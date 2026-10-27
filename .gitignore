@@ -1,0 +1,12 @@
+# Godot cache
+/game/.godot/
+
+# Local output: test captures and exported builds
+/captures/
+/export/
+
+# Personal notes, never published
+/private/
+
+# Python
+__pycache__/

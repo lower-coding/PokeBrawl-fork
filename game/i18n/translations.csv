@@ -1,0 +1,263 @@
+keys,en,es
+Effective!,Effective!,¡Eficaz!
+It's super effective!,It's super effective!,¡Es muy eficaz!
+Not very effective,Not very effective,Poco eficaz
+It's not very effective...,It's not very effective...,No es muy eficaz...
+%s used %s!,%s used %s!,¡%s usó %s!
+Out of stamina,Out of stamina,Sin aguante
+Chlorophyll,Chlorophyll,Clorofila
+Static,Static,Electricidad Estática
+Underground!,Underground!,¡Bajo tierra!
+Dodged,Dodged,Esquivado
+Thick Fat,Thick Fat,Sebo
+Rough Skin,Rough Skin,Piel Tosca
+Steadfast,Steadfast,Impasible
+Poisoned,Poisoned,Envenenado
+Paused,Paused,Pausa
+%s to resume,%s to resume,%s para seguir
+%s jump,%s jump,%s salto
+%s dodge   %s lock on,%s dodge   %s lock on,%s esquiva   %s fijar
+%s %s %s %s moves,%s %s %s %s moves,%s %s %s %s movimientos
+%s back to menu,%s back to menu,%s volver al menú
+"Go, %s!","Go, %s!","¡Adelante, %s!"
+%s jumps onto the field!,%s jumps onto the field!,¡%s salta al campo!
+"Training. R resets, T stops or frees the rival, F3 shows the hitboxes.","Training. R resets, T stops or frees the rival, F3 shows the hitboxes.","Entrenamiento. R reinicia, T para o suelta al rival, F3 enseña los golpes."
+%s fainted!,%s fainted!,¡%s se ha debilitado!
+%s wins.,%s wins.,Gana %s.
+"%s rematch, %s pick another.","%s rematch, %s pick another.","%s revancha, %s elegir otro."
+"%s rematch, %s menu.","%s rematch, %s menu.","%s revancha, %s menú."
+The IP has four numbers separated by dots.,The IP has four numbers separated by dots.,La IP tiene cuatro números separados por puntos.
+Real-time Pokémon battles,Real-time Pokémon battles,Combates Pokémon en tiempo real
+%s to start,%s to start,%s para empezar
+Online,Online,En línea
+Waiting for rival,Waiting for rival,Esperando rival
+Give your friend one of these IPs:,Give your friend one of these IPs:,Dile a tu amigo una de estas IP:
+Over the internet: %s,Over the internet: %s,Por internet: %s
+Local network or VPN: %s,Local network or VPN: %s,Red local o VPN: %s
+Opening port 7777 on the router,Opening port 7777 on the router,Abriendo el puerto 7777 en el router
+Port 7777 open on the router.,Port 7777 open on the router.,Puerto 7777 abierto en el router.
+The router did not open the port: open it (UDP 7777) or use Radmin VPN or ZeroTier.,The router did not open the port: open it (UDP 7777) or use Radmin VPN or ZeroTier.,El router no abrió el puerto: ábrelo (UDP 7777) o usad Radmin VPN o ZeroTier.
+%s back,%s back,%s volver
+Connecting,Connecting,Conectando
+Joining %s:7777,Joining %s:7777,Entrando en %s:7777
+%s cancel,%s cancel,%s cancelar
+Join,Join,Unirse
+Game IP:,Game IP:,IP de la partida:
+Type or paste with Ctrl+V. Enter connects.,Type or paste with Ctrl+V. Enter connects.,Escribe o pega con Ctrl+V. Intro conecta.
+Up and down change the digit. %s connects.,Up and down change the digit. %s connects.,Arriba y abajo cambian la cifra. %s conecta.
+Pick your Pokémon,Pick your Pokémon,Elige tu Pokémon
+Pick the rival,Pick the rival,Elige al rival
+Difficulty,Difficulty,Dificultad
+You,You,Tú
+AI,AI,IA
+Rival,Rival,Rival
+Both,Both,Los dos
+< %s >   up/down: %s   %s battle   %s back,< %s >   up/down: %s   %s battle   %s back,< %s >   arriba/abajo: %s   %s combatir   %s volver
+choosing...,choosing...,eligiendo...
+ready,ready,listo
+choosing,choosing,eligiendo
+Rival: %s,Rival: %s,Rival: %s
+"Ready, waiting for the rival   %s change","Ready, waiting for the rival   %s change","Listo, esperando al rival   %s cambiar"
+%s ready   %s leave,%s ready   %s leave,%s listo   %s salir
+%s pick   %s back,%s pick   %s back,%s elegir   %s volver
+"AI, %s","AI, %s","IA, %s"
+Could not open port %d (is another program using it?),Could not open port %d (is another program using it?),No se pudo abrir el puerto %d (¿otro programa lo usa?)
+Invalid address,Invalid address,Dirección no válida
+The other player disconnected,The other player disconnected,El otro jugador se ha desconectado
+No response from the other player,No response from the other player,Sin respuesta del otro jugador
+Recoil,Recoil,Retroceso
+Double!,Double!,¡Doble!
+Thunder Shock,Thunder Shock,Impactrueno
+Quick Attack,Quick Attack,Ataque Rápido
+Iron Tail,Iron Tail,Cola Férrea
+Electro Ball,Electro Ball,Bola Voltio
+Body Slam,Body Slam,Golpe Cuerpo
+Ice Punch,Ice Punch,Puño Hielo
+Earthquake,Earthquake,Terremoto
+Rest,Rest,Descanso
+Flamethrower,Flamethrower,Lanzallamas
+Air Slash,Air Slash,Tajo Aéreo
+Dragon Claw,Dragon Claw,Garra Dragón
+Flare Blitz,Flare Blitz,Envite Ígneo
+Aqua Jet,Aqua Jet,Acua Jet
+Hydro Pump,Hydro Pump,Hidrobomba
+Rapid Spin,Rapid Spin,Giro Rápido
+Ice Beam,Ice Beam,Rayo Hielo
+Vine Whip,Vine Whip,Látigo Cepa
+Razor Leaf,Razor Leaf,Hoja Afilada
+Sludge Bomb,Sludge Bomb,Bomba Lodo
+Solar Beam,Solar Beam,Rayo Solar
+Aura Sphere,Aura Sphere,Esfera Aural
+Meteor Mash,Meteor Mash,Puño Meteoro
+Extreme Speed,Extreme Speed,Velocidad Extrema
+Detect,Detect,Detección
+Shadow Ball,Shadow Ball,Bola Sombra
+Hex,Hex,Infortunio
+Substitute,Substitute,Sustituto
+Dig,Dig,Excavar
+Stone Edge,Stone Edge,Roca Afilada
+Water Shuriken,Water Shuriken,Shuriken de Agua
+Night Slash,Night Slash,Tajo Umbrío
+Double Team,Double Team,Doble Equipo
+Bullet Punch,Bullet Punch,Puño Bala
+X-Scissor,X-Scissor,Tijera X
+Swords Dance,Swords Dance,Danza Espada
+Wing Attack,Wing Attack,Ataque Ala
+Pikachu,Pikachu,Pikachu
+Snorlax,Snorlax,Snorlax
+Charizard,Charizard,Charizard
+Blaze,Blaze,Mar Llamas
+Blastoise,Blastoise,Blastoise
+Rain Dish,Rain Dish,Cura Lluvia
+Venusaur,Venusaur,Venusaur
+Lucario,Lucario,Lucario
+Gengar,Gengar,Gengar
+Levitate,Levitate,Levitación
+Garchomp,Garchomp,Garchomp
+Greninja,Greninja,Greninja
+Protean,Protean,Mutatipo
+Scizor,Scizor,Scizor
+Technician,Technician,Experto
+A straight discharge from the cheeks. Fast and cheap.,A straight discharge from the cheeks. Fast and cheap.,Descarga en línea recta desde las mejillas. Rápida y barata.
+"Dashes in a straight line, hitting whatever is in the way. No invulnerability.","Dashes in a straight line, hitting whatever is in the way. No invulnerability.",Se lanza en línea recta golpeando lo que encuentra. Sin invulnerabilidad.
+"Spins and strikes with a steel tail that launches the target. In the air, it dives.","Spins and strikes with a steel tail that launches the target. In the air, it dives.","Gira y golpea con la cola de acero: lanza por los aires. En el aire, cae en picado."
+Like in the anime: gathers electricity on the tip of its tail and flings it with a tail flip. Flies in an arc (good against flyers) and bursts in an area.,Like in the anime: gathers electricity on the tip of its tail and flings it with a tail flip. Flies in an arc (good against flyers) and bursts in an area.,Como en el anime: junta la electricidad en la punta de la cola y la lanza de un coletazo. Sale en parábola (buena contra los que vuelan) y estalla en área.
+Jumps and lands with all its weight. Only heavy hits interrupt it.,Jumps and lands with all its weight. Only heavy hits interrupt it.,Salta y cae con todo su peso. Solo le cortan los golpes fuertes.
+A wide punch that chills: the target is slowed for 2 s.,A wide punch that chills: the target is slowed for 2 s.,Puñetazo amplio que deja helado: el rival va más lento 2 s.
+A stomp that sends a shockwave along the ground. Only hits whoever is touching the ground.,A stomp that sends a shockwave along the ground. Only hits whoever is touching the ground.,Pisotón que lanza una onda por el suelo. Solo alcanza a quien está pisando el suelo.
+Falls asleep and recovers a third of its HP. Twice per battle.,Falls asleep and recovers a third of its HP. Twice per battle.,Se duerme y recupera un tercio de la vida. Dos veces por combate.
+Hold for a cone of fire. It turns slowly while firing.,Hold for a cone of fire. It turns slowly while firing.,"Mantén para un chorro de fuego en cono. Mientras lo lanza, gira despacio."
+A horizontal blade of air. Also usable in the air.,A horizontal blade of air. Also usable in the air.,Una cuchilla de aire que corta en horizontal. También en el aire.
+Two quick advancing swipes. Opens combos.,Two quick advancing swipes. Opens combos.,Dos zarpazos rápidos avanzando. Abre combos.
+Wraps itself in flames and charges in a line. Shrugs off light hits and takes recoil when it lands.,Wraps itself in flames and charges in a line. Shrugs off light hits and takes recoil when it lands.,Se envuelve en llamas y embiste en línea. Aguanta golpes ligeros y se hace daño al acertar.
+Wraps itself in water and shoots forward in a line. The fastest thing it has.,Wraps itself in water and shoots forward in a line. The fastest thing it has.,Se envuelve en agua y sale disparado en línea. Lo más rápido que tiene.
+Hold for a high-pressure stream from its cannons. Pushes very hard; it cannot move while firing.,Hold for a high-pressure stream from its cannons. Pushes very hard; it cannot move while firing.,Mantén para un chorro a presión desde los cañones. Empuja muchísimo; mientras dispara no se mueve.
+"Hides in its shell and spins around the field, hitting. Steered with the stick; it also removes slowness.","Hides in its shell and spins around the field, hitting. Steered with the stick; it also removes slowness.",Se mete en el caparazón y gira por el campo golpeando. Se dirige con el stick y quita la lentitud.
+A straight beam that chills the target and leaves a strip of ice on the ground: whoever steps on it is slowed.,A straight beam that chills the target and leaves a strip of ice on the ground: whoever steps on it is slowed.,Rayo recto que hiela al rival y deja una franja de hielo en el suelo: quien la pisa va lento.
+Two long vines lash forward and pull the target toward Venusaur.,Two long vines lash forward and pull the target toward Venusaur.,Dos lianas largas que azotan por delante y tiran del rival hacia Venusaur.
+"Three leaves in a fan. Up close, all three hit.","Three leaves in a fan. Up close, all three hit.",Tres hojas en abanico. De cerca entran las tres.
+A lobbed bomb that lands where the ground is marked. Leaves a puddle that poisons whoever steps in it.,A lobbed bomb that lands where the ground is marked. Leaves a puddle that poisons whoever steps in it.,Bomba en parábola que cae donde marca el suelo. Deja un charco que envenena a quien lo pisa.
+"Gathers sunlight for over a second and fires a huge beam. A crushing hit, very punishable.","Gathers sunlight for over a second and fires a huge beam. A crushing hit, very punishable.","Recoge la luz durante más de un segundo y suelta un rayo enorme. Golpe durísimo, muy castigable."
+"Hold to charge, like in Smash: uncharged it is slow and homes in a lot; fully charged it is big, fast, straight and hits hard.","Hold to charge, like in Smash: uncharged it is slow and homes in a lot; fully charged it is big, fast, straight and hits hard.","Mantén para cargar, como en Smash: sin cargar es lenta y persigue mucho; cargada es grande, rápida, recta y pega fuerte."
+A punch that comes down like a meteor: advances and hits hard.,A punch that comes down like a meteor: advances and hits hard.,Puñetazo que cae como un meteoro: avanza y golpea fuerte.
+"Crosses the field almost instantly, hitting and passing through the target: it ends up behind it.","Crosses the field almost instantly, hitting and passing through the target: it ends up behind it.","Cruza el campo casi al instante, golpeando y atravesando al rival: acaba a su espalda."
+"Reads the attack: if hit during the short window, it takes nothing and the attacker is stunned. If it whiffs, Lucario is exposed.","Reads the attack: if hit during the short window, it takes nothing and the attacker is stunned. If it whiffs, Lucario is exposed.","Lee el golpe: si le alcanzan en la ventana breve, no le hace nada y el atacante queda aturdido. Si falla, queda expuesto."
+A ball of shadow that slightly follows the target.,A ball of shadow that slightly follows the target.,Bola de sombras que sigue un poco al rival.
+"Marks the ground under the target and bursts. Double damage if the target is poisoned, burned, chilled or charged.","Marks the ground under the target and bursts. Double damage if the target is poisoned, burned, chilled or charged.","Marca el suelo bajo el rival y estalla. Hace el doble si el rival está envenenado, quemado, helado o cargado."
+Leaves an identical decoy where it stood. Gengar turns translucent and faster for a moment. The decoy breaks on the first hit.,Leaves an identical decoy where it stood. Gengar turns translucent and faster for a moment. The decoy breaks on the first hit.,Deja un señuelo idéntico donde estaba. Gengar se vuelve translúcido y más rápido un momento. El señuelo se deshace al primer golpe.
+"Burrows underground and moves (hold). On release, it bursts out launching the target. Underground only Earthquake reaches it, for double damage.","Burrows underground and moves (hold). On release, it bursts out launching the target. Underground only Earthquake reaches it, for double damage.","Se mete bajo tierra y avanza (mantén). Al soltar, sale lanzando por los aires. Bajo tierra solo le alcanza Terremoto, que le hace el doble."
+"Cracks run toward the target and, behind them, rock spikes burst out one after another.","Cracks run toward the target and, behind them, rock spikes burst out one after another.","Grietas en línea hacia el rival y, tras ellas, estacas de roca que salen una tras otra."
+"Three water shuriken in a row, each one aimed as it is thrown.","Three water shuriken in a row, each one aimed as it is thrown.","Tres shuriken de agua seguidos, cada uno apuntado al soltarlo."
+"Vanishes and reappears beside the target, slashing. From far away it only closes in.","Vanishes and reappears beside the target, slashing. From far away it only closes in.","Desaparece y aparece al costado del rival cortando. Lejos, solo se acerca."
+"Two copies at its sides that break on the first hit. They confuse, they do not protect.","Two copies at its sides that break on the first hit. They confuse, they do not protect.","Dos copias a sus lados que se deshacen al primer golpe. Confunden, no protegen."
+An almost instant advancing punch. Chains into other moves.,An almost instant advancing punch. Chains into other moves.,Puñetazo casi instantáneo avanzando. Encadena con otros movimientos.
+Two slashes that cross in an X; the second one is heavy.,Two slashes that cross in an X; the second one is heavy.,Dos tajos que se cruzan en X; el segundo es fuerte.
+Dances with the swords (vulnerable): its next two physical hits deal 50% more.,Dances with the swords (vulnerable): its next two physical hits deal 50% more.,Baila con las espadas (vulnerable): sus dos siguientes golpes físicos hacen un 50 % más.
+Rises on its wings and charges a short distance.,Rises on its wings and charges a short distance.,Se alza con las alas y embiste en línea corta.
+It flies straight: sidestep it or dodge through it.,It flies straight: sidestep it or dodge through it.,Va recta: se esquiva moviéndose de lado o con la esquiva.
+"If it misses, Pikachu is exposed for a moment. The flash gives it away.","If it misses, Pikachu is exposed for a moment. The flash gives it away.",Si falla queda expuesto un momento. Se ve el destello antes de salir.
+The tail glows before the hit: there is time to step away. Long recovery if it misses.,The tail glows before the hit: there is time to step away. Long recovery if it misses.,La cola brilla antes del golpe: hay tiempo para apartarse. Recuperación larga si falla.
+The tail flip warns you: sidestep or leave the area before it bursts.,The tail flip warns you: sidestep or leave the area before it bursts.,El giro del coletazo avisa: esquiva de lado o sal del área antes de que estalle.
+You can see where it will land. It takes a long time to recover after landing: punish it.,You can see where it will land. It takes a long time to recover after landing: punish it.,Se ve dónde va a caer. Tras aterrizar tarda mucho en recuperarse: castígalo.
+The fist frosts over first: back off or dodge backwards.,The fist frosts over first: back off or dodge backwards.,El puño se carga de escarcha antes: retrocede o esquiva hacia atrás.
+Jump when the wave reaches you. You can see it coming: the body rises first.,Jump when the wave reaches you. You can see it coming: the body rises first.,Salta cuando la onda llegue a ti. Se ve venir: levanta el cuerpo antes.
+While asleep it takes 35% more damage and cannot defend itself: attack now.,While asleep it takes 35% more damage and cannot defend itself: attack now.,Dormido recibe un 35 % más y no puede defenderse: es el momento de atacar.
+"It is long and turns slowly: you cannot back out of it, so circle around it. It stays still for a moment at the end.","It is long and turns slowly: you cannot back out of it, so circle around it. It stays still for a moment at the end.","Es largo y gira lento: hacia atrás no se sale, rodéalo por un lado. Al acabar se queda quieto un momento."
+It is wide but flat: you can jump over it.,It is wide but flat: you can jump over it.,Es ancha pero plana: se puede saltar por encima.
+Short range: keeping your distance shuts it down.,Short range: keeping your distance shuts it down.,Corto alcance: guardar la distancia lo anula.
+"It catches fire before setting off and goes straight: step aside. If it misses, it is wide open.","It catches fire before setting off and goes straight: step aside. If it misses, it is wide open.","Arde antes de salir y va en línea recta: apártate de lado. Si falla, queda muy expuesto."
+"Almost no warning, but it goes straight: one step to the side is enough. If it misses, it stops dead.","Almost no warning, but it goes straight: one step to the side is enough. If it misses, it stops dead.","Sale casi sin aviso pero en línea recta: un paso de lado basta. Si falla, queda quieto."
+The cannons charge up first. It turns very slowly: step out of the line sideways.,The cannons charge up first. It turns very slowly: step out of the line sideways.,Los cañones se cargan antes. Gira muy despacio: sal de la línea de lado.
+It steers poorly: jump over it or dodge when it arrives.,It steers poorly: jump over it or dodge when it arrives.,Gira con poca precisión: salta por encima o esquiva cuando llegue.
+The cannons frost over before firing. Walk around the ice strip or jump it.,The cannons frost over before firing. Walk around the ice strip or jump it.,Los cañones escarchan antes del disparo. La franja de hielo se rodea o se salta.
+"Long reach but in a line: it misses from the side. After the pull, dodge before the next hit.","Long reach but in a line: it misses from the side. After the pull, dodge before the next hit.","Alcanza lejos pero en línea: de lado no llega. Tras el tirón, esquiva antes del siguiente golpe."
+"They spread out with distance: from far away, slip between them.","They spread out with distance: from far away, slip between them.","Se abren con la distancia: lejos, pasa entre ellas."
+"The ground shows where it lands: leave the circle. Afterwards, do not step in the puddle.","The ground shows where it lands: leave the circle. Afterwards, do not step in the puddle.","El suelo marca dónde cae: sal del círculo. Después, no pises el charco."
+The charge is visible from afar: leave its line or punish it while it charges.,The charge is visible from afar: leave its line or punish it while it charges.,La carga se ve de lejos: sal de su línea o castígalo mientras carga.
+"Uncharged, you cannot outrun it: dodge it when it is close. Charged, it goes straight: get out of its line.","Uncharged, you cannot outrun it: dodge it when it is close. Charged, it goes straight: get out of its line.",Sin cargar no se escapa corriendo: esquívala cuando esté cerca. Cargada va recta: apártate de su línea.
+"The fist glows first: step aside. If it misses, Lucario is exposed.","The fist glows first: step aside. If it misses, Lucario is exposed.","El puño brilla antes: apártate de lado. Si falla, queda expuesto."
+"Almost no warning, but it goes straight: move sideways. When it ends, turn around.","Almost no warning, but it goes straight: move sideways. When it ends, turn around.","Casi no avisa, pero va en línea recta: muévete de lado. Al acabar, date la vuelta."
+Do not attack right when it glows: wait for it to end and punish.,Do not attack right when it glows: wait for it to end and punish.,No ataques justo cuando brilla: espera a que acabe y castiga.
+It barely turns: a well-timed change of direction leaves it behind.,It barely turns: a well-timed change of direction leaves it behind.,Gira poco: un cambio de dirección a tiempo la deja atrás.
+"Leave the mark before it bursts. With a status condition on you, it hurts twice as much.","Leave the mark before it bursts. With a status condition on you, it hurts twice as much.","Sal de la marca antes de que estalle. Con un estado encima, duele el doble."
+The real one glows less and has no shadow: look for it.,The real one glows less and has no shadow: look for it.,El de verdad brilla menos y no tiene sombra: búscalo por ahí.
+The cracks in the ground show where it is: move away or jump when it is about to come out. It is slow to react after emerging.,The cracks in the ground show where it is: move away or jump when it is about to come out. It is slow to react after emerging.,Las grietas del suelo dicen dónde está: apártate o salta cuando vaya a salir. Al salir tarda en reaccionar.
+The cracks mark the line: get off it or jump the spikes.,The cracks mark the line: get off it or jump the spikes.,Las grietas marcan la línea: sal de ella o salta las estacas.
+"They come one at a time: move in a curve, not a straight line.","They come one at a time: move in a curve, not a straight line.","Llegan de uno en uno: muévete en curva, no en línea recta."
+It leaves smoke as it vanishes: turn to the side and dodge.,It leaves smoke as it vanishes: turn to the side and dodge.,Deja humo al irse: date la vuelta hacia el lado y esquiva.
+The copies have no shadow and do nothing: the one that moves is the real one.,The copies have no shadow and do nothing: the one that moves is the real one.,Las copias no tienen sombra ni hacen nada: el que se mueve es el de verdad.
+"Almost no warning, but it is light: it does not interrupt moves with poise.","Almost no warning, but it is light: it does not interrupt moves with poise.",Casi no avisa pero es ligero: no corta lo que tenga aguante.
+The pincers open first: take a step back.,The pincers open first: take a step back.,Las pinzas se abren antes: retrocede un paso.
+"It cannot defend itself while dancing: punish it. Afterwards, watch out for its two boosted hits.","It cannot defend itself while dancing: punish it. Afterwards, watch out for its two boosted hits.","Mientras baila no se defiende: castígalo. Después, cuidado con sus dos golpes."
+Short and straight: step aside.,Short and straight: step aside.,Corto y en línea: apártate de lado.
+"Agile and frail. Pressures, changes direction and never stands still.","Agile and frail. Pressures, changes direction and never stands still.","Ágil y frágil. Presiona, cambia de dirección y no se queda quieto."
+"Huge and slow. Soaks up damage, takes up space and punishes every mistake.","Huge and slow. Soaks up damage, takes up space and punishes every mistake.","Enorme y lento. Aguanta, ocupa el espacio y castiga cada error."
+Mid-range pressure. Flies while its stamina lasts; it can never stay up forever.,Mid-range pressure. Flies while its stamina lasts; it can never stay up forever.,Presión a media distancia. Vuela mientras le dura el aguante; nunca se queda arriba siempre.
+Heavy. Controls lines with water and ice and punishes hard from range.,Heavy. Controls lines with water and ice and punishes hard from range.,Pesado. Controla líneas con agua y hielo y castiga fuerte desde lejos.
+"Slow zoner. Long reach, fouls the ground and punishes anyone who gets careless.","Slow zoner. Long reach, fouls the ground and punishes anyone who gets careless.","Lento y de zona. Alcanza lejos, ensucia el suelo y castiga a quien se confía."
+"Precise close-range fighter. Gets in fast, punishes and counters.","Precise close-range fighter. Gets in fast, punishes and counters.","Cuerpo a cuerpo y preciso. Entra rápido, castiga y contraataca."
+"Slippery. Harasses from range, tricks and shows up where you least expect it.","Slippery. Harasses from range, tricks and shows up where you least expect it.","Escurridizo. Hostiga de lejos, engaña y aparece donde no se le espera."
+Aggressive and fast on the ground. Strikes from below and gives no breathing room.,Aggressive and fast on the ground. Strikes from below and gives no breathing room.,Agresivo y rápido por el suelo. Entra desde abajo y no deja respirar.
+"Ninja. Never stops moving, throws from range and comes in from the sides.","Ninja. Never stops moving, throws from range and comes in from the sides.","Ninja. Se mueve sin parar, lanza desde lejos y entra por los lados."
+Close-range pressure with short advances. Punishes every mistake with its pincers.,Close-range pressure with short advances. Punishes every mistake with its pincers.,Presión de cerca con avances cortos. Castiga cada error con las pinzas.
+Whoever hits it up close is charged for 4 s. An Electric move against a charged target slows it and deals 25% more. Shown as sparks above it.,Whoever hits it up close is charged for 4 s. An Electric move against a charged target slows it and deals 25% more. Shown as sparks above it.,Quien le golpea de cerca queda cargado 4 s. Un movimiento eléctrico contra él le frena y hace un 25 % más. Se ve como chispas encima.
+Takes 30% less from Fire and Ice attacks. A message shows when it happens.,Takes 30% less from Fire and Ice attacks. A message shows when it happens.,Recibe un 30 % menos de los ataques de Fuego y Hielo. Lo avisa al recibirlos.
+"Below a third of its HP, its Fire moves deal 25% more. Its tail flame burns brighter.","Below a third of its HP, its Fire moves deal 25% more. Its tail flame burns brighter.","Con menos de un tercio de vida, sus movimientos de Fuego hacen un 25 % más. Su cola arde más fuerte."
+"Every Water move leaves it wet for 4 s, and while wet it slowly recovers HP. You can see the drops.","Every Water move leaves it wet for 4 s, and while wet it slowly recovers HP. You can see the drops.","Cada movimiento de Agua lo deja mojado 4 s, y mientras está mojado recupera vida poco a poco. Se ven las gotas."
+After a Grass move it runs 30% faster for 4 s. Leaves swirl around it while it lasts.,After a Grass move it runs 30% faster for 4 s. Leaves swirl around it while it lasts.,Tras un movimiento de Planta corre un 30 % más durante 4 s. Lo rodean hojas mientras dura.
+"When one of its moves is interrupted or it is knocked down, it runs 20% faster for 3 s. A blue aura surrounds it.","When one of its moves is interrupted or it is knocked down, it runs 20% faster for 3 s. A blue aura surrounds it.","Cuando le cortan un movimiento o le derriban, corre un 20 % más durante 3 s. Lo envuelve un aura azul."
+"It floats: Earthquake, puddles and ice cannot reach it. Its dodge is to vanish and reappear.","It floats: Earthquake, puddles and ice cannot reach it. Its dodge is to vanish and reappear.","Flota: Terremoto, los charcos y el hielo no le alcanzan. Su esquiva es desaparecer y reaparecer."
+Whoever hits it in melee gets hurt: 12% of the damage they deal. Sparks fly.,Whoever hits it in melee gets hurt: 12% of the damage they deal. Sparks fly.,Quien le golpea cuerpo a cuerpo se hace daño: un 12 % de lo que le quita. Saltan chispas.
+"Takes the type of the last move it used, which changes its weaknesses. Shown by the icons on its frame.","Takes the type of the last move it used, which changes its weaknesses. Shown by the icons on its frame.",Toma el tipo del último movimiento que usa: cambian sus debilidades. Se ve en los iconos de su marco.
+Its light hits deal 25% more: Bullet Punch hits above its weight.,Its light hits deal 25% more: Bullet Punch hits above its weight.,Sus golpes ligeros hacen un 25 % más: Puño Bala pega por encima de lo normal.
+Normal,Normal,Normal
+Fire,Fire,Fuego
+Water,Water,Agua
+Electric,Electric,Eléctrico
+Grass,Grass,Planta
+Ice,Ice,Hielo
+Fighting,Fighting,Lucha
+Poison,Poison,Veneno
+Ground,Ground,Tierra
+Flying,Flying,Volador
+Psychic,Psychic,Psíquico
+Bug,Bug,Bicho
+Rock,Rock,Roca
+Ghost,Ghost,Fantasma
+Dragon,Dragon,Dragón
+Dark,Dark,Siniestro
+Steel,Steel,Acero
+Fairy,Fairy,Hada
+Easy,Easy,Fácil
+Hard,Hard,Difícil
+Stadium,Stadium,Estadio
+Forest Glade,Forest Glade,Claro del bosque
+Battle,Battle,Combate
+"Against the AI. Pick your Pokémon, the rival and the difficulty.","Against the AI. Pick your Pokémon, the rival and the difficulty.","Contra la IA. Elige tu Pokémon, el rival y la dificultad."
+1 vs 1 with a friend over the internet.,1 vs 1 with a friend over the internet.,1 contra 1 con un amigo por internet.
+Training,Training,Entrenamiento
+"Still or active rival, no rush. R resets, T stops or frees the rival.","Still or active rival, no rush. R resets, T stops or frees the rival.","Rival quieto o activo, sin prisas. R reinicia, T para o suelta al rival."
+Quit,Quit,Salir
+Close the game.,Close the game.,Cerrar el juego.
+Host game,Host game,Crear partida
+Your friend joins with your IP. Port 7777 (UDP).,Your friend joins with your IP. Port 7777 (UDP).,Tu amigo se une con tu IP. Puerto 7777 (UDP).
+Type the IP of whoever hosted the game.,Type the IP of whoever hosted the game.,Escribe la IP de quien ha creado la partida.
+Back,Back,Volver
+Created by xjoje6,Created by xjoje6,Creado por xjoje6
+"Models, animations, particles, sounds and battle UI: the Cobblemon team (CC BY-NC 3.0, adapted)","Models, animations, particles, sounds and battle UI: the Cobblemon team (CC BY-NC 3.0, adapted)","Modelos, animaciones, partículas, sonidos e interfaz de combate: equipo de Cobblemon (CC BY-NC 3.0, adaptados)"
+"Non-profit fan project. Pokémon belongs to Nintendo, Game Freak and The Pokémon Company.","Non-profit fan project. Pokémon belongs to Nintendo, Game Freak and The Pokémon Company.","Proyecto de fans sin ánimo de lucro. Pokémon es de Nintendo, Game Freak y The Pokémon Company."
+BRN,BRN,QUEM
+PSN,PSN,VENE
+CHL,CHL,HELA
+CHG,CHG,CARG
+SLP,SLP,DORM
+FNT,FNT,DEB
+Space,Space,Espacio
+Shift,Shift,Mayús
+Tab,Tab,Tab
+Q,Q,Q
+E,E,E
+RMB,RMB,Clic D
+F,F,F
+Backspace,Backspace,Retroceso
+Ctrl,Ctrl,Ctrl
