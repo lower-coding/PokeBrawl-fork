@@ -13,9 +13,9 @@ extends Node
 ## It adapts: if the player dodges a lot, it waits out the dodge to punish it.
 
 const DIFFICULTY := {
-	"easy": {"reaction": 0.42, "error": 0.32, "doubt": 0.5, "punish": 0.4, "defense": 0.45},
-	"normal": {"reaction": 0.28, "error": 0.16, "doubt": 0.25, "punish": 0.7, "defense": 0.7},
-	"hard": {"reaction": 0.19, "error": 0.06, "doubt": 0.1, "punish": 0.92, "defense": 0.9},
+	"easy": {"reaction": 0.42, "aim_lead": 0.3, "aim_error": 1.6, "error": 0.32, "doubt": 0.5, "punish": 0.4, "defense": 0.45, "deflect": 0.05, "deflect_error": 0.12},
+	"normal": {"reaction": 0.28, "aim_lead": 0.6, "aim_error": 1.0, "error": 0.16, "doubt": 0.25, "punish": 0.7, "defense": 0.7, "deflect": 0.2, "deflect_error": 0.07},
+	"hard": {"reaction": 0.19, "aim_lead": 0.9, "aim_error": 0.6, "error": 0.06, "doubt": 0.1, "punish": 0.92, "defense": 0.9, "deflect": 0.4, "deflect_error": 0.04},
 }
 
 ## Each Pokémon's style: preferred distance and eagerness to attack.
@@ -51,13 +51,19 @@ var _rival_last_dodge := -10.0
 var _plan := ""
 var _decoy_seen: Object = null    # the last rival decoy it has seen
 var _fooled := false               # whether it fell for it
+const DODGE_REACH := 6.0      # about how far a dodge carries it, with some to spare (m)
 const BELIEVES_DECOY := {"easy": 0.9, "normal": 0.65, "hard": 0.35}
 const RANGED := ["projectile", "stream", "charge", "engage"]   # what reaches another height (dashes go diagonally)
 var _flight_pending := -1.0              # pending second jump to take off
+var _aim_phase := Vector2(randf() * TAU, randf() * TAU)   # so each AI wobbles its own way
 
 
 func _physics_process(delta: float) -> void:
 	if me == null or rival == null or not is_instance_valid(rival):
+		return
+	me.ai_driven = true
+	if main.intro_t > 0.0:
+		me.ctrl.clear()
 		return
 	_t += delta
 	_cooldown_def -= delta
@@ -82,9 +88,16 @@ func _physics_process(delta: float) -> void:
 	var dist := toward.length()
 	c.yaw = atan2(-toward.x, -toward.z)
 	me.locked = true
-	# 1. Defensa
+	# Where it aims manual streams: the delayed sight plus a slow wobble of "aim_error" meters.
+	var wobble := Vector3(sin(_t * 1.1 + _aim_phase.x), 0.0, sin(_t * 0.8 + _aim_phase.y))
+	me.ai_aim = seen.pos + wobble * diff.aim_error
+	me.aim_lead = diff.aim_lead
+	if _recover():
+		return
+	# 1. Defense
 	_fly(seen, dist, delta)
 	if _defend(seen, dist, diff):
+		_edge_guard()
 		return
 	# 2 and 3. Decide every so often, not every step (with doubt depending on difficulty).
 	_decision_t -= delta
@@ -93,6 +106,37 @@ func _physics_process(delta: float) -> void:
 		_decision_t = randf_range(0.08, 0.2) + (diff.doubt * randf() * 0.4)
 		if not _punish(seen, dist, diff):
 			_attack(seen, dist, diff)
+	_edge_guard()
+
+
+## On a stage with a void, a flyer that fell off flies back: it takes off, first moves out
+## from under the platform (its underside is solid), climbs above the edge and then heads
+## for the center. True while it is doing that.
+func _recover() -> bool:
+	var p := me.global_position
+	if main.arena.void_y == -INF or not me.data.has("flight") or p.y > -0.3 or me.state != "free":
+		return false
+	if not me.flying:
+		_press("jump")
+	var out := Vector3(p.x, 0.0, p.z).normalized()
+	if main.arena.inside(p, -1.2):
+		me.ctrl.move_input = _to_local(out)          # under the platform: out first
+	else:
+		_hold_button("jump", 0.15)
+		me.ctrl.move_input = _to_local(-out) * (1.0 if p.y > 0.6 else 0.0)
+	state_text = "flies back to the platform"
+	return true
+
+
+## On a stage with a void: if its own momentum is carrying it off the edge, it runs back
+## toward the center (it only falls if it is knocked off).
+func _edge_guard() -> void:
+	if main.arena.void_y == -INF or me.state not in ["free", "dodge"]:
+		return
+	var p := me.global_position
+	var ahead := p + Vector3(me.velocity.x, 0.0, me.velocity.z) * 0.45
+	if not main.arena.inside(ahead, 1.5) or not main.arena.inside(p, 2.0):
+		me.ctrl.move_input = _to_local(-Vector3(p.x, 0.0, p.z).normalized())
 
 
 # ---------------------------------------------------------------- perception
@@ -105,7 +149,9 @@ func _record() -> void:
 			decoy = o
 	if decoy != _decoy_seen:
 		_decoy_seen = decoy
-		_fooled = decoy != null and randf() < BELIEVES_DECOY[difficulty]
+		# Substitute's doll always fools it (Gengar is invisible); Double Team's clones,
+		# depending on the difficulty.
+		_fooled = decoy != null and (decoy.kind == "substitute" or randf() < BELIEVES_DECOY[difficulty])
 	me.fooled_by = decoy if _fooled else null
 	if decoy != null and _fooled:
 		_history.append({"t": _t, "pos": decoy.global_position, "speed": Vector3.ZERO, "state": "free",
@@ -167,6 +213,17 @@ func _defend(seen: Dictionary, dist: float, diff: Dictionary) -> bool:
 			continue
 		var near: Vector3 = p.pos + v * t_near
 		if near.distance_to(me.center()) < p.radius + me.radius() + 0.5:
+			# A move that deflects, ready and quick enough to be out when it arrives: swing
+			# instead of dodging (sometimes; more often the harder it is).
+			# Its sense of when the shot arrives is off by up to deflect_error: sometimes it
+			# swings too early or too late and takes the hit anyway.
+			var guess: float = t_near + randf_range(-diff.deflect_error, diff.deflect_error)
+			var swing := _deflect_move(guess, int(Moves.DATA.get(p.hit.move_id, {}).get("deflectable", 2)))
+			if swing != "" and randf() < diff.deflect:
+				_use(swing)
+				state_text = "swings at the projectile"
+				_cooldown_def = 0.5
+				return true
 			if randf() < diff.defense:
 				var side := v.cross(Vector3.UP).normalized()
 				if not main.arena.inside(me.global_position + side * 4.0, 1.5):
@@ -195,6 +252,17 @@ func _defend(seen: Dictionary, dist: float, diff: Dictionary) -> bool:
 		elif seen.action == "earthquake" and seen.phase == "startup" and dist < d.r_max:
 			state_text = "waits for the wave"
 			return false
+		# Reading a shot (fast ones arrive before they can be seen): when the swing would
+		# meet it, swing as it fires.
+		if ai.kind == "projectile" and seen.phase == "startup" and float(d.get("speed", 0.0)) > 0.0:
+			var left := maxf(0.0, float(d.get("startup", 0.0)) - (_t - diff.reaction - _phase_start()))
+			var guess: float = left + dist / float(d.speed) + randf_range(-diff.deflect_error, diff.deflect_error)
+			var swing := _deflect_move(guess, int(d.get("deflectable", 2)))
+			if swing != "" and randf() < diff.deflect:
+				_use(swing)
+				state_text = "swings at %s" % d.display_name
+				_cooldown_def = 0.6
+				return true
 		var reach: float = ai.max + me.radius()
 		if ai.kind in ["punish", "engage", "stream", "area"] and dist < reach + 1.0 and seen.phase == "startup":
 			if randf() < diff.defense * 0.85:
@@ -209,6 +277,18 @@ func _defend(seen: Dictionary, dist: float, diff: Dictionary) -> bool:
 	return false
 
 
+## A ready move that deflects at least "level" (or breaks) whose hit is out at "arrival" s.
+func _deflect_move(arrival: float, level: int) -> String:
+	for move in me.data.moves:
+		var d: Dictionary = Moves.DATA[move]
+		if int(d.get("deflects", 0)) <= 0 or not me.ready(move) or level <= 0:
+			continue
+		var start: float = d.get("startup", 0.2)
+		if absf(arrival - start - Combat.DEFLECT_WINDOW * 0.5) <= Combat.DEFLECT_WINDOW * 0.5:
+			return move
+	return ""
+
+
 func _phase_start() -> float:
 	# Moment (in the history) when the rival entered the phase we see.
 	var current_phase: String = _history.back().phase if not _history.is_empty() else ""
@@ -219,6 +299,11 @@ func _phase_start() -> float:
 
 
 func _dodge_toward(world_dir: Vector3) -> void:
+	# Never into the void (stages with an edge): the other way, or toward the center.
+	if not _lands_inside(world_dir, DODGE_REACH):
+		world_dir = -world_dir
+		if not _lands_inside(world_dir, DODGE_REACH):
+			world_dir = -Vector3(me.global_position.x, 0.0, me.global_position.z).normalized()
 	for move in me.data.moves:
 		if Moves.DATA[move].get("ai", {}).get("kind", "") == "guard" and me.ready(move) and randf() < 0.45:
 			_use(move)
@@ -259,6 +344,12 @@ func _punish(seen: Dictionary, dist: float, diff: Dictionary) -> bool:
 			continue
 		var ai: Dictionary = Moves.DATA[move].get("ai", {})
 		if ai.is_empty() or ai.kind in ["heal", "guard", "decoy"]:
+			continue
+		# A weather that is already on is not called again.
+		if Moves.DATA[move].has("weather") and main.weather.is_on(Moves.DATA[move].weather):
+			continue
+		# A status the rival cannot get right now is not tried.
+		if _status_useless(move):
 			continue
 		if _other_height(seen) and not ai.kind in RANGED:
 			continue
@@ -337,6 +428,12 @@ func _attack(seen: Dictionary, dist: float, diff: Dictionary) -> void:
 		var ai: Dictionary = Moves.DATA[move].get("ai", {})
 		if ai.is_empty() or ai.kind in ["heal", "guard", "decoy"]:
 			continue
+		# A weather that is already on is not called again.
+		if Moves.DATA[move].has("weather") and main.weather.is_on(Moves.DATA[move].weather):
+			continue
+		# A status the rival cannot get right now is not tried.
+		if _status_useless(move):
+			continue
 		if _other_height(seen) and not ai.kind in RANGED:
 			continue
 		if dist < ai.min or dist > ai.max + me.radius():
@@ -379,7 +476,7 @@ func _fly(_seen: Dictionary, dist: float, delta: float) -> void:
 			state_text = "takes off"
 		return
 	var altitude: float = me.global_position.y - main.ground_y
-	if me.flight < maximum * 0.3:
+	if me.flight < maximum * 0.3 and _lands_inside(Vector3.ZERO, 0.0):
 		_hold_button("descend", 0.15)
 	elif altitude < 3.5:
 		_hold_button("jump", 0.12)
@@ -392,6 +489,13 @@ func _use(move: String) -> void:
 	if b == "":
 		return
 	var d: Dictionary = Moves.DATA[move]
+	# Dashes and lunges carry it toward the rival: not if they would end off the edge
+	# (if the rival dodges, the dash goes all the way).
+	var travel: float = d.get("dist", d.get("advance", 0.0))
+	if travel > 0.0:
+		var to_rival := rival.global_position - me.global_position
+		if not _lands_inside(Vector3(-sin(me.ctrl.yaw), 0.0, -cos(me.ctrl.yaw)), travel + 1.5) 				or not _lands_inside(Vector3(to_rival.x, 0.0, to_rival.z), travel + 1.5):
+			return
 	if d.get("chargeable", false):
 		_hold_button(b, randf_range(d.startup, d.startup_max))
 	elif d.get("hold", false):
@@ -400,6 +504,31 @@ func _use(move: String) -> void:
 		_press(b)
 
 
+## Moving "meters" along world_dir keeps it on the stage (always true without a void).
+func _lands_inside(world_dir: Vector3, meters: float) -> bool:
+	if main.arena.void_y == -INF:
+		return true
+	return main.arena.inside(me.global_position + world_dir.normalized() * meters, 1.0)
+
+
 func _clear_line(target_point: Vector3) -> bool:
 	var q := PhysicsRayQueryParameters3D.create(me.center(), target_point + Vector3.UP * 0.5, 1)
 	return main.get_world_3d().direct_space_state.intersect_ray(q).is_empty()
+
+
+## A status move whose status the rival cannot get now (it has one, was just cured, is
+## drowsy, or is immune by type or ability).
+func _status_useless(move: String) -> bool:
+	var d: Dictionary = Moves.DATA[move]
+	if not d.has("inflicts"):
+		return false
+	var o = me.rival
+	if not (o is Fighter) or not is_instance_valid(o):
+		return true
+	if o.status != "" or o.status_lock > 0.0 or o.drowsy > 0.0:
+		return true
+	if d.get("respects_types", false) and Roster.immune(d.type, o.types):
+		return true
+	if d.get("powder", false) and "grass" in o.types:
+		return true
+	return not Status.can_get("slp" if d.inflicts == "drowsy" else d.inflicts, o.types, o.data.passive.id)

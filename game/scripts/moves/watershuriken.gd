@@ -35,7 +35,6 @@ func _throw(i: int) -> void:
 	g.type = "water"
 	g.cat = "special"
 	g.damage = d.damage
-	g.push = d.push
 	g.stun = d.stun
 	g.strength = d.strength
 	g.contact = false
@@ -47,22 +46,19 @@ func _throw(i: int) -> void:
 	play_sound("watershuriken", -4.0)
 
 
-## A Cobblemon shuriken that spins edge-on as it flies.
+## Pixel water shuriken (fx/tex/custom/watershuriken.png, from tools/move_sprites.py):
+## lying almost flat, like a thrown star, tipped back a little toward the thrower so it
+## reads from behind; it spins through its frames. The projectile points the root along
+## its way, so the star keeps its tilt whichever way it flies.
 func _shuriken() -> Node3D:
 	var root := Node3D.new()
-	var s := Sprite3D.new()
-	s.texture = load("res://fx/tex/moves/watershuriken.png")
-	s.pixel_size = 0.03
-	s.texture_filter = BaseMaterial3D.TEXTURE_FILTER_NEAREST
-	s.shaded = false
-	s.rotation.x = -PI * 0.5
-	s.modulate = Color(0.8, 0.95, 1.0)
-	root.add_child(s)
-	l.main.vfx.add_child(root)
 	var vfx: Vfx = l.main.vfx
-	vfx.live(root, d.reach / d.speed + 0.1, func(_k: float):
-		if is_instance_valid(s):
-			s.rotation.y += 0.6)
+	vfx.add_child(root)
+	var s := vfx.flat_sprite("res://fx/tex/custom/watershuriken.png", 4, 1.0, Vector3.ZERO, Basis.IDENTITY,
+		d.reach / d.speed + 0.1, Color.WHITE, 20.0, Callable(), 0.08)
+	s.reparent(root, false)
+	s.transform = Transform3D(Basis(Vector3.RIGHT, deg_to_rad(-65.0)), Vector3.ZERO)
+	vfx.live(root, d.reach / d.speed + 0.1)
 	return root
 
 

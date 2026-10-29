@@ -29,7 +29,6 @@ func on_active() -> void:
 	g.type = "electric"
 	g.cat = "special"
 	g.damage = d.damage
-	g.push = d.push
 	g.stun = d.stun
 	g.hitstop = d.hitstop
 	g.contact = false

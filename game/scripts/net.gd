@@ -22,6 +22,7 @@ signal event(data: Dictionary)
 const PORT := 7777
 const ACTIONS := ["jump", "dodge", "lock_on", "mov1", "mov2", "mov3", "mov4", "descend"]
 const STATES := ["free", "action", "dodge", "stunned", "knocked_down", "lying", "get_up", "ko", "dive"]
+const STATUSES := ["", "brn", "par", "psn", "tox", "slp", "frz"]
 const TYPES := ["normal", "fire", "water", "grass", "electric", "ice", "fighting", "poison", "ground",
 	"flying", "psychic", "bug", "rock", "ghost", "dragon", "dark", "steel", "fairy"]
 const P_STATE := 1
@@ -31,6 +32,9 @@ var main: Node
 var peer: ENetMultiplayerPeer
 var host := false
 var linked := false              # connected to the other player
+## This copy's own id in shared decisions (votes): random per session, the same for the
+## whole connection.
+var me := ""
 var in_battle := false
 var local: Fighter              # your own Pokémon
 var remote: Fighter             # the rival's copy
@@ -45,6 +49,7 @@ var public_ip := ""
 var _counters := {}            # own presses per action
 var _seen_list := {}                # last counters received from the other player
 var _last_frame_other := -1
+var states_applied := 0       # rival states actually applied (tests and the session log)
 var _exit_t: Array = []          # [time, channel, bytes] (simulated network)
 var _ping_t := 0.0
 var _pings := {}                 # id -> send time
@@ -56,6 +61,7 @@ var upnp_testing := false
 
 
 func _ready() -> void:
+	me = "%08x" % (randi() & 0x7fffffff)
 	process_physics_priority = -15
 	for a in ACTIONS:
 		_counters[a] = 0
@@ -188,6 +194,12 @@ func _put_on(channel: int, data: PackedByteArray) -> void:
 		peer.host.flush()
 
 
+## How many players share this session (themselves included). 1 vs 1 for now: the votes
+## (rematch) count against this, so more players only need it to grow.
+func players() -> int:
+	return 2 if linked else 1
+
+
 ## Reliable event (start, confirmed hit, effect, KO, rematch, pick...).
 func send_event(data: Dictionary) -> void:
 	var b := StreamPeerBuffer.new()
@@ -288,7 +300,8 @@ func _pack() -> PackedByteArray:
 	b.put_u8(code)
 	b.put_u8(["startup", "active", "recovery"].find(l.action.phase) if l.action else 0)
 	b.put_float(l.action.t if l.action else 0.0)
-	for v in [l.hp, l.energy, l.charges, l.flight, l.slow, l._slow_t, l.burned, l.poisoned, l.static_mark,
+	# The status travels in the old burned / poisoned / static slots: code, time left, toxic turns.
+	for v in [l.hp, l.energy, l.charges, l.flight, l.slow, l._slow_t, float(STATUSES.find(l.status)), l.status_t, l._status_age,
 			l.steadfast_t, l.translucent, l.invulnerable]:
 		b.put_float(v)
 	b.put_u8((1 if l.flying else 0) | (2 if l.model.visible else 0))
@@ -305,6 +318,7 @@ func _read_state(b: StreamPeerBuffer) -> void:
 	_last_frame_other = f
 	if remote == null or not is_instance_valid(remote):
 		return
+	states_applied += 1
 	var r := remote
 	var c := r.ctrl
 	c.move_input = Vector2(b.get_float(), b.get_float())

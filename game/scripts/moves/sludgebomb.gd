@@ -21,7 +21,8 @@ func in_startup(_delta: float) -> void:
 func _target_pos() -> Vector3:
 	var p: Vector3 = l.global_position + l.forward() * d.max * 0.6
 	if l.rival and is_instance_valid(l.rival) and l.rival.state != "ko":
-		p = l.rival.global_position
+		# Lobbed: it lands where the rival will be when it comes down.
+		p = l.rival.global_position + Vector3(l.rival.velocity.x, 0.0, l.rival.velocity.z) * d.flight_time * l.aim_lead
 	var plane := Vector3(p.x - l.global_position.x, 0, p.z - l.global_position.z)
 	var dist: float = clampf(plane.length(), d.min, d.max)
 	var dir := plane.normalized() if plane.length() > 0.1 else l.forward()
@@ -41,37 +42,22 @@ func on_active() -> void:
 	g.type = "poison"
 	g.cat = "special"
 	g.damage = d.damage * 0.5
-	g.push = 2.0
 	g.stun = 0.25
 	g.contact = false
 	var vfx: Vfx = l.main.vfx
 	vfx.telegraph(dest, d.blast_radius, tv, Roster.TYPE_COLOR.poison)
-	l.main.combat.projectile({"user": l, "pos": from_pos, "velocity": speed, "radius": 0.35, "lifetime": tv + 0.6, "gravity": GRAVITY,
+	# "track": 0: a lobbed bomb comes down where the ground is marked, it does not follow.
+	l.main.combat.projectile({"user": l, "pos": from_pos, "velocity": speed, "radius": 0.35, "lifetime": tv + 0.6, "gravity": GRAVITY, "track": 0.0,
 		"hit": g, "node": _ball(), "on_impact": func(pos: Vector3, _c: String): _burst(Vector3(pos.x, l.main.ground_y, pos.z))})
 	vfx.cobble("sludgebomb_actorfling", from_pos, dest, l.data.height)
 	play_sound("sludgebomb", 0.0)
 
 
+## Pixel blob of sludge (fx/tex/custom/sludgebomb.png, from tools/move_sprites.py) that
+## sheds dark wisps while it flies.
 func _ball() -> Node3D:
-	var root := Node3D.new()
-	var mi := MeshInstance3D.new()
-	var sm := SphereMesh.new()
-	sm.radius = 0.32
-	sm.height = 0.64
-	sm.radial_segments = 12
-	sm.rings = 6
-	mi.mesh = sm
-	var m := StandardMaterial3D.new()
-	m.albedo_color = Color("6a3d86")
-	m.roughness = 0.25
-	m.emission_enabled = true
-	m.emission = Color("8e4fb8")
-	m.emission_energy_multiplier = 0.4
-	mi.material_override = m
-	mi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
-	root.add_child(mi)
-	l.main.vfx.add_child(root)
 	var vfx: Vfx = l.main.vfx
+	var root: Node3D = vfx.pixel_ball("sludgebomb", 8, 0.8, Roster.TYPE_COLOR.poison, 10.0, false)
 	vfx.live(root, d.flight_time + 0.6, func(_k: float):
 		if randf() < 0.3:
 			vfx.burst("shadow", root.global_position, Vector3.UP, Color(0, 0, 0, 0), 0.2))
@@ -89,7 +75,6 @@ func _burst(pos: Vector3) -> void:
 	g.type = "poison"
 	g.cat = "special"
 	g.damage = d.damage
-	g.push = d.push
 	g.lift = d.lift
 	g.stun = d.stun
 	g.strength = d.strength

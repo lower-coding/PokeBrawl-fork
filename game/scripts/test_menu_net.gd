@@ -4,7 +4,8 @@ extends Node
 ##   godot --headless --path game -- --test=menu_net --role=guest --bot
 ## Each copy presses the buttons like a player: title, Online, Host game or Join
 ## (types 127.0.0.1 on the keyboard), picks a Pokémon, ready, VS, battle. After the
-## first KO the host goes back to selection; both pick another, another battle, and at
+## first KO the host goes back to selection; both pick another, the host picks the floating
+## stage (the guest must get it too), another battle, and at
 ## the end the host leaves: the guest must return to the online menu with the notice.
 ## Prints a MENU_NET_FINAL line to compare both copies.
 
@@ -21,6 +22,7 @@ var _captures := {}
 var _steps: Array = []
 var _battles: Array = []
 var _end := ""
+var _states_at_start := 0     # net.states_applied when the battle started
 var _last := {}                # HP and state of the last battle frame
 
 
@@ -59,7 +61,7 @@ func _capture(n: String) -> void:
 		return
 	_captures[n] = true
 	var img := get_viewport().get_texture().get_image()
-	img.save_png(ProjectSettings.globalize_path("res://").path_join("../captures/red_%s_%s.png" % [role, n]))
+	img.save_png(ProjectSettings.globalize_path("res://").path_join("../captures/net_%s_%s.png" % [role, n]))
 
 
 func _physics_process(delta: float) -> void:
@@ -122,6 +124,17 @@ func _menu(m: Menu) -> void:
 				return
 			if _round >= 2:
 				return
+			# Second battle: the host changes the stage (mov2) to the floating one.
+			if role == "host" and _round == 1 and m.choice.stage != "floating":
+				_press("mov2")
+				return
+			# Picked: on the options, Ready is already highlighted.
+			if m.sel_phase == "setup":
+				if not m.me_ready:
+					_press("menu_accept")
+				elif m.rival_choice_id != "":
+					_capture("selection_%d" % (_round + 1))
+				return
 			var want: String = CHOOSES[role][_round]
 			_step("selection %d: want %s" % [_round + 1, want])
 			if m.me_ready:
@@ -148,7 +161,7 @@ func _go_to(m: Menu, list: Array, id: String) -> void:
 	if m.cursor == i:
 		_press("menu_accept")
 	else:
-		_press("move_down")
+		_press("move_right")          # Online and Join are to the right of the first tile
 
 
 func _combat(delta: float) -> void:
@@ -164,9 +177,18 @@ func _combat(delta: float) -> void:
 	if _combat_t < 0.0:
 		_combat_t = 0.0
 		_step("battle %d: me %s, rival %s, ping %d ms" % [_round + 1, l.species, r.species, net.ping_ms()])
+		_states_at_start = net.states_applied
 		var expected: Array = [CHOOSES[role][_round], CHOOSES["guest" if role == "host" else "host"][_round]]
 		if [l.species, r.species] != expected:
 			_finish("species swapped: %s, expected %s" % [[l.species, r.species], expected])
+			return
+		# Both play on the stage the host picked.
+		var want_stage := "floating" if _round == 1 else "night"
+		_step("stage %s" % main.arena.stage)
+		# Each side's moves: the rival's must be what it saved (it sends them with its choice).
+		_step("moves: me %s, rival %s" % [",".join(l.data.moves), ",".join(r.data.moves)])
+		if main.arena.stage != want_stage:
+			_finish("battle %d on stage %s, expected %s" % [_round + 1, main.arena.stage, want_stage])
 			return
 	_combat_t += delta
 	_last = {"me_ko": l.state == "ko", "my_hp": int(l.hp), "rival_hp": int(r.hp)}
@@ -176,7 +198,12 @@ func _combat(delta: float) -> void:
 	# (each copy controls its own); the next hit ends it.
 	if _combat_t > 10.0 and _combat_t - delta <= 10.0:
 		l.hp = minf(l.hp, 1.0)
-	if main._end_t > 2.0:
+	# In sync: the rival's states keep arriving during the battle (after "pick another"
+	# they used to be thrown away as old, and each side saw the other frozen).
+	if _combat_t > 8.0 and _combat_t - delta <= 8.0 and net.states_applied - _states_at_start < 120:
+		_finish("battle %d out of sync: only %d rival states applied in 8 s" % [_round + 1, net.states_applied - _states_at_start])
+		return
+	if main._end_t > main.CHOICES_AT + 0.3:
 		_round_end()
 		if role == "host":
 			if _round == 1:

@@ -44,9 +44,14 @@ func on_active() -> void:
 	g.move_id = id
 	g.type = "electric"
 	g.cat = "special"
-	g.damage = d.damage * 0.4
-	g.push = 2.0
-	g.stun = 0.2
+	# Straight on the body it is the whole burst (the burst's own hit would expire while
+	# the user is frozen by this one); the burst's hit is for near misses.
+	g.damage = d.damage
+	g.lift = d.lift
+	g.stun = d.stun
+	g.effect = d.get("effect", "")
+	g.strength = 2
+	g.hitstop = 0.1
 	g.contact = false
 	var ball := _ball
 	_ball = null
@@ -56,7 +61,7 @@ func on_active() -> void:
 	var radius := 0.55
 	var p: Dictionary = l.main.combat.projectile({"user": l, "pos": _tail(), "velocity": dir * d.speed, "radius": radius, "lifetime": 3.0,
 		"gravity": d.gravity, "hit": g, "node": ball, "homing": 0.8, "target": l.rival,
-		"on_impact": func(pos: Vector3, _against: String): _burst(pos)})
+		"on_impact": func(pos: Vector3, against: String): _burst(pos, against == "body")})
 	# Sheds sparks while it flies.
 	var clock := {"t": 0.0}
 	l.main.vfx.live(Node3D.new(), 3.0, func(_k):
@@ -68,7 +73,7 @@ func on_active() -> void:
 	play_sound("electroball", -2.0)
 
 
-func _burst(pos: Vector3) -> void:
+func _burst(pos: Vector3, direct := false) -> void:
 	var g := Hit.new()
 	g.user = l
 	g.move_id = id
@@ -79,20 +84,19 @@ func _burst(pos: Vector3) -> void:
 	g.type = "electric"
 	g.cat = "special"
 	g.damage = d.damage
-	g.push = d.push
 	g.lift = d.lift
 	g.stun = d.stun
-	g.effect = d.effect
+	g.effect = d.get("effect", "")
 	g.strength = 2
 	g.hitstop = 0.1
 	g.contact = false
 	g.lifetime = 0.08
-	l.main.combat.add_hit(g)
+	if not direct:
+		l.main.combat.add_hit(g)
 	var vfx: Vfx = l.main.vfx
 	var col := Roster.TYPE_COLOR.electric
 	vfx.impact(pos, "electric", 2, false)
 	vfx.wave(pos - Vector3.UP * (pos.y - l.main.ground_y), d.blast_radius * 1.1, 0.35, col, 0.1)
-	vfx.distortion(pos, d.blast_radius * 2.5, 0.35, 0.06)
 	vfx.light(pos, col, 5.0, d.blast_radius * 3.0, 0.25)
 	vfx.cobble("thunder_targetboom", pos, null, 1.0)
 	vfx.cobble("thunder_targetfloorsparks", Vector3(pos.x, l.main.ground_y, pos.z), null, 1.0)

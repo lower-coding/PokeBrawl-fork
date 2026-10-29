@@ -17,19 +17,20 @@ extends RefCounted
 ##   flight      flyers (Charizard): stamina (s hovering), climb (m/s), ceiling (m),
 ##               recharge (s to refill on the ground), speed (multiplies air speed).
 ##               Jump, then jump again in the air to take off
+##   item        what it holds, as in the games (Stats.ITEMS): Ash's Pikachu, a Light Ball
 ## Player-facing text (style, passive name and text) is in English and is translated
 ## through game/i18n/translations.csv.
 
 const POKEMON := {
 	"pikachu": {
-		"display_name": "Pikachu", "types": ["electric"], "cat": "special",
-		"style": "Agile and frail. Pressures, changes direction and never stands still.",
+		"display_name": "Ash's Pikachu", "types": ["electric"], "cat": "special", "item": "lightball",
+		"style": "Ash's Pikachu, with its Light Ball: double Attack and Sp. Atk. Agile and frail; it pressures, changes direction and never stands still.",
 		"height": 0.95, "radius": 0.38, "poise": 0, "hp": 780.0, "knockback": 1.25,
 		"speed": 8.6, "accel": 75.0, "turn": 18.0, "jump": 9.6, "gravity": 27.0, "air_control": 0.85,
 		"dodge": {"dist": 6.2, "dur": 0.22, "iframes": [0.03, 0.19], "recovery": 0.14, "charges": 3, "recharge": 1.0},
 		"moves": ["thundershock", "quickattack", "irontail", "electroball"],
 		"passive": {"id": "static", "display_name": "Static",
-			"text": "Whoever hits it up close is charged for 4 s. An Electric move against a charged target slows it and deals 25% more. Shown as sparks above it."},
+			"text": "Whoever hits it with a contact move has a 30% chance of being paralyzed."},
 	},
 	"snorlax": {
 		"display_name": "Snorlax", "types": ["normal"], "cat": "physical",
@@ -39,7 +40,7 @@ const POKEMON := {
 		"dodge": {"dist": 3.2, "dur": 0.3, "iframes": [0.06, 0.22], "recovery": 0.3, "charges": 2, "recharge": 1.8},
 		"moves": ["bodyslam", "icepunch", "earthquake", "rest"],
 		"passive": {"id": "thickfat", "display_name": "Thick Fat",
-			"text": "Takes 30% less from Fire and Ice attacks. A message shows when it happens."},
+			"text": "Takes half damage from Fire and Ice moves. A message shows when it happens."},
 	},
 	"charizard": {
 		"display_name": "Charizard", "types": ["fire", "flying"], "cat": "special",
@@ -50,7 +51,7 @@ const POKEMON := {
 		"flight": {"stamina": 6.0, "climb": 6.5, "ceiling": 8.5, "recharge": 3.0, "speed": 1.15},
 		"moves": ["flamethrower", "airslash", "dragonclaw", "flareblitz"],
 		"passive": {"id": "blaze", "display_name": "Blaze",
-			"text": "Below a third of its HP, its Fire moves deal 25% more. Its tail flame burns brighter."},
+			"text": "At a third of its HP or less, its Fire moves hit 1.5 times as hard. Its tail flame burns brighter."},
 	},
 	"blastoise": {
 		"display_name": "Blastoise", "types": ["water"], "cat": "special",
@@ -60,8 +61,8 @@ const POKEMON := {
 		"dodge": {"dist": 3.8, "dur": 0.28, "iframes": [0.05, 0.21], "recovery": 0.26, "charges": 2, "recharge": 1.6},
 		"no_anims": ["ground_run"],
 		"moves": ["aquajet", "hydropump", "rapidspin", "icebeam"],
-		"passive": {"id": "raindish", "display_name": "Rain Dish",
-			"text": "Every Water move leaves it wet for 4 s, and while wet it slowly recovers HP. You can see the drops."},
+		"passive": {"id": "torrent", "display_name": "Torrent",
+			"text": "At a third of its HP or less, its Water moves hit 1.5 times as hard."},
 	},
 	"venusaur": {
 		"display_name": "Venusaur", "types": ["grass", "poison"], "cat": "special",
@@ -70,8 +71,8 @@ const POKEMON := {
 		"speed": 5.6, "accel": 26.0, "turn": 7.0, "jump": 7.0, "gravity": 30.0, "air_control": 0.4,
 		"dodge": {"dist": 3.5, "dur": 0.3, "iframes": [0.06, 0.22], "recovery": 0.3, "charges": 2, "recharge": 1.8},
 		"moves": ["vinewhip", "razorleaf", "sludgebomb", "solarbeam"],
-		"passive": {"id": "chlorophyll", "display_name": "Chlorophyll",
-			"text": "After a Grass move it runs 30% faster for 4 s. Leaves swirl around it while it lasts."},
+		"passive": {"id": "overgrow", "display_name": "Overgrow",
+			"text": "At a third of its HP or less, its Grass moves hit 1.5 times as hard."},
 	},
 	"lucario": {
 		"display_name": "Lucario", "types": ["fighting", "steel"], "cat": "physical",
@@ -81,7 +82,7 @@ const POKEMON := {
 		"dodge": {"dist": 5.0, "dur": 0.22, "iframes": [0.03, 0.19], "recovery": 0.16, "charges": 3, "recharge": 1.1},
 		"moves": ["aurasphere", "meteormash", "extremespeed", "detect"],
 		"passive": {"id": "steadfast", "display_name": "Steadfast",
-			"text": "When one of its moves is interrupted or it is knocked down, it runs 20% faster for 3 s. A blue aura surrounds it."},
+			"text": "Each time a hit cuts one of its moves short (it flinches), its Speed rises one stage (x1.5 for the battle)."},
 	},
 	"gengar": {
 		"display_name": "Gengar", "types": ["ghost", "poison"], "cat": "special",
@@ -90,9 +91,11 @@ const POKEMON := {
 		"speed": 7.4, "accel": 40.0, "turn": 12.0, "jump": 9.0, "gravity": 18.0, "air_control": 0.9,
 		"dodge": {"dist": 6.5, "dur": 0.3, "iframes": [0.02, 0.3], "recovery": 0.2, "charges": 2, "recharge": 1.5, "teleport": true},
 		"levitates": true,
+		# It levitates rather than flies on wings: lower and shorter than Charizard.
+		"flight": {"stamina": 4.5, "climb": 5.0, "ceiling": 6.0, "recharge": 3.0, "speed": 1.0},
 		"moves": ["shadowball", "sludgebomb", "hex", "substitute"],
 		"passive": {"id": "levitate", "display_name": "Levitate",
-			"text": "It floats: Earthquake, puddles and ice cannot reach it. Its dodge is to vanish and reappear."},
+			"text": "It floats: Earthquake, puddles and ice cannot reach it, and it can fly for a while (jump again in the air). Its dodge is to vanish and reappear."},
 	},
 	"garchomp": {
 		"display_name": "Garchomp", "types": ["dragon", "ground"], "cat": "physical",
@@ -102,7 +105,7 @@ const POKEMON := {
 		"dodge": {"dist": 5.0, "dur": 0.25, "iframes": [0.04, 0.2], "recovery": 0.2, "charges": 2, "recharge": 1.3},
 		"moves": ["dig", "dragonclaw", "earthquake", "stoneedge"],
 		"passive": {"id": "roughskin", "display_name": "Rough Skin",
-			"text": "Whoever hits it in melee gets hurt: 12% of the damage they deal. Sparks fly."},
+			"text": "Whoever hits it with a contact move loses 1/8 of its max HP. Sparks fly."},
 	},
 	"greninja": {
 		"display_name": "Greninja", "types": ["water", "dark"], "cat": "special",
@@ -123,14 +126,15 @@ const POKEMON := {
 		"dodge": {"dist": 3.6, "dur": 0.18, "iframes": [0.02, 0.15], "recovery": 0.12, "charges": 3, "recharge": 0.9},
 		"moves": ["bulletpunch", "xscissor", "swordsdance", "wingattack"],
 		"passive": {"id": "technician", "display_name": "Technician",
-			"text": "Its light hits deal 25% more: Bullet Punch hits above its weight."},
+			"text": "Its moves of 60 power or less hit 1.5 times as hard: Bullet Punch hits above its weight."},
 	},
 }
 
 ## Soft type matchups: a disadvantage matters, but it does not decide the battle on its own.
+## An immunity still lets a quarter through ("barely effective").
 const EFFECTIVE := 1.25
 const NOT_VERY := 0.8
-const NOTHING := 0.6
+const NOTHING := 0.25
 
 const TABLE := {
 	"normal": {"weak": ["rock", "steel"], "immune": ["ghost"]},
@@ -166,6 +170,28 @@ const TYPE_COLOR := {
 	"rock": Color("c9b458"), "ghost": Color("8f6fc4"), "dragon": Color("7f5cff"), "dark": Color("8a7062"),
 	"steel": Color("c8ccdf"), "fairy": Color("f2a3cf"),
 }
+
+
+## Whether one of these types is immune to the move's type in the games. Damage only
+## softens immunities (NOTHING); status effects follow them to the letter.
+static func immune(type: String, defense: Array) -> bool:
+	var row: Dictionary = TABLE.get(type, {})
+	return defense.any(func(t): return t in row.get("immune", []))
+
+
+## How a multiplier reads, like the games' tiers: "super" (weak twice, x4 there),
+## "effective" (x2), "" (neutral), "not_very" (x1/2), "barely" (resisted twice, x1/4 there,
+## or immune).
+static func tier(mult: float) -> String:
+	if mult > EFFECTIVE * 1.15:
+		return "super"
+	if mult > 1.05:
+		return "effective"
+	if mult < NOT_VERY * 0.88:
+		return "barely"
+	if mult < 0.95:
+		return "not_very"
+	return ""
 
 
 static func affinity(type: String, defense: Array) -> float:

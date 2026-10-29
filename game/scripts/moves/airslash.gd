@@ -1,6 +1,7 @@
 extends Action
 ## Air Slash: a crescent-shaped blade of air that cuts horizontally. Wide but flat: it
-## can be jumped over. Also usable in the air.
+## can be jumped over. Also usable in the air. It looks like two nested crescents (a pale
+## outer edge and a bright inner one) that wobble as they fly and leave streaks of wind.
 
 func on_start() -> void:
 	turn_mult = 2.5
@@ -18,7 +19,6 @@ func on_active() -> void:
 	g.type = "flying"
 	g.cat = "special"
 	g.damage = d.damage
-	g.push = d.push
 	g.stun = d.stun
 	g.contact = false
 	g.strength = 1
@@ -28,6 +28,17 @@ func on_active() -> void:
 			l.main.vfx.burst("wind", pos, -dir)
 			l.main.audio.play_sound("airslash_hit", pos, -4.0)})
 	l.main.vfx.burst("wind", from_pos, dir)
+	l.main.vfx.cobble("gust_actor", from_pos, from_pos + dir * 4.0, l.data.height)
+	# Streaks of wind behind it while it flies, and a slight wobble (in steps).
+	var vfx: Vfx = l.main.vfx
+	var streak := [0.0]
+	vfx.live(node, d.reach / d.speed, func(k: float):
+		if not is_instance_valid(node):
+			return
+		node.get_child(0).rotation.z = 0.12 * sin(floorf(k * 40.0) * 0.9)
+		streak[0] += 1.0
+		if int(streak[0]) % 3 == 0:
+			vfx.burst("wind", node.global_position - dir * 0.6, -dir, Color(0, 0, 0, 0), 0.35))
 	play_sound("airslash", 0.0)
 
 
@@ -58,6 +69,15 @@ func _blade() -> Node3D:
 	mi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 	mi.rotation.y = PI
 	root.add_child(mi)
+	# Inner crescent: thinner, brighter, a little behind.
+	var inner := MeshInstance3D.new()
+	inner.mesh = im
+	inner.material_override = l.main.vfx.mat("ribbon_core", VfxShaders.RIBBON, {"color": Color(0.95, 0.98, 1.0), "energy": 4.0})
+	inner.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	inner.rotation.y = PI
+	inner.scale = Vector3(0.7, 1.0, 0.7)
+	inner.position = Vector3(0, 0, 0.12)
+	mi.add_child(inner)
 	l.main.vfx.add_child(root)
 	return root
 

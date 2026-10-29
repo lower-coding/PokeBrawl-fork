@@ -56,6 +56,13 @@ var action: Action = null
 var locked := true
 var face_yaw := 0.0                  # where it faces (the +Z of its frame)
 var slow := 1.0                     # Ice, Static...
+## Confused (Outrage's rage wearing off, and moves to come): seconds left with its movement
+## turned around, as with an inverted stick: left goes right, forward goes back. It sits
+## alongside a status (burned and confused at once is possible). Stars circle its head.
+var confused := 0.0
+var _locked_decoy := false            # locked on a decoy (when it goes, the lock goes)
+var ai_driven := false                # its moves come from the AI (it never unlocks)
+var _confuse_fx := 0.0
 var _slow_t := 0.0
 var static_mark := 0.0
 var burned := 0.0
@@ -63,9 +70,29 @@ var poisoned := 0.0
 var wet := 0.0                    # Rain Dish (Blastoise)
 var chlorophyll := 0.0                 # Chlorophyll (Venusaur)
 var steadfast_t := 0.0                 # Steadfast (Lucario)
+## Stat stages, as in the games: each +1 is x1.5 (+2 x2...), each -1 x2/3; -6 to +6. They
+## last the whole battle. Attack and Sp. Atk change damage, Defense and Sp. Def what it
+## takes, Speed how fast it moves.
+var stages := {"atk": 0, "def": 0, "spa": 0, "spd": 0, "spe": 0}
+var _berry_used := false             # Gluttony (Snorlax)
+## Major status condition (Status): "", "brn", "par", "psn", "tox", "slp", "frz".
+var status := ""
+var status_t := 0.0                  # seconds left
+var status_lock := 0.0               # just cured: no new status yet
+var shots := 0                       # projectiles fired this battle (Combat numbers them)
+var drowsy := 0.0                    # Yawn: seconds before it falls asleep
+var _status_age := 0.0
+var _status_tick := 0.0
+var _status_dealt := 0.0
+var _para_roll := 0.0
+var _status_fx := 0.0
 var translucent := 0.0               # Substitute (Gengar)
 var _skin_t := 0.0
-var fooled_by: Node3D = null         # decoy this AI has fallen for (see aim_target())
+var fooled_by: Node3D = null         # decoy it is locked on (the AI falls for it; a player picks it)
+var ai_aim = null                    # AI only: where it thinks the rival is (delayed, with error)
+var aim_lead := 1.0                  # how much projectiles lead a moving target (the AI uses less)
+var _hit_ms := -100000               # when it was last hit (Time ms), for the ring-out log
+var _left_as := ""                   # what it was doing when it went off the edge (same log)
 var head_pitch := 0.0                   # tilt of hits toward the target's height (rad)
 var air_jumps := 0                 # jumps left in the air (Greninja: double jump)
 var boosted_hits := 0                        # hits boosted by Swords Dance
@@ -91,6 +118,10 @@ var _rumble_ok := true
 
 # Visual
 var pivot: Node3D                   # receives the procedural pose
+## Only for show: how far it has come out of its Poké Ball (0 inside, 1 out) and how white
+## it still glows from it (the battle's opening, main.gd).
+var appear := 1.0
+var appear_glow := 0.0
 var model: PokeModel
 var _scale := 1.0
 var _pose := {"tilt": 0.0, "side": 0.0, "turn": 0.0, "stretch": 1.0, "height": 0.0, "spin": 0.0}
@@ -101,11 +132,21 @@ var _feet: Array = []                # lowest bones of the model (so it does not
 var _above_ground := 0.0              # how much the body is raised if the feet sink
 
 
-func setup(m: Node, sp: String, eq: int) -> void:
+## "loadout": its moves and ability (Loadout); empty, the roster's defaults.
+func setup(m: Node, sp: String, eq: int, loadout := {}) -> void:
 	main = m
 	species = sp
 	team = eq
-	data = Roster.POKEMON[sp]
+	data = Stats.battle_data(sp)
+	if not loadout.is_empty():
+		data.moves = loadout.moves.duplicate()
+		data.passive = Loadout.ability(sp, loadout.ability)
+	if data.passive.id == "lightmetal":
+		# Half its weight: it dodges a little further (weight counts on a log scale) and is
+		# knocked further (speed goes with 1/mass; tamed to x1.25 here).
+		data.weight_kg = float(data.get("weight_kg", 100.0)) * 0.5
+		data.dodge.dist = snappedf(float(data.dodge.dist) + 0.085 * log(2.0), 0.1)
+		data.knockback = float(data.knockback) * 1.25
 	types = data.types
 	hp_max = data.hp
 	hp = hp_max
@@ -205,11 +246,74 @@ func on_floor() -> bool:
 	return is_on_floor() or global_position.y < main.ground_y + 0.15
 
 
-## What it looks at and aims at: the rival, or the decoy if it fell for it (the AI).
+## What it looks at and aims at: the rival, or a decoy it is locked on (the AI falls for
+## one; Substitute locks its rival on its doll; a player can pick one, see switch_target).
 func aim_target() -> Node3D:
 	if fooled_by and is_instance_valid(fooled_by) and not fooled_by.is_queued_for_deletion():
 		return fooled_by
 	return rival
+
+
+## Not locked on: its moves go where the camera looks (Action.aim), not at the rival. Only
+## players unlock; the AI is always locked on.
+func free_aim() -> bool:
+	return not locked
+
+
+## Where the camera looks, flat (free aim).
+func camera_forward() -> Vector3:
+	return Vector3(-sin(ctrl.yaw), 0.0, -cos(ctrl.yaw))
+
+
+## What it can lock on: the rival and the rival's decoys (Substitute's doll, Double Team's
+## clones): it cannot always tell the real one.
+func lock_candidates() -> Array:
+	var out: Array = []
+	if rival and is_instance_valid(rival) and rival.state != "ko":
+		out.append(rival)
+	for o in main.combat.targets:
+		if o is Decoy and is_instance_valid(o) and o.user == rival and not o.is_queued_for_deletion():
+			out.append(o)
+	return out
+
+
+## Locks on whatever is closest to where the camera looks (the real one or not).
+func lock_on_looked() -> void:
+	locked = true
+	var best: Node3D = rival
+	var best_a := INF
+	var look := camera_forward()
+	for o in lock_candidates():
+		var to: Vector3 = o.global_position - global_position
+		to.y = 0.0
+		if to.length() < 0.1:
+			continue
+		var a := look.angle_to(to.normalized())
+		if a < best_a:
+			best_a = a
+			best = o
+	fooled_by = null if best == rival else best
+
+
+## Souls style: the next target to the right (side 1) or the left (-1) of the current one
+## on screen, among the rival and its decoys.
+func switch_target(side: int) -> void:
+	var cur: Node3D = aim_target()
+	if cur == null:
+		return
+	var right := Vector3(cos(ctrl.yaw), 0.0, -sin(ctrl.yaw))
+	var here: float = right.dot(cur.global_position - global_position)
+	var best: Node3D = null
+	var best_d := INF
+	for o in lock_candidates():
+		if o == cur:
+			continue
+		var d: float = (right.dot(o.global_position - global_position) - here) * side
+		if d > 0.05 and d < best_d:
+			best_d = d
+			best = o
+	if best:
+		fooled_by = null if best == rival else best
 
 
 ## How high the feet can rise with hits and dashes that go upward: its jump height
@@ -227,17 +331,120 @@ func target_center() -> Vector3:
 	return b.center() if b else center() + forward() * 3.0
 
 
-## Any visible status condition (for Hex).
+## A major status condition (for Hex and Facade).
 func has_status() -> bool:
-	return poisoned > 0.0 or burned > 0.0 or slow < 1.0 or static_mark > 0.0
+	return status != ""
+
+
+## Gives it a major status condition if it can get it (types, ability, none already), as
+## in the games. Online, on the rival's copy, it is sent to the rival, who decides.
+## Confusion for "secs" seconds (longer wins), said over its head.
+func confuse(secs: float) -> void:
+	if state == "ko":
+		return
+	if confused <= 0.0:
+		main.vfx.text(center() + Vector3.UP * 1.0, tr("Confused!"), Color(0.85, 0.7, 1.0))
+	confused = maxf(confused, secs)
+
+
+func inflict(kind: String) -> bool:
+	if state == "ko" or status != "" or status_lock > 0.0 or not Status.can_get(kind, types, data.passive.id):
+		return false
+	if is_remote:
+		main.net.send_event({"t": "effect", "type": "status", "v": 0.0, "move": kind})
+		return true
+	status = kind
+	status_t = Status.DURATION.get(kind, 0.0)
+	_status_age = 0.0
+	_status_tick = Status.TICK
+	_status_dealt = 0.0
+	_para_roll = Status.PARA_ROLL
+	main.vfx.text(center() + Vector3.UP * 0.9, Status.text(kind), Status.COLOR[kind])
+	main.hud.log_entry(tr("%s: %s") % [tr(data.display_name), Status.text(kind)])
+	match kind:
+		"slp":
+			status_t = randf_range(Status.SLEEP.x, Status.SLEEP.y)
+			stun_target(status_t)
+		"frz":
+			status_t = randf_range(Status.FREEZE.x, Status.FREEZE.y)
+			stun_target(status_t)
+	return true
+
+
+## Cures it; for a while it cannot get another one (IMMUNE_AFTER).
+func cure_status(lock := true) -> void:
+	if status != "" and lock:
+		status_lock = Status.IMMUNE_AFTER
+	status = ""
+	status_t = 0.0
+	_status_age = 0.0
+
+
+## Per frame: the chip damage, paralysis, and wearing off (each copy decides its own
+## Pokémon; online the rival's HP comes with its state), and the look of it.
+func _status_process(delta: float) -> void:
+	status_lock = maxf(0.0, status_lock - delta)
+	if drowsy > 0.0 and state != "ko":
+		drowsy -= delta
+		_status_fx -= delta
+		if _status_fx <= 0.0:
+			_status_fx = 0.9
+			main.fx.anim("generic/status/sleep_zzz.png", global_position + Vector3(0.3, data.height + 0.3, 0), 0.5, 16, 0.9)
+		if drowsy <= 0.0 and not is_remote:
+			inflict("slp")
+	if status == "" or state == "ko":
+		return
+	if not is_remote:
+		_status_age += delta
+		var chip := hp_max * Status.rate(status, _status_age) * delta
+		if chip > 0.0:
+			_damage_direct(chip)
+			_status_dealt += chip
+		_status_tick -= delta
+		if _status_tick <= 0.0:
+			_status_tick += Status.TICK
+			if _status_dealt > 0.5:
+				main.vfx.number(center(), _status_dealt, 1.0)
+			_status_dealt = 0.0
+		if status == "par":
+			_para_roll -= delta
+			if _para_roll <= 0.0:
+				_para_roll = Status.PARA_ROLL
+				if randf() < Status.PARA_CHANCE and state in ["free", "action"]:
+					stun_target(Status.PARA_T)
+					main.vfx.text(center() + Vector3.UP * 0.9, tr("Fully paralyzed!"), Status.COLOR.par)
+		status_t -= delta
+		if status_t <= 0.0:
+			main.vfx.text(center() + Vector3.UP * 0.9, Status.cured_text(status), Status.COLOR[status])
+			cure_status()
+			return
+	# The look of it: Cobblemon's status sprites and the types' particles.
+	_status_fx -= delta
+	if _status_fx <= 0.0:
+		match status:
+			"par":
+				_status_fx = 0.5
+				main.fx.anim("generic/status/paralysis_spark.png", center() + Vector3(randf_range(-0.4, 0.4), randf_range(0.0, 0.5), 0), 0.5, 10, 0.4)
+			"slp":
+				_status_fx = 0.7
+				main.fx.anim("generic/status/sleep_zzz.png", global_position + Vector3(0.3, data.height + 0.35, 0), 0.7, 16, 1.0)
+			"brn":
+				_status_fx = 0.35
+				main.vfx.burst("fire_fx", center() + Vector3.UP * 0.2, Vector3.UP, Color(0, 0, 0, 0), 0.25)
+			"psn", "tox":
+				_status_fx = 0.4
+				main.vfx.burst("shadow", center(), Vector3.UP, Status.COLOR[status], 0.25)
+			"frz":
+				_status_fx = 0.25
+				main.vfx.burst("ice_fx", center(), Vector3.UP, Color(0, 0, 0, 0), 0.35)
 
 
 ## Effect on this fighter caused by the rival (Rough Skin, Static, Detect). If this is
 ## an online rival's copy, it is sent to the rival, who is in charge of its own
 ## Pokémon.
-func effect(type: String, value: float) -> void:
+func effect(type: String, value: float, move := "") -> void:
 	if is_remote:
-		main.net.send_event({"t": "effect", "type": type, "v": value})
+		main.net.send_event({"t": "effect", "type": type, "v": value, "move": move})
 		return
 	match type:
 		"damage":
@@ -246,6 +453,16 @@ func effect(type: String, value: float) -> void:
 			static_mark = value
 		"stun":
 			stun_target(value)
+		"status":
+			inflict(move)
+		"self_boost":
+			if stages.has(move):
+				boost(move, int(value))
+		"disable":
+			# Disable: that move cannot be used for a while.
+			if Moves.DATA.has(move):
+				cds[move] = maxf(cds.get(move, 0.0), value)
+				main.vfx.text(center() + Vector3.UP * 0.9, tr("%s is disabled!") % tr(Moves.DATA[move].display_name), Color(0.75, 0.6, 1.0))
 
 
 ## Online copy: moves toward the rival's real state (position extrapolated with the
@@ -262,9 +479,12 @@ func _net_correct(delta: float) -> void:
 	flying = s.flying
 	slow = s.slow
 	_slow_t = s.slow_t
-	burned = s.burned
-	poisoned = s.poisoned
-	static_mark = s.static_mark
+	var had := status
+	status = Net.STATUSES[clampi(int(s.burned), 0, Net.STATUSES.size() - 1)]
+	if had != "" and status == "":
+		status_lock = Status.IMMUNE_AFTER
+	status_t = s.poisoned
+	_status_age = s.static_mark
 	steadfast_t = s.steadfast_t
 	translucent = s.translucent
 	invulnerable = s.invulnerable
@@ -297,6 +517,7 @@ func stun_target(t: float) -> void:
 	if state == "ko":
 		return
 	if action:
+		_cut_cooldown()
 		action.finish(true)
 		action = null
 	_switch_state("stunned")
@@ -330,6 +551,12 @@ func ready(move: String) -> bool:
 
 func _physics_process(delta: float) -> void:
 	_time += delta
+	# Each copy decides its own Pokémon's fall (online, the rival's copy just follows).
+	if not is_remote and state != "ko" and global_position.y < main.arena.void_y:
+		_ring_out()
+		return
+	if main.arena.void_y != -INF and _left_as == "" and global_position.y < -0.5:
+		_left_as = state + (" " + action.id if action else "")
 	if _frozen > 0.0:
 		# Hitstop: everything frozen, the animation too.
 		_frozen -= delta
@@ -350,18 +577,26 @@ func _physics_process(delta: float) -> void:
 		"dodge":
 			_step_dodge(delta)
 		"stunned":
-			_brake(delta, 10.0 if on_ground else 2.0)
+			# Slides back with ground friction (Knockback.FRICTION) and stays stunned until
+			# the slide ends. Asleep or frozen, it stays put until that wears off.
+			_brake(delta, Knockback.FRICTION / 3.0 if on_ground else 2.0)
+			if status in ["slp", "frz"]:
+				_stunned = maxf(_stunned, status_t)
 			_stunned -= delta
-			if _stunned <= 0.0 and on_ground:
+			if _stunned <= 0.0 and on_ground and Vector2(velocity.x, velocity.z).length() < 0.8:
 				_to_free()
 			elif _stunned <= -0.6:
 				_to_free()
 		"knocked_down":
-			_brake(delta, 6.0 if on_ground else 0.5)
+			_brake(delta, Knockback.FRICTION / 3.0 if on_ground else 0.5)
 			if on_ground and _state_t > 0.25 and velocity.y <= 0.0:
 				_switch_state("lying")
 				main.vfx.dust(global_position, data.radius * 1.6)
 				main.audio.play_sound("fall", global_position, -4.0)
+			# Knocked off into a void it would never land: after a moment it regains
+			# control in the air, so a flyer can fly back (and anyone can steer).
+			elif not on_ground and _state_t > 0.6 and main.arena.void_y != -INF and global_position.y < -1.0:
+				_to_free()
 		"lying":
 			_brake(delta, 14.0)
 			if _state_t >= 0.55:
@@ -390,7 +625,9 @@ func _physics_process(delta: float) -> void:
 	elif state != "action" or not action or not action.no_gravity:
 		velocity.y -= data.gravity * delta * (2.2 if state == "dive" else 1.0)
 	_separate()
+	var before := global_position
 	move_and_slide()
+	_edge_stop(before)
 	if is_remote and not net_state.is_empty():
 		_net_correct(delta)
 	if on_ground and not _was_grounded and state in ["free", "action"]:
@@ -399,11 +636,100 @@ func _physics_process(delta: float) -> void:
 	ctrl.clear()
 
 
+## On stages with a void, a move never carries its user off the edge (a Quick Attack or an
+## Extreme Speed stops at it): only being knocked off, dodging out or walking out are falls.
+func _edge_stop(before: Vector3) -> void:
+	if main.arena.void_y == -INF or is_remote or state not in ["action", "dive"]:
+		return
+	var p := global_position
+	if main.arena.inside(p, 0.2):
+		return
+	# Already outside (pushed close to the edge): only stop moving further out.
+	if Vector2(p.x, p.z).length() <= Vector2(before.x, before.z).length():
+		return
+	global_position = Vector3(before.x, p.y, before.z)
+	velocity.x = 0.0
+	velocity.z = 0.0
+
+
+## A move's secondary effect as in the games ("secondary": {"chance", and "status", "boost"
+## on the target or "self" on the user}). A stream's ticks share the chance of one use.
+## A status move that touched it (Toxic, Will-O-Wisp, the powders...): no damage or stun,
+## only its status, if it can get it. As in the games, the type chart stops some ("respects_
+## types": Thunder Wave does nothing to Ground types) and Grass types and Overcoat ignore
+## powders.
+func _status_move(md: Dictionary, info: Dictionary) -> String:
+	var kind: String = md.get("inflicts", "")
+	# Why it fails, as the games tell it: the type (or the ability), a status it already
+	# has, or the few seconds after one wears off.
+	var why := ""
+	if (md.get("respects_types", false) and Roster.immune(info.hit.type, types)) \
+			or (md.get("powder", false) and ("grass" in types or data.passive.id == "overcoat")) \
+			or not Status.can_get("slp" if kind == "drowsy" else kind, types, data.passive.id):
+		why = tr("No effect")
+	elif status != "" or drowsy > 0.0:
+		why = tr("Already has a status")
+	elif status_lock > 0.0:
+		why = tr("Temporary immunity")
+	elif kind == "drowsy":
+		drowsy = Status.YAWN
+		main.vfx.text(center() + Vector3.UP * 0.9, tr("Drowsy..."), Status.COLOR.slp)
+	else:
+		inflict(kind)
+	if why != "":
+		main.vfx.text(center() + Vector3.UP * 0.9, why, Color(0.75, 0.77, 0.85))
+		return "status"
+	var at: Fighter = info.attacker if info.attacker is Fighter else null
+	for piece in md.get("fx_hit", []):
+		main.vfx.cobble(piece, center(), at.center() if at else null, data.height)
+	main.audio.play_sound(info.hit.move_id + "_hit", center(), -3.0)
+	return "status"
+
+
+func _secondary(md: Dictionary, info: Dictionary, at: Fighter) -> void:
+	if not md.has("secondary") or Roster.immune(info.hit.type, types):
+		return
+	var sec: Dictionary = md.secondary
+	var chance: float = float(sec.get("chance", 1.0)) / float(md.get("split", 1))
+	if randf() >= chance:
+		return
+	if sec.has("status"):
+		inflict(sec.status)
+	for stat in sec.get("boost", {}):
+		boost(stat, int(sec.boost[stat]))
+	if at and is_instance_valid(at):
+		for stat in sec.get("self", {}):
+			at.effect("self_boost", float(sec.self[stat]), stat)
+
+
+## A move cut short by a hit or a stun: if it had already gone off (past its startup) it
+## was used and goes on cooldown; cut while winding up, it was not (as a flinch in the
+## games: the move never happens).
+func _cut_cooldown() -> void:
+	if action and action.phase != "startup":
+		_start_cooldown(action.id)
+
+
+## A used move goes on cooldown (keeping a longer one already set, like a Disable).
+func _start_cooldown(move: String) -> void:
+	var c: float = Moves.cooldown(move)
+	if c > 0.0:
+		cds[move] = maxf(cds.get(move, 0.0), c)
+
+
 func _timers(delta: float) -> void:
 	for k in cds.keys():
 		cds[k] = maxf(0.0, cds[k] - delta)
 	invulnerable = maxf(0.0, invulnerable - delta)
 	static_mark = maxf(0.0, static_mark - delta)
+	if confused > 0.0:
+		confused = maxf(0.0, confused - delta)
+		_confuse_fx -= delta
+		if _confuse_fx <= 0.0:
+			_confuse_fx = 0.2
+			var a := _time * 4.0
+			var head: Vector3 = global_position + Vector3.UP * (data.height + 0.35)
+			main.vfx.burst("stars", head + Vector3(cos(a), 0.0, sin(a)) * (data.radius * 0.8 + 0.2), Vector3.UP, Color(0, 0, 0, 0), 0.3)
 	_flash = maxf(0.0, _flash - delta * 6.0)
 
 	_slow_t -= delta
@@ -418,12 +744,7 @@ func _timers(delta: float) -> void:
 	if charges < dodge_cfg.charges and state != "dodge" and _time - _last_dodge > float(dodge_cfg.get("delay", DODGE_DELAY)):
 		charges = minf(dodge_cfg.charges, charges + delta / dodge_cfg.recharge)
 	_flight_timers(delta)
-	if burned > 0.0:
-		burned -= delta
-		_damage_direct(hp_max * 0.012 * delta)
-	if poisoned > 0.0:
-		poisoned -= delta
-		_damage_direct(hp_max * 0.016 * delta)
+	_status_process(delta)
 	_passive_t -= delta
 	if wet > 0.0:
 		wet -= delta
@@ -437,9 +758,14 @@ func _timers(delta: float) -> void:
 		if _passive_t <= 0.0:
 			_passive_t = 0.12
 			main.vfx.burst("stars", center(), Vector3.UP, Color(0.45, 0.65, 1.0), 0.3)
+	# Substitute: invisible for the rival; a faint ghost for whoever plays it.
 	if translucent > 0.0:
 		translucent -= delta
-		model.mesh_instance.transparency = 0.65 if translucent > 0.0 else 0.0
+		var hidden := translucent > 0.0
+		var sees_self: bool = is_player or (main.net != null and not is_remote)
+		model.visible = not hidden or sees_self
+		model.mesh_instance.transparency = 0.85 if hidden and sees_self else 0.0
+		model.mesh_instance.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF if hidden else GeometryInstance3D.SHADOW_CASTING_SETTING_ON
 	_skin_t -= delta
 	if boosted_hits > 0:
 		_boost_t -= delta
@@ -466,8 +792,22 @@ func _read_buffer(delta: float) -> void:
 	for k in ctrl.pressed:
 		_buffer[k] = BUFFER
 	if ctrl.pressed.has("lock_on"):
-		locked = not locked
+		# Locking on picks what the camera looks at (a decoy, maybe).
+		if locked:
+			locked = false
+			fooled_by = null
+		else:
+			lock_on_looked()
 		_buffer.erase("lock_on")
+	# The decoy it was locked on is gone: the camera is free; lock on again to find the real
+	# one (the AI just goes back to the rival).
+	if _locked_decoy and not (fooled_by and is_instance_valid(fooled_by) and not fooled_by.is_queued_for_deletion()):
+		_locked_decoy = false
+		fooled_by = null
+		if not ai_driven:
+			locked = false
+	elif fooled_by and is_instance_valid(fooled_by):
+		_locked_decoy = true
 
 
 func _wants(a: String) -> bool:
@@ -481,6 +821,8 @@ func _consume(a: String) -> void:
 # ---------------------------------------------------------------- movement
 
 func _world_dir(v: Vector2) -> Vector3:
+	if confused > 0.0:
+		v = -v
 	var yaw := ctrl.yaw
 	var right := Vector3(cos(yaw), 0, -sin(yaw))
 	var fwd := Vector3(-sin(yaw), 0, -cos(yaw))
@@ -489,7 +831,7 @@ func _world_dir(v: Vector2) -> Vector3:
 
 
 func _move_free(delta: float, on_ground: bool, mult := 1.0) -> void:
-	var extra := (1.3 if chlorophyll > 0.0 else 1.0) * (1.2 if steadfast_t > 0.0 else 1.0) * (1.35 if translucent > 0.0 else 1.0)
+	var extra := (1.35 if translucent > 0.0 else 1.0) * speed_stage() * (0.5 if status == "par" else 1.0)
 	var wants: Vector3 = _world_dir(ctrl.move_input) * data.speed * slow * mult * extra
 	# Backing away (moving away from the locked-on rival) is 15% slower.
 	if locked and rival and is_instance_valid(rival) and wants.length() > 0.1:
@@ -669,6 +1011,10 @@ func _start_dive(move: String, b: String) -> void:
 
 func start(move: String, button: String, extra := {}) -> void:
 	var d: Dictionary = Moves.DATA[move]
+	# Attacking reveals it (Substitute).
+	if translucent > 0.0 and d.cat != "status":
+		translucent = 0.001
+		main.vfx.burst("shadow", center(), Vector3.UP, Color(0, 0, 0, 0), 1.0)
 	var a: Action = load(d.script).new()
 	a.l = self
 	a.id = move
@@ -676,9 +1022,11 @@ func start(move: String, button: String, extra := {}) -> void:
 	a.button = button
 	a.extra = extra
 	if action:
+		_cut_cooldown()
 		action.finish(true)
 	action = a
 	_switch_state("action")
+	main.trainer_react(self, "command")
 	if d.get("cost", 0.0) > 0.0:
 		energy -= d.cost
 		_energy_pause = 0.8
@@ -695,12 +1043,6 @@ func start(move: String, button: String, extra := {}) -> void:
 	if data.passive.id == "protean" and d.cat != "status" and types != [d.type]:
 		types = [d.type]
 		main.vfx.text(center() + Vector3.UP * 0.9, tr(Roster.TYPE_NAME[d.type]), Roster.TYPE_COLOR[d.type])
-	if data.passive.id == "raindish" and d.type == "water":
-		wet = 4.0
-	if data.passive.id == "chlorophyll" and d.type == "grass":
-		if chlorophyll <= 0.0:
-			main.vfx.text(center() + Vector3.UP * 0.9, tr("Chlorophyll"), Roster.TYPE_COLOR.grass)
-		chlorophyll = 4.0
 	a.start()
 	for i in lead:
 		if a.finished or action != a:
@@ -721,12 +1063,21 @@ func _step_action(delta: float, on_ground: bool) -> void:
 	if action.d.get("manual_aim", false) and is_player:
 		if ctrl.move_input.length() > 0.3:
 			turn_toward(global_position + _world_dir(ctrl.move_input), delta, action.d.get("manual_turn", 0.5))
+	elif action.d.get("manual_aim", false) and ai_aim != null:
+		# The AI turns its stream as slowly as a player and toward where it thinks the
+		# rival is, not where it really is: strafing gets you out, like against a person.
+		turn_toward(ai_aim, delta, action.d.get("manual_turn", 0.5))
+	elif action.faces_rival and free_aim():
+		# Not locked on: the move goes where the camera looks.
+		turn_toward(global_position + camera_forward(), delta, action.turn_mult)
 	elif action.faces_rival and rival and is_instance_valid(rival):
 		turn_toward(aim_target().global_position, delta, action.turn_mult)
-	# Cancels allowed by the action itself.
+	# Cancels allowed by the action itself. The cancelled move still goes on cooldown (it was
+	# used): otherwise a move that cancels into moves could chain into itself forever.
 	if action.can_cancel():
 		if _wants("dodge") and charges >= 1.0 and action.cancels_dodge():
 			_consume("dodge")
+			_start_cooldown(action.id)
 			action.finish(true)
 			action = null
 			_start_dodge()
@@ -734,22 +1085,22 @@ func _step_action(delta: float, on_ground: bool) -> void:
 		for i in 4:
 			var b := "mov%d" % (i + 1)
 			var move: String = data.moves[i]
-			if _wants(b) and action.cancels_into(move) and ready(move):
+			if _wants(b) and move != action.id and action.cancels_into(move) and ready(move):
 				_consume(b)
+				_start_cooldown(action.id)
 				start(move, b)
 				main.hud.log_entry(tr("%s used %s!") % [tr(data.display_name), tr(Moves.DATA[move].display_name)])
 				return
 		if _wants("jump") and on_ground and action.cancels_jump():
 			_consume("jump")
+			_start_cooldown(action.id)
 			action.finish(true)
 			action = null
 			_to_free()
 			velocity.y = data.jump
 			return
 	if action and action.finished:
-		var c: float = action.d.get("cd", 0.0)
-		if c > 0.0:
-			cds[action.id] = c
+		_start_cooldown(action.id)
 		action = null
 		_to_free()
 
@@ -820,20 +1171,61 @@ func _to_free() -> void:
 ## Damage adjustments from passives (of the attacker).
 func outgoing_mod(g: Hit, target: Fighter) -> float:
 	var k := 1.0
-	if data.passive.id == "technician" and g.strength == 0:
-		k *= 1.25
+	# Technician: moves of 60 power or less hit 1.5 times as hard.
+	var power := Damage.power_of(Moves.DATA.get(g.move_id, {}), self, target)
+	if data.passive.id == "technician" and power > 0.0 and power <= 60.0:
+		k *= 1.5
 	if boosted_hits > 0 and g.cat == "physical":
 		k *= 1.5
 		boosted_hits -= 1
 		main.vfx.burst("sparks_metal", target.center(), Vector3.UP, Color(0, 0, 0, 0), 1.0)
-	if data.passive.id == "blaze" and g.type == "fire" and hp < hp_max / 3.0:
-		k *= 1.25
-	if data.passive.id == "static" and g.type == "electric" and target.static_mark > 0.0:
-		k *= 1.25
-		target.static_mark = 0.0
-		target.slow_down(0.6, 1.0)
-		main.vfx.text(target.center() + Vector3.UP * 0.6, tr("Static"), Roster.TYPE_COLOR.electric)
+	# Blaze, Torrent, Overgrow, Swarm: at a third of its HP or less, moves of that type
+	# hit 1.5 times as hard.
+	if PINCH.get(data.passive.id, "") == g.type and hp <= hp_max / 3.0:
+		k *= 1.5
 	return k
+
+
+const PINCH := {"blaze": "fire", "torrent": "water", "overgrow": "grass", "swarm": "bug"}
+## Flinching (Headbutt...), adapted: this much longer stunned instead of a lost turn.
+const FLINCH_T := 0.35
+## Paralysis (Static), adapted to real time: half speed this long, no lost turns.
+const PARALYSIS_T := 5.0
+
+
+## Multiplier of a stat stage (see "stages").
+func stage_mult(stat: String) -> float:
+	var n: int = stages.get(stat, 0)
+	return (2.0 + n) / 2.0 if n >= 0 else 2.0 / (2.0 - n)
+
+
+## Movement from the Speed stage: the Speed stat is multiplied and the movement speed
+## follows the same formula as in Stats (4 + 0.032 x Speed).
+func speed_stage() -> float:
+	var k := stage_mult("spe")
+	# Chlorophyll: Speed doubles in harsh sunlight.
+	if data.passive.id == "chlorophyll" and main.weather and main.weather.is_on("sun"):
+		k *= 2.0
+	if k == 1.0 or not data.has("stats"):
+		return 1.0
+	var spe: float = data.stats.spe
+	return (4.0 + 0.032 * spe * k) / (4.0 + 0.032 * spe)
+
+
+## Raises (or lowers) a stat stage, with its text. Online the rival's copy of this Pokémon
+## gets it too (it needs it to work out damage).
+func boost(stat: String, n: int, source := "") -> void:
+	var before: int = stages[stat]
+	stages[stat] = clampi(before + n, -6, 6)
+	if stages[stat] == before:
+		return
+	var names := {"atk": tr("Attack"), "def": tr("Defense"), "spa": tr("Sp. Atk"), "spd": tr("Sp. Def"), "spe": tr("Speed")}
+	var text: String = names[stat] + (" +%d" % (stages[stat] - before) if n > 0 else " %d" % (stages[stat] - before))
+	if source != "":
+		text = tr(source) + ": " + text
+	main.vfx.text(center() + Vector3.UP * 1.0, text, Color(1.0, 0.85, 0.4) if n > 0 else Color(0.6, 0.75, 1.0))
+	if not is_remote and main.net and main.net.linked:
+		main.net.send_event({"t": "boost", "stat": stat, "stages": stages[stat]})
 
 
 func receive(info: Dictionary) -> String:
@@ -847,21 +1239,54 @@ func receive(info: Dictionary) -> String:
 		main.vfx.text(center() + Vector3.UP * 0.5, tr("Underground!"), Color(0.95, 0.75, 0.4))
 	elif invulnerable > 0.0:
 		main.vfx.text(center() + Vector3.UP * 0.5, tr("Dodged"), Color(0.85, 0.9, 1.0))
+		if state == "dodge":
+			main.arena.on_dodge(self)
+			main.session.dodge(team)
 		return "dodged"
 	if action and action.has_method("intercept"):
 		var r: String = action.intercept(info)
 		if r != "":
 			return r
-	var damage: float = g.damage * info.affinity * vulnerable * (2.0 if underground and g.move_id == "earthquake" else 1.0)
+	var md: Dictionary = Moves.DATA.get(g.move_id, {})
+	# Flinch ("flinch": chance, as in the games): a longer stun. Inner Focus does not flinch;
+	# Steadfast speeds up when it does.
+	var flinched: bool = not info.get("flow", false) and randf() < float(md.get("flinch", 0.0)) and data.passive.id != "innerfocus"
+	# Lightning Rod: Electric moves do nothing to it and raise its Sp. Atk.
+	if data.passive.id == "lightningrod" and g.type == "electric" and g.move_id != "":
+		if not info.get("flow", false):
+			boost("spa", 1, "Lightning Rod")
+		return "absorbed"
+	if g.cat == "status":
+		return _status_move(md, info)
+	# A Fire hit thaws it out, as in the games.
+	if status == "frz" and g.type == "fire":
+		main.vfx.text(center() + Vector3.UP * 0.9, tr("Thawed out!"), Status.COLOR.frz)
+		cure_status()
+		_stunned = minf(_stunned, 0.2)
+	var damage: float = Damage.dealt(g, at if at and is_instance_valid(at) else null, self, info.affinity) * vulnerable * (2.0 if underground and g.move_id == "earthquake" else 1.0)
 	if at and is_instance_valid(at):
 		damage *= at.outgoing_mod(g, self)
 	if data.passive.id == "thickfat" and g.type in ["fire", "ice"]:
-		damage *= 0.7
+		damage *= 0.5
 		main.vfx.text(center() + Vector3.UP * 0.9, tr("Thick Fat"), Color(0.95, 0.9, 0.8))
-	if data.passive.id == "static" and g.contact and at and is_instance_valid(at):
-		at.effect("static_charge", 4.0)
+	# Static: a contact hit has a 30% chance of paralyzing whoever made it.
+	if data.passive.id == "static" and g.contact and at and is_instance_valid(at) and randf() < 0.3:
+		at.inflict("par")
+		main.vfx.text(at.center() + Vector3.UP * 0.7, tr("Static"), Roster.TYPE_COLOR.electric)
+	# Justified: a Dark move raises its Attack.
+	if data.passive.id == "justified" and g.type == "dark" and not info.get("flow", false):
+		boost("atk", 1, "Justified")
+	# Cursed Body: 30% chance of disabling the move that hit it (4 turns: 12 s).
+	if data.passive.id == "cursedbody" and at and is_instance_valid(at) and g.move_id != "" and not info.get("flow", false) and randf() < 0.3:
+		at.effect("disable", 12.0, g.move_id)
+		main.vfx.text(at.center() + Vector3.UP * 0.7, tr("Cursed Body"), Roster.TYPE_COLOR.ghost)
+	# Moves that lower the target's stats ("target_boost", with "boost_chance").
+	if md.has("target_boost") and not info.get("flow", false) and randf() < float(md.get("boost_chance", 1.0)):
+		for stat in md.target_boost:
+			boost(stat, int(md.target_boost[stat]))
+	# Rough Skin: a contact hit costs whoever made it 1/8 of its max HP.
 	if data.passive.id == "roughskin" and g.contact and at and is_instance_valid(at):
-		at.effect("damage", g.damage * info.affinity * 0.12)
+		at.effect("damage", at.hp_max / 8.0)
 		main.vfx.burst("sparks_metal", at.center(), Vector3.UP, Color(0, 0, 0, 0), 0.6)
 		if _skin_t <= 0.0:
 			_skin_t = 1.5
@@ -880,8 +1305,19 @@ func receive(info: Dictionary) -> String:
 		_combo = 0
 	hp -= damage
 	_flash = 1.0
+	# Gluttony: no items yet, so it holds a Sitrus Berry and, being a glutton, eats it at
+	# half HP instead of a quarter: it heals a quarter of its HP, once per battle.
+	if data.passive.id == "gluttony" and not _berry_used and hp > 0.0 and hp <= hp_max * 0.5:
+		_berry_used = true
+		hp = minf(hp_max, hp + hp_max * 0.25)
+		main.vfx.text(center() + Vector3.UP * 1.0, tr("Gluttony: Sitrus Berry"), Color(1.0, 0.85, 0.4))
 	main.vfx.number(info.point, damage, info.affinity)
 	hit_taken.emit(self, info)
+	main.arena.on_hit(info.attacker, self, damage)
+	main.trainer_react(info.attacker, "cheer")
+	if g.strength >= 2 or damage > hp_max * 0.12:
+		main.trainer_react(self, "flinch")
+	main.session.hit(team, damage)
 	if at and is_instance_valid(at) and not at.is_remote:
 		at.energy = minf(ENERGY_MAX, at.energy + 3.0)
 	energy = minf(ENERGY_MAX, energy + 2.0)
@@ -892,7 +1328,7 @@ func receive(info: Dictionary) -> String:
 		var far: Vector3 = global_position - (at.global_position if at and is_instance_valid(at) else info.point)
 		far.y = 0.0
 		if far.length() > 0.01 and state in ["free", "action"]:
-			var push: Vector3 = far.normalized() * g.push * data.knockback * 0.3
+			var push: Vector3 = far.normalized() * Knockback.launch_speed(Knockback.distance(g)) * Knockback.STREAM_SHARE * data.knockback
 			velocity.x += push.x
 			velocity.z += push.z
 		slow_down(0.5, 0.3)
@@ -904,27 +1340,33 @@ func receive(info: Dictionary) -> String:
 	# Poise: while preparing or executing a move, it is only interrupted by hits with
 	# strength (0 light, 1 medium, 2 heavy) equal to or greater than the move's poise
 	# plus the Pokémon's. It takes the damage anyway.
+	# Inner Focus: it does not flinch, so one more step of strength is needed to cut its moves.
 	if action and action.phase in ["startup", "active"]:
-		var level: int = int(action.d.get("poise", 0)) + int(data.get("poise", 0))
+		var level: int = int(action.d.get("poise", 0)) + int(data.get("poise", 0)) + (1 if data.passive.id == "innerfocus" else 0)
 		if g.strength < level:
 			main.vfx.armor(self)
 			return "armor"
+	var was_acting := action != null and action.phase in ["startup", "active"]
 	if action:
+		_cut_cooldown()
 		action.finish(true)
 		action = null
 	flying = false
-	if data.passive.id == "steadfast":
-		if steadfast_t <= 0.0:
-			main.vfx.text(center() + Vector3.UP * 0.9, tr("Steadfast"), Color(0.45, 0.65, 1.0))
-		steadfast_t = 3.0
+	# Steadfast: flinching (its move cut short by a hit) raises its Speed.
+	if data.passive.id == "steadfast" and was_acting:
+		boost("spe", 1, "Steadfast")
 	var outside: Vector3 = global_position - (at.global_position if at and is_instance_valid(at) else info.point)
 	outside.y = 0.0
 	var dir: Vector3 = outside.normalized() if outside.length() > 0.01 else -forward()
 	if g.push_dir != Vector3.ZERO:
 		dir = (g.base().basis * g.push_dir).normalized()
+	# Knockback by the power of the hit (see Knockback): a starting speed backward that
+	# friction stops while it is stunned. Light Pokémon fly further (speed ∝ 1/mass).
 	var knockback: float = data.knockback
-	velocity = dir * g.push * knockback + Vector3.UP * g.lift * knockback
+	var speed := g.push if g.push_dir != Vector3.ZERO else Knockback.launch_speed(Knockback.distance(g))
+	velocity = dir * speed * knockback + Vector3.UP * g.lift * knockback
 	_apply_effect(g.effect)
+	_secondary(md, info, at)
 	if g.knocks_down or g.lift * knockback > 5.0 or _combo >= COMBO_MAX:
 		_switch_state("knocked_down")
 		if velocity.y < 3.0:
@@ -933,6 +1375,12 @@ func receive(info: Dictionary) -> String:
 	else:
 		_switch_state("stunned")
 		_stunned = g.stun * maxf(0.35, 1.0 - 0.15 * _combo)
+		if flinched:
+			_stunned += FLINCH_T
+			main.vfx.text(center() + Vector3.UP * 1.0, tr("Flinched!"), Color(1.0, 0.9, 0.6))
+			if data.passive.id == "steadfast":
+				boost("spe", 1, "Steadfast")
+	_hit_ms = Time.get_ticks_msec()
 	if model.has_anim("recoil"):
 		model.play("recoil", 0.03, true)
 		_cheer = "recoil"
@@ -940,23 +1388,13 @@ func receive(info: Dictionary) -> String:
 
 
 func _apply_effect(e: String) -> void:
-	match e:
-		"paralyze":
-			_stunned += 0.25
-			main.vfx.sparks(center(), Roster.TYPE_COLOR.electric, 10)
-		"freeze":
-			slow_down(0.6, 2.0)
-		"burn":
-			burned = 3.0
+	if e in ["brn", "par", "psn", "tox", "slp", "frz"]:
+		inflict(e)
 
 
-## Sludge Bomb puddle: while stepping on it, and "t" seconds after, it loses HP.
-func poison_target(t: float) -> void:
-	if state == "ko":
-		return
-	if poisoned <= 0.0:
-		main.vfx.text(center() + Vector3.UP * 0.8, tr("Poisoned"), Roster.TYPE_COLOR.poison)
-	poisoned = maxf(poisoned, t)
+## Sludge Bomb puddle: stepping in it poisons (the status, as in the games).
+func poison_target(_t: float) -> void:
+	inflict("psn")
 
 
 func slow_down(f: float, t: float) -> void:
@@ -976,9 +1414,14 @@ func heal(c: float) -> void:
 	hp = minf(hp_max, hp + c)
 
 
-func on_strike(_o: Node, _g: Hit, _res: String) -> void:
+func on_strike(o: Node, g: Hit, res: String) -> void:
 	if action:
 		action.landed = true
+	# Recoil, as in the games: a share of the damage dealt ("recoil" in the move data).
+	var d: Dictionary = Moves.DATA.get(g.move_id, {})
+	if res == "hit" and d.has("recoil") and o is Fighter and not is_remote:
+		_damage_direct(Damage.dealt(g, self, o, Roster.affinity(g.type, o.types)) * float(d.recoil))
+		main.vfx.text(center() + Vector3.UP * 0.6, tr("Recoil"), Color(1.0, 0.6, 0.4), 0.8)
 
 
 func _die(_info: Dictionary) -> void:
@@ -1001,9 +1444,19 @@ func _die(_info: Dictionary) -> void:
 	defeated.emit(self)
 
 
+## Fell into the stage's void (only stages with one: Arena.void_y): KO.
+func _ring_out() -> void:
+	main.vfx.text(global_position + Vector3.UP * 4.0, tr("Out!"), Color(1.0, 0.55, 0.3))
+	# "since_hit": seconds since it was last hit (a long time: it walked off on its own).
+	main.session.event("ring_out", {"species": species, "team": team, "state": state, "left_as": _left_as,
+		"since_hit": snappedf((Time.get_ticks_msec() - _hit_ms) / 1000.0, 0.1)})
+	_die({})
+
+
 ## On restarting the battle.
 func reset(pos: Vector3, yaw: float) -> void:
 	net_state = {}
+	_left_as = ""
 	if action:
 		action.finish(true)
 		action = null
@@ -1022,11 +1475,18 @@ func reset(pos: Vector3, yaw: float) -> void:
 	cds.clear()
 	uses.clear()
 	slow = 1.0
+	confused = 0.0
 	burned = 0.0
 	poisoned = 0.0
 	steadfast_t = 0.0
 	translucent = 0.0
 	boosted_hits = 0
+	stages = {"atk": 0, "def": 0, "spa": 0, "spd": 0, "spe": 0}
+	_berry_used = false
+	cure_status(false)
+	status_lock = 0.0
+	shots = 0
+	drowsy = 0.0
 	types = data.types
 	model.mesh_instance.transparency = 0.0
 	model.visible = true
@@ -1113,6 +1573,14 @@ func _process(delta: float) -> void:
 		"stunned":
 			obj.tilt = -0.25
 			obj.stretch = 0.92
+			if status == "slp":
+				obj.tilt = -0.05
+				if model.has_anim("sleep"):
+					_set_anim("sleep", 1.0)
+			elif status == "frz":
+				obj.tilt = 0.0
+				obj.stretch = 1.0
+				model.speed = 0.0
 		"knocked_down", "lying":
 			obj.tilt = -1.2 if state == "lying" else -0.6
 			obj.height = 0.0
@@ -1171,7 +1639,10 @@ func _process(delta: float) -> void:
 		tint_col += Vector3(0.1, 0.25, 0.35)
 	if static_mark > 0.0 and fmod(_time, 0.5) < 0.25:
 		tint_col += Vector3(0.25, 0.22, 0.0)
+	tint_col += Vector3.ONE * appear_glow * 1.4
 	model.set_param("tint", tint_col)
+	model.visible = appear > 0.01
+	model.scale = Vector3.ONE * _scale * clampf(appear, 0.05, 1.0)
 
 
 ## The lowest bones in the idle pose: feet, toes and whatever brushes the ground.

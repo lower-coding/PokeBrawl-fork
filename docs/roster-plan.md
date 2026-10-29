@@ -54,7 +54,7 @@ Pokémon are exactly the ones in the games.
 | **Attack / Sp. Atk** | Damage of its physical / special moves | damage formula (below) |
 | **Defense / Sp. Def** | Damage taken | damage formula |
 | **Speed** | Movement speed, number of dodges, dodge distance and cooldown | speed = 4 + 0.032 × Spe50; dodges = 1 + Spe50 / 45 (max 3); cooldown = 2.2 − 0.009 × Spe50 s |
-| **Real weight** | Knockback taken, poise (what does not interrupt it), dodge distance | heavy ones dodge shorter and take more |
+| **Real weight** | Knockback taken, poise (what does not interrupt it), dodge distance | dodge distance = 3.2 + 0.0225 × Spe50 − 0.085 × ln(kg); knockback and poise still hand-tuned |
 | **Height and hitbox** | Size and hurtbox | Cobblemon's |
 
 **Damage:** the games' formula at level 50, `(22 × Power × Attack / Defense) / 50 + 2`, times STAB
@@ -200,8 +200,8 @@ also play that way. Variety and freedom.
 
 ## 6. Phases
 
-1. **Importer and stats:** data copied into the project, generated data for the 10 and real
-   stats applied to health, speed and dodges. Play it and tune the formulas.
+1. **Importer and stats** (done, `game/scripts/data/stats.gd`): generated data for the 10 and real
+   stats applied to health, speed and dodges. `--hand-stats` plays with the old numbers to compare.
 2. **The games' damage:** level 50 formula with the HP multiplier, STAB and types; the 36 moves
    with their real power and PP.
 3. **Events and abilities:** the system and every ability of the 10, picked in the selection

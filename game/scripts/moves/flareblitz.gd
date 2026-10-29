@@ -47,12 +47,7 @@ func on_active() -> void:
 	no_gravity = absf(_dir.y) > 0.01 or not l.is_on_floor()
 	var g := hit({"shape": "capsule", "a": Vector3(0, l.data.height * 0.45, -0.3), "b": Vector3(0, l.data.height * 0.45, l.data.radius + 0.6),
 		"radius": l.data.radius})
-	g.on_strike = func(_o, res: String):
-		if res == "hit":
-			l._damage_direct(g.damage * d.recoil)
-			l.main.vfx.text(l.center() + Vector3.UP * 0.6, l.tr("Recoil"), Color(1.0, 0.6, 0.4), 0.8)
 	play_sound("flareblitz", 2.0)
-	l.main.vfx.distortion(l.center(), 4.0, 0.3, 0.05)
 
 
 func in_active(_delta: float) -> void:

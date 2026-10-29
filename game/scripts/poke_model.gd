@@ -284,6 +284,9 @@ static func _load(species: String) -> Dictionary:
 	if ResourceLoader.exists(dir + "texture_emissive.png"):
 		m.set_shader_parameter("emis", load(dir + "texture_emissive.png"))
 		m.set_shader_parameter("has_emis", true)
+	if ResourceLoader.exists(dir + "texture_flame.png"):
+		m.set_shader_parameter("flame_tex", load(dir + "texture_flame.png"))
+		m.set_shader_parameter("has_flame", true)
 	var res := {"dir": dir, "bones": bones, "mesh": mesh, "skin": skin, "library": lib,
 		"blink": blink, "fps": fps, "mat": m, "anims": data.anims.keys(), "layer_library": layer_lib}
 	_cache[species] = res

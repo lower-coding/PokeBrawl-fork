@@ -1,7 +1,8 @@
 extends Action
-## Double Team: two copies of Greninja appear at its sides (with a speed flash) and
-## stand still until "decoy_dur" runs out or the first hit. They fool the AI just like
-## Gengar's decoy; the real one is the one that moves and has a shadow.
+## Double Team: two copies of Greninja appear at its sides (with a speed flash) and run
+## around the rival on their own until "decoy_dur" runs out or the first hit. If the rival
+## had Greninja locked on, it loses the lock (and it does not jump onto a copy). They fool
+## the AI just like Gengar's decoy; the real one has a shadow.
 
 
 func on_start() -> void:
@@ -18,11 +19,17 @@ func on_active() -> void:
 		var copy := Decoy.new()
 		main.add_child(copy)
 		copy.setup(main, l, d.decoy_dur)
+		copy.kind = "clone"
+		copy.wander = true
 		copy.global_position = l.global_position + side * s * d.separation
 		main.combat.targets.append(copy)
 		main.vfx.afterimage(l, Color(0.6, 0.8, 1.0))
 		main.vfx.burst("wind", copy.center(), side * s, Color(0, 0, 0, 0), 0.8)
 	l.invulnerable = maxf(l.invulnerable, 0.2)
+	# A player who had it locked on loses the lock.
+	var r: Fighter = l.rival
+	if r and is_instance_valid(r) and r.is_player and r.locked:
+		r.locked = false
 	play_sound("doubleteam", -2.0)
 
 

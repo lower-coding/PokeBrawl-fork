@@ -33,19 +33,20 @@ func on_active() -> void:
 	_g = hit({"shape": "cone", "local": false, "center": mouth, "dir": _dir(), "length": d.length, "angle": d.angle,
 		"interval": d.interval})
 	var vfx: Vfx = l.main.vfx
-	_fire_fx = vfx.continuous_emitter("fire_fx", 300, 0.56, Vector2(13.5, 17.5), 13.0, Vector2(0.45, 0.95))
+	# Narrow and long ("angle", "length"): faster, tighter flames.
+	_fire_fx = vfx.continuous_emitter("fire_fx", 320, 0.6, Vector2(17.5, 22.0), 8.5, Vector2(0.45, 0.9))
 	var pm: ParticleProcessMaterial = _fire_fx.process_material
 	var width_curve := Curve.new()
 	width_curve.add_point(Vector2(0, 0.25))
-	width_curve.add_point(Vector2(0.5, 1.4))
-	width_curve.add_point(Vector2(1, 2.0))
+	width_curve.add_point(Vector2(0.5, 1.2))
+	width_curve.add_point(Vector2(1, 1.7))
 	var ct := CurveTexture.new()
 	ct.curve = width_curve
 	pm.scale_curve = ct
 	pm.damping_min = 6.0
 	pm.damping_max = 9.0
 	pm.gravity = Vector3(0, 2.5, 0)
-	_embers = vfx.continuous_emitter("embers", 30, 0.7, Vector2(9.0, 15.0), 18.0, Vector2(0.7, 1.2))
+	_embers = vfx.continuous_emitter("embers", 30, 0.75, Vector2(12.0, 18.0), 12.0, Vector2(0.7, 1.2))
 	_light = OmniLight3D.new()
 	_light.light_color = Color(1.0, 0.55, 0.2)
 	_light.omni_range = 7.0
@@ -63,6 +64,13 @@ func in_active(delta: float) -> void:
 	var dir := _dir()
 	_g.center = mouth
 	_g.dir = dir
+	# Cut short by a stronger stream (Combat._streams): the hit and the flames stop there.
+	var reach: float = _g.cut if _g.cut > 0.0 else float(d.length)
+	_g.length = reach
+	if is_instance_valid(_fire_fx):
+		var want := 0.6 * clampf(reach / float(d.length), 0.15, 1.0)
+		if absf(_fire_fx.lifetime - want) > 0.08:
+			_fire_fx.lifetime = want
 	var b := Basis.looking_at(dir, Vector3.UP)
 	for e in [_fire_fx, _embers]:
 		if is_instance_valid(e):
@@ -76,7 +84,6 @@ func in_active(delta: float) -> void:
 	_heat -= delta
 	if _heat <= 0.0:
 		_heat = 0.18
-		l.main.vfx.distortion(mouth + dir * randf_range(3.0, 6.0), 2.5, 0.3, 0.025)
 		if randf() < 0.4:
 			var p: Vector3 = mouth + dir * d.length
 			p.y = l.main.ground_y

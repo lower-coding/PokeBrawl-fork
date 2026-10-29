@@ -26,7 +26,6 @@ func on_active() -> void:
 		g.type = "grass"
 		g.cat = "special"
 		g.damage = d.damage
-		g.push = d.push
 		g.stun = d.stun
 		g.contact = false
 		g.strength = 0

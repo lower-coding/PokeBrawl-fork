@@ -10,3 +10,9 @@
 
 # Python
 __pycache__/
+
+# Music: arrangements by The Noble Demon, used with credit but never reuploaded on their
+# own. Each copy of the project gets the files locally (see game/music/README.md); the
+# released build carries them inside its .pck only.
+/game/music/*
+!/game/music/README.md

@@ -12,6 +12,7 @@ func on_start() -> void:
 
 
 func on_active() -> void:
+	l.cure_status()
 	l.vulnerable = d.vulnerable
 	if l.model.has_anim("sleep_intro"):
 		l.model.play("sleep_intro", 0.2)

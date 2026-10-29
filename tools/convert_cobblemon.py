@@ -303,7 +303,8 @@ def convert(name_id, group=None):
     (dest / "model.json.gz").write_bytes(gzip.compress(json.dumps({
         "fps": FPS, "tex_w": width_px, "tex_h": height_px, "bones": bones, "anims": anims,
     }, separators=(",", ":")).encode("utf-8"), 9, mtime=0))
-    for f in ("texture.png", "texture_shiny.png", "texture_emissive.png", "texture_alpha.png", "cry.ogg"):
+    # texture_flame.png: an animated layer's frames side by side (Charizard's tail flame).
+    for f in ("texture.png", "texture_shiny.png", "texture_emissive.png", "texture_alpha.png", "texture_flame.png", "cry.ogg"):
         if (folder / f).exists():
             shutil.copy(folder / f, dest / f)
     print(f"{name_id}: {len(bones)} bones, animations {sorted(anims)}")

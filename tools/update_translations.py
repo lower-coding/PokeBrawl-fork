@@ -43,16 +43,18 @@ def collect():
                 for m in re.finditer(r"\btr\(" + LIT + r"\)|translate\(" + LIT + r"\)", text):
                     add(m.group(1) or m.group(2))
 
-    data = read("data", "moves.gd") + read("data", "roster.gd")
+    data = read("data", "moves.gd") + read("data", "roster.gd") + read("data", "abilities.gd")
     for field in ("display_name", "desc", "counterplay", "style", "text"):
         for m in re.finditer(r'"%s": ' % field + LIT, data):
             add(m.group(1))
+    for m in re.finditer(r'"name": ' + LIT, read("data", "trainers.gd")):
+        add(m.group(1))
     for m in re.finditer(r'": ' + LIT, re.search(r"const TYPE_NAME := \{(.*?)\}", data, re.S).group(1)):
         add(m.group(1))
 
-    menu = read("menu.gd")
-    for name in ("DIFFICULTY_NAME", "STAGE_NAME"):
-        for m in re.finditer(r'": ' + LIT, re.search(r"const %s := \{(.*?)\}" % name, menu).group(1)):
+    menu = read("menu.gd") + read("ui", "menu_draw.gd")
+    for name in ("DIFFICULTY_NAME", "STAGE_NAME", "STAGE_TEXT"):
+        for m in re.finditer(r'": ' + LIT, re.search(r"const %s := \{(.*?)\}" % name, menu, re.S).group(1)):
             add(m.group(1))
     for name in ("MAIN_MENU", "ONLINE", "CREDITS"):
         block = re.search(r"const %s := \[(.*?)\]\]?\n" % name, menu, re.S).group(1)
@@ -62,6 +64,11 @@ def collect():
 
     for m in re.finditer(r'\["[a-z]{3}", "([A-Z]{3})"\]', read("hud.gd")):
         add(m.group(1))
+    # Gamepad buttons with a name that is a word (not a letter or a symbol).
+    pads = re.search(r"const PAD_NAME := \{(.*?)\n\}", read("controls.gd"), re.S).group(1)
+    for v in re.finditer(r': ' + LIT, pads):
+        if not re.fullmatch(r"[A-Z0-9△○□✕]{1,3}", v.group(1)):
+            add(v.group(1))
     for m in re.finditer(r'"keyboard": \{(.*?)\}', read("controls.gd")):
         for v in re.finditer(r'": ' + LIT, m.group(1)):
             add(v.group(1))

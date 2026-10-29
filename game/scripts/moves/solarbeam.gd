@@ -1,19 +1,28 @@
-extends Action
+extends EnergyStream
 ## Solar Beam: a long, very visible charge. A beam of light comes down from the sky onto
-## the flower, a sun forms in it and the ground marks the line the beam will follow.
-## While charging it turns slowly (it can be circled or punished). On release, a huge
-## straight beam that knocks down. Long recovery.
+## the flower, a sun forms in it and the ground marks the line the beam will follow (it
+## turns slowly with the aim while charging). Then a huge golden beam pours out of the
+## flower for as long as the button is held (EnergyStream: aimed, several hits, energy
+## drain), lumpy and with coils of light like Dragon Pulse's, never a plain tube, leaves
+## swirling off it. Quicker to charge in the sun.
+
+const GOLD := Color(1.0, 0.85, 0.4)
+const PALETTE := {"edge": Color(0.45, 0.55, 0.12), "mid": Color(0.95, 0.8, 0.25), "glow": Color(1.0, 0.95, 0.55), "core": Color(1.0, 1.0, 0.92)}
 
 var _pillar: MeshInstance3D
 var _sun: Node3D
 var _line: MeshInstance3D
 var _line_mat: StandardMaterial3D
-var _beam: MeshInstance3D
+var _beams: Array[MeshInstance3D] = []
 var _spark := 0.0
+var _leaf := 0.0
 
 
 func on_start() -> void:
 	turn_mult = d.charge_turn
+	# In harsh sunlight it barely needs to charge, as in the games.
+	if l.main.weather.is_on("sun"):
+		startup_mult = 0.25
 	play_sound("solarbeam_charge", -2.0)
 	var vfx: Vfx = l.main.vfx
 	_pillar = vfx.beam(Color(1.0, 0.92, 0.55), 0.35, Color(1.0, 1.0, 0.9), 2.0)
@@ -36,21 +45,15 @@ func _flower() -> Vector3:
 	return l.point("locator_special") + Vector3.UP * 0.35
 
 
-func _dir() -> Vector3:
-	return aim(0.3)
-
-
-func _reach(from_pos: Vector3, dir: Vector3) -> float:
-	var q := PhysicsRayQueryParameters3D.create(from_pos, from_pos + dir * d.length, 1)
-	var r: Dictionary = l.main.get_world_3d().direct_space_state.intersect_ray(q)
-	return from_pos.distance_to(r.position) if not r.is_empty() else float(d.length)
+func origin() -> Vector3:
+	return _flower() + l.forward() * 0.5
 
 
 func in_startup(delta: float) -> void:
 	# On the frame it is released the charge has already been removed.
 	if phase != "startup" or not is_instance_valid(_line):
 		return
-	var k: float = clampf(t / d.startup, 0.0, 1.0)
+	var k: float = clampf(t / startup_len(), 0.0, 1.0)
 	tint_col = Color(1.0, 0.9, 0.5)
 	tint_k = 0.4 * k
 	var flower := _flower()
@@ -78,33 +81,41 @@ func in_startup(delta: float) -> void:
 			vfx.burst("leaves", l.global_position, Vector3.UP, Color(0, 0, 0, 0), 0.3)
 
 
-func on_active() -> void:
-	turn_mult = 0.0
-	var flower := _flower()
-	var dir := _dir()
-	var o := flower + dir * 0.5
-	var length := _reach(o, dir)
-	var end_pos := o + dir * length
-	hit({"shape": "capsule", "local": false, "a": o, "b": end_pos, "radius": d.radius})
-	var vfx: Vfx = l.main.vfx
-	_beam = vfx.beam(Color(1.0, 0.85, 0.4), 0.75, Color(1.0, 1.0, 0.92), 16.0)
-	vfx.place_beam(_beam, o, end_pos, 1.0)
-	vfx.light(o + dir * 2.0, Color(1.0, 0.9, 0.55), 6.0, 10.0, 0.4)
-	vfx.distortion(o + dir * 3.0, 6.0, 0.4, 0.05)
-	vfx.cobble("leafstorm_actorwind", o, end_pos, l.data.height)
+func _beam_on(o: Vector3, dir: Vector3) -> void:
 	_remove_charge()
-	l.velocity -= dir * 3.0
-	l.main.shake_camera(0.35, o)
+	var vfx: Vfx = l.main.vfx
+	_beams = vfx.dragon_beam(d.radius * 0.75, 24.0, PALETTE)
+	for b in _beams:
+		vfx.place_beam(b, o, o + dir * 0.5, 1.0)
+	_sun = vfx.pixel_ball("sun_ball", 6, 1.6, GOLD, 14.0)
+	_sun.global_position = o
+	vfx.light(o + dir * 2.0, GOLD, 6.0, 10.0, 0.4)
+	vfx.cobble("leafstorm_actorwind", o, o + dir * 8.0, l.data.height)
+	l.velocity -= dir * 1.0
 	play_sound("solarbeam", 2.0)
 
 
-func in_active(_delta: float) -> void:
-	if is_instance_valid(_beam):
-		var k: float = t / d.active
-		_beam.scale.x = 1.0 + 0.15 * sin(total * 50.0)
-		if k > 0.6:
-			l.main.vfx.stop_beam(_beam, d.active * 0.5)
-			_beam = null
+func _beam_at(o: Vector3, dir: Vector3, length: float, _full: float) -> void:
+	var vfx: Vfx = l.main.vfx
+	var front := o + dir * length
+	for b in _beams:
+		if is_instance_valid(b):
+			vfx.place_beam(b, o, front, 1.0 + 0.12 * sin(total * 50.0))
+	if is_instance_valid(_sun):
+		_sun.global_position = o
+		_sun.scale = Vector3.ONE * (1.0 + 0.15 * sin(total * 40.0))
+	_leaf -= l.get_physics_process_delta_time()
+	if _leaf <= 0.0:
+		_leaf = 0.07
+		var side := dir.cross(Vector3.UP).normalized()
+		vfx.burst("leaves", o + dir * randf_range(1.0, length) + side * randf_range(-0.8, 0.8), Vector3.UP, Color(0, 0, 0, 0), 0.4)
+
+
+func _beam_off(dur: float) -> void:
+	_remove_charge()
+	for b in _beams:
+		l.main.vfx.stop_beam(b, dur)
+	_beams.clear()
 
 
 func _remove_charge() -> void:
@@ -119,21 +130,10 @@ func _remove_charge() -> void:
 	_line = null
 
 
-func on_recovery() -> void:
-	tint_k = 0.0
-	remove_hits()
-
-
-func on_end(_i: bool) -> void:
-	_remove_charge()
-	if is_instance_valid(_beam):
-		l.main.vfx.stop_beam(_beam, 0.1)
-
-
 func pose() -> Dictionary:
 	match phase:
 		"startup":
-			var k: float = t / d.startup
+			var k: float = t / startup_len()
 			return {"tilt": -0.2 * k, "stretch": 0.94 - 0.04 * k}
 		"active":
 			return {"tilt": -0.1 + 0.03 * sin(total * 40.0), "stretch": 1.06}

@@ -11,11 +11,11 @@ const DIR := "res://sounds/moves/"
 ## Key -> Cobblemon folder and file prefix (one is picked at random).
 const COBBLEMON := {
 	"thundershock": ["thundershock", "thundershock_actor"], "thundershock_hit": ["thundershock", "thundershock_target"],
-	"bolt": ["thunderbolt", "thunderbolt_actor"], "bolt_hit": ["thunderbolt", "thunderbolt_target"],
+	"bolt": ["thunderbolt", "thunderbolt_actor"], "thunderbolt": ["thunderbolt", "thunderbolt_target"], "bolt_hit": ["thunderbolt", "thunderbolt_target"],
 	"quickattack": ["quickattack", "quickattack_actor"], "quickattack_hit": ["quickattack", "quickattack_target"],
 	"flamethrower": ["flamethrower", "flamethrower_actor"], "flamethrower_hit": ["flamethrower", "flamethrower_target"],
 	"bodyslam": ["bodyslam", "bodyslam_actor"], "bodyslam_hit": ["bodyslam", "bodyslam_target"],
-	"icepunch": ["icepunch", "icepunch_target"], "dragonclaw": ["dragonclaw", "dragonclaw_actor"],
+	"icepunch": ["icepunch", "icepunch_target"], "firepunch": ["firepunch", "firepunch_target"], "fireblast": ["fireblast", "fireblast_actor"], "fireblast_hit": ["fireblast", "fireblast_target"], "closecombat": ["closecombat", "closecombat_target"], "shadowclaw": ["shadowball", "shadowball_target"], "rockslide": ["rockthrow", "rockthrow_actor"], "rockslide_hit": ["rockthrow", "rockthrow_target"], "surf": ["waterpulse", "waterpulse_actor"], "surf_hit": ["waterpulse", "waterpulse_target"], "psychic": ["psychic", "psychic_actor"], "psychic_hit": ["psychic", "psychic_target"], "darkpulse": ["shadowball", "shadowball_actor"], "darkpulse_hit": ["shadowball", "shadowball_target"], "ball_throw": ["poke_ball", "poke_ball_throw_"], "ball_send": ["poke_ball", "poke_ball_send_out"], "ball_open": ["poke_ball", "poke_ball_open"], "thunder_up": ["thunder", "thunder_actor"], "thunder": ["thunder", "thunder_target"], "volttackle": ["thunderbolt", "thunderbolt_actor"], "focusblast": ["closecombat", "closecombat_actor"], "focusblast_hit": ["eruption", "eruption_target"], "flashcannon": ["aurorabeam", "aurorabeam_actor"], "flashcannon_hit": ["bulletpunch", "bulletpunch_target"], "outrage_cry": ["dragonclaw", "dragonclaw_actor"], "outrage": ["closecombat", "closecombat_actor"], "outrage_hit": ["dragonclaw", "dragonclaw_target"], "dragonpulse_charge": ["aurorabeam", "aurorabeam_actor"], "dragonpulse": ["dracometeor", "dracometeor_actor"], "dragonpulse_hit": ["dracometeor", "dracometeor_target"], "energyball": ["shadowball", "shadowball_actor"], "energyball_hit": ["shadowball", "shadowball_target"], "bite": ["bite", "bite_target"], "crunch": ["crunch", "crunch_target"], "thunderpunch": ["thundershock", "thundershock_target"], "dragonclaw": ["dragonclaw", "dragonclaw_actor"],
 	"dragonclaw_hit": ["dragonclaw", "dragonclaw_target"], "airslash": ["aerialace", "aerialace_actor"],
 	"airslash_hit": ["aerialace", "aerialace_target"], "earthquake": ["bulldoze", "bulldoze_actor"],
 	"earthquake_hit": ["bulldoze", "bulldoze_target"], "flareblitz": ["flamewheel", "flamewheel_actor"],
@@ -39,6 +39,21 @@ const COBBLEMON := {
 	"watershuriken": ["watergun", "watergun_actor"], "nightslash": ["aerialace", "aerialace_actor"],
 	"doubleteam": ["doubleteam", "doubleteam"], "xscissor": ["aerialace", "aerialace_target"],
 	"swordsdance": ["swordsdance", "swordsdance"], "wingattack": ["gust", "gust"],
+	"takedown": ["bodyslam", "bodyslam_actor"], "doubleedge": ["closecombat", "closecombat_actor"],
+	"gigaimpact": ["eruption", "eruption_actor"], "headbutt": ["seismictoss", "seismictoss_target"],
+	"strength": ["bulldoze", "bulldoze_actor"], "rocksmash": ["rockthrow", "rockthrow_target"],
+	"facade": ["superfang", "superfang_actor"], "megapunch": ["closecombat", "closecombat_target"],
+	"megakick": ["seismictoss", "seismictoss_actor"], "brickbreak": ["crunch", "crunch_target"],
+	"focuspunch_hit": ["closecombat", "closecombat_target"], "hyperbeam_charge": ["aurorabeam", "aurorabeam_actor"],
+	"hyperbeam": ["dracometeor", "dracometeor_target"],
+	"toxic": ["acid", "acid_actor"], "toxic_hit": ["acid", "acid_target"],
+	"willowisp": ["willowisp", "willowisp_actor"], "willowisp_hit": ["willowisp", "willowisp_target"],
+	"thunderwave": ["thunderwave", "thunderwave_actor"], "thunderwave_hit": ["thunderwave", "thunderwave_target"],
+	"hypnosis": ["kinesis", "kinesis_actor"], "hypnosis_hit": ["kinesis", "kinesis_target"],
+	"yawn": ["bubble", "bubble_actor"], "yawn_hit": ["bubble", "bubble_target"],
+	"sleeppowder": ["sleeppowder", "sleeppowder_actor"], "sleeppowder_hit": ["sleeppowder", "sleeppowder_target"],
+	"poisonpowder": ["poisonpowder", "poisonpowder_actor"], "poisonpowder_hit": ["poisonpowder", "poisonpowder_target"],
+	"nuzzle": ["thundershock", "thundershock_actor"],
 }
 
 var main: Node
@@ -46,15 +61,36 @@ var _pool: Array = []
 var _cache := {}
 var _synth := {}
 var volume := 1.0
+var _ui: AudioStreamPlayer
+
+
+## Every sound goes through one of two buses under Master: "SFX" (effects, cries, the
+## menus' clicks) and "Music"; the options set their volumes (Settings.apply). Made here,
+## so the project needs no bus layout file.
+static func buses() -> void:
+	for name in ["SFX", "Music"]:
+		if AudioServer.get_bus_index(name) == -1:
+			AudioServer.add_bus()
+			var i := AudioServer.bus_count - 1
+			AudioServer.set_bus_name(i, name)
+			AudioServer.set_bus_send(i, "Master")
+
+
+static func set_bus_volume(name: String, v: float) -> void:
+	buses()
+	var i := AudioServer.get_bus_index(name)
+	AudioServer.set_bus_volume_db(i, linear_to_db(maxf(v, 0.001)))
+	AudioServer.set_bus_mute(i, v <= 0.001)
 
 
 func _ready() -> void:
+	buses()
 	for i in 24:
 		var p := AudioStreamPlayer3D.new()
 		p.unit_size = 10.0
 		p.max_distance = 70.0
 		p.attenuation_model = AudioStreamPlayer3D.ATTENUATION_INVERSE_DISTANCE
-		p.bus = "Master"
+		p.bus = "SFX"
 		add_child(p)
 		_pool.append(p)
 	_synth["dodge"] = _whistle(0.22, 900.0, 3200.0, 0.55)
@@ -66,6 +102,9 @@ func _ready() -> void:
 	_synth["light_hit"] = _thud(0.08, 260.0, 0.6)
 	_synth["heavy_hit"] = _thud(0.25, 110.0, 1.0)
 	_synth["ko"] = _whistle(0.9, 1600.0, 200.0, 0.4)
+	_synth["ui_move"] = _notes([1320.0], 0.035)
+	_synth["ui_ok"] = _notes([880.0, 1320.0], 0.055)
+	_synth["ui_back"] = _notes([990.0, 660.0], 0.05)
 
 
 func _player() -> AudioStreamPlayer3D:
@@ -111,16 +150,46 @@ func impact(type: String, strength: int, pos: Vector3) -> void:
 	_touch(_synth["heavy_hit" if strength >= 2 else "light_hit"], pos, -6.0 + strength * 2.0, 1.0)
 
 
-func cry(species: String, pos: Vector3, tone := 1.0) -> void:
+func cry(species: String, pos: Vector3, tone := 1.0, vol := -2.0) -> void:
 	var file_path := "res://pokemon/%s/cry.ogg" % species
 	if ResourceLoader.exists(file_path):
-		_touch(load(file_path), pos, -2.0, tone)
+		_touch(load(file_path), pos, vol, tone)
+
+
+## Menu sounds, not placed in the world: "move" (cursor, Cobblemon's soft click a little
+## higher), "ok" (two quick rising notes) and "back" (two falling ones). Quiet and short.
+func ui(kind: String) -> void:
+	if _ui == null:
+		_ui = AudioStreamPlayer.new()
+		_ui.bus = "SFX"
+		_ui.max_polyphony = 4
+		add_child(_ui)
+	var s: AudioStream = null
+	var vol := -16.0
+	var pitch := 1.0
+	match kind:
+		"move":
+			s = load("res://sounds/gui/click.ogg") if ResourceLoader.exists("res://sounds/gui/click.ogg") else _synth.get("ui_move")
+			vol = -20.0
+			pitch = randf_range(1.15, 1.22)
+		"ok":
+			s = _synth.get("ui_ok")
+			vol = -15.0
+		"back":
+			s = _synth.get("ui_back")
+			vol = -16.0
+	if s == null:
+		return
+	_ui.stream = s
+	_ui.volume_db = vol
+	_ui.pitch_scale = pitch
+	_ui.play()
 
 
 func _touch(s: AudioStream, pos: Vector3, vol: float, tone: float) -> void:
 	var p := _player()
 	p.stream = s
-	p.volume_db = vol + linear_to_db(maxf(volume, 0.001))
+	p.volume_db = vol
 	p.pitch_scale = tone
 	p.global_position = pos
 	p.play()
@@ -180,6 +249,21 @@ func _metal(dur: float, f: float) -> AudioStreamWAV:
 		var t := float(i) / 22050.0
 		var s := sin(TAU * f * t) + 0.6 * sin(TAU * f * 2.76 * t) + 0.4 * sin(TAU * f * 5.4 * t)
 		out[i] = s * exp(-k * 9.0) * 0.35 + randf_range(-1, 1) * exp(-k * 60.0) * 0.4
+	return _wav(out)
+
+
+## Soft notes one after another (menu sounds): a sine with a quick attack and decay and a
+## touch of its octave, like a small chime.
+func _notes(freqs: Array, each: float) -> AudioStreamWAV:
+	var n := int(22050 * each)
+	var out := PackedFloat32Array()
+	out.resize(n * freqs.size())
+	for j in freqs.size():
+		var f: float = freqs[j]
+		for i in n:
+			var t := float(i) / 22050.0
+			var env := minf(1.0, t / 0.004) * exp(-t / each * 3.0)
+			out[j * n + i] = (sin(TAU * f * t) * 0.8 + sin(TAU * f * 2.0 * t) * 0.15) * env * 0.5
 	return _wav(out)
 
 

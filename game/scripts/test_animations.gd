@@ -98,7 +98,6 @@ func _strike(strength: int, knocks_down := false, damage := 30.0) -> void:
 	g.radius = 0.4
 	g.damage = damage
 	g.strength = strength
-	g.push = 5.0
 	g.stun = 0.5
 	g.knocks_down = knocks_down
 	g.lift = 5.0 if knocks_down else 0.0

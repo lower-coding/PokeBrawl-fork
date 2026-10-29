@@ -16,6 +16,7 @@ var clock := 0.0
 
 
 func add_hit(g: Hit) -> Hit:
+	g.born = clock
 	hits.append(g)
 	return g
 
@@ -43,19 +44,356 @@ func remove_from(user: Node) -> void:
 # ---------------------------------------------------------------- projectiles
 
 ## p: {user, pos, velocity, radius, lifetime, gravity, hit (a Hit in the world), node
-## (visual that moves with it), on_impact (Callable(pos, against)), pierces}
+## (visual that moves with it), on_impact (Callable(pos, against)), pierces, target, homing,
+## track}
+## Every projectile follows its target (by default whatever its user aims at, a decoy
+## included): "track" is how fast it can turn horizontally (rad/s, from the move's accuracy
+## in the games unless set), so stepping aside at mid range does not shake it off; only up
+## close, where it cannot turn fast enough, or jumping at the right time. A dodge breaks the
+## lock for good, like a step in Gundam Versus: from then on it flies straight. It also
+## stops following once it has gone past the target (no U-turns). "homing" is the older,
+## stronger pull in 3D (Aura Sphere), with the same rules.
 func projectile(p: Dictionary) -> Dictionary:
 	p.merge({"radius": 0.3, "lifetime": 2.0, "gravity": 0.0, "pierces": false, "age_t": 0.0, "alive": true,
-		"homing": 0.0, "target": null}, false)
+		"homing": 0.0, "target": null, "track": -1.0}, false)
+	if p.target == null and p.user is Fighter and is_instance_valid(p.user):
+		p.target = p.user.aim_target()
+	if p.track < 0.0:
+		p.track = track_for(p.hit.move_id)
+		# Sand Veil: in a sandstorm, projectiles follow it worse (its evasion in the games).
+		if p.target is Fighter and p.target.data.passive.id == "sandveil" and main.weather and main.weather.is_on("sand"):
+			p.track *= 0.8
 	p.hit.local = false
 	p.hit.shape = "sphere"
 	p.hit.radius = p.radius
+	# Its number among its user's shots: both copies count the same, so online a deflect
+	# can say which one it was.
+	if p.user is Fighter and is_instance_valid(p.user):
+		p.user.shots += 1
+		p.seq = p.user.shots
+		p.shooter = p.user               # stays, even if it is sent back
 	projectiles.append(p)
 	return p
 
 
+## Clashing projectiles (special against special, like in the anime): two shots from
+## different sides that meet compare their strength, the move's power (what this shot is
+## worth of it) by its type's effectiveness against the other's type. Clearly stronger
+## (by more than CLASH_TIE) goes on with what the other took off it; otherwise both burst in
+## the middle. Status shots count as CLASH_STATUS power. Online the host referees and tells
+## the guest (Net event "clash"), so both screens see the same.
+const CLASH_TIE := 0.15
+const CLASH_STATUS := 20.0
+
+
+func _clashes(delta: float) -> void:
+	if main.net and not main.net.host:
+		return
+	for i in projectiles.size():
+		var a: Dictionary = projectiles[i]
+		for j in range(i + 1, projectiles.size()):
+			var b: Dictionary = projectiles[j]
+			if not a.alive or not b.alive or a.get("clashed", false) or b.get("clashed", false) or a.user == b.user:
+				continue
+			var a0: Vector3 = a.pos - a.velocity * delta
+			var b0: Vector3 = b.pos - b.velocity * delta
+			if dist_seg_seg(a0, a.pos, b0, b.pos) >= a.radius + b.radius:
+				continue
+			if main.net:
+				var mine: Dictionary = a if a.get("shooter") == main.net.local else b
+				var theirs: Dictionary = b if mine == a else a
+				main.net.send_event({"t": "clash", "h": mine.get("seq", -1), "g": theirs.get("seq", -1)})
+			clash(a, b)
+
+
+## Streams (Flamethrower, Hydro Pump: hits that repeat) against shots and against each
+## other, without a tug of war. A shot that flies into a stream at least as strong is put
+## out; a stronger one goes through, weaker. Two streams that touch: the weaker is cut where
+## they meet (its hit and its look stop there) and the stronger goes on weaker while they
+## touch; even ones are both cut. Strength is power by type against type, as in clash().
+## Every copy works it out itself: online, whoever is hit decides with what it sees.
+func _streams() -> void:
+	var list: Array = []
+	for g in hits:
+		if g.active and g.interval > 0.0 and g.user is Fighter and is_instance_valid(g.user) and g.shape in ["capsule", "cone"]:
+			g.cut = 0.0
+			g.bonus = 1.0
+			list.append(g)
+	for g in list:
+		for p in projectiles:
+			if not p.alive or p.user == g.user or p.get("cut_by") == g or not _touches_point(g, p.pos, p.radius):
+				continue
+			var sg := _power(g.move_id, g.hit_share()) * Roster.affinity(g.type, [p.hit.type])
+			var sp := clash_strength(p, {"hit": g})
+			p.cut_by = g
+			main.vfx.impact(p.pos, g.type, 1, false)
+			if sg >= sp * (1.0 - CLASH_TIE):
+				p.age_t = p.lifetime
+			else:
+				var h: Hit = p.hit.copy()
+				h.bonus *= 1.0 - sg / sp
+				p.hit = h
+	for i in list.size():
+		for j in range(i + 1, list.size()):
+			var a: Hit = list[i]
+			var b: Hit = list[j]
+			if a.user == b.user:
+				continue
+			var at = _stream_contact(a, b)
+			if at == null:
+				continue
+			var sa := _power(a.move_id, 1.0) * Roster.affinity(a.type, [b.type])
+			var sb := _power(b.move_id, 1.0) * Roster.affinity(b.type, [a.type])
+			var even := absf(sa - sb) <= CLASH_TIE * maxf(sa, sb)
+			if even or sa < sb:
+				_cut(a, at)
+			if even or sb < sa:
+				_cut(b, at)
+			if not even:
+				var win: Hit = a if sa > sb else b
+				win.bonus = 1.0 - minf(sa, sb) / maxf(sa, sb)
+			_contact_fx(at, a.type, b.type)
+
+
+## Stops stream g at point "at" now (its script keeps it there from the next frame on).
+func _cut(g: Hit, at: Vector3) -> void:
+	var s := _seg(g)
+	g.cut = maxf(s[0].distance_to(at), 0.3)
+	if g.shape == "capsule":
+		g.b = g.a + (g.b - g.a).normalized() * g.cut
+	else:
+		g.length = g.cut
+
+
+## A move's power for these comparisons (status moves and unset power: CLASH_STATUS).
+func _power(move_id: String, share: float) -> float:
+	var d: Dictionary = Moves.DATA.get(move_id, {})
+	var power: float = d.get("power", 0)
+	return (power if power > 0.0 else CLASH_STATUS) * share
+
+
+## The stream's line (origin, end) and thickness.
+func _seg(g: Hit) -> Array:
+	if g.shape == "capsule":
+		return [g.a, g.b, g.radius]
+	return [g.center, g.center + g.dir.normalized() * g.length, g.length * tan(g.angle) * 0.6]
+
+
+## Where two streams meet (the middle of their closest points), or null.
+func _stream_contact(a: Hit, b: Hit):
+	var sa := _seg(a)
+	var sb := _seg(b)
+	var best := INF
+	var at := Vector3.ZERO
+	for k in 13:
+		var pa: Vector3 = sa[0].lerp(sa[1], k / 12.0)
+		var pb := closest_on_seg(pa, sb[0], sb[1])
+		var dist := pa.distance_to(pb)
+		if dist < best:
+			best = dist
+			at = (pa + pb) * 0.5
+	return at if best < float(sa[2]) + float(sb[2]) else null
+
+
+var _contact_t := 0.0
+
+
+## Steam where fire meets water, sparks in both colors otherwise, now and then.
+func _contact_fx(at: Vector3, ta: String, tb: String) -> void:
+	_contact_t -= get_physics_process_delta_time()
+	if _contact_t > 0.0:
+		return
+	_contact_t = 0.06
+	if (ta == "fire" and tb == "water") or (ta == "water" and tb == "fire"):
+		main.vfx.burst("steam", at, Vector3.UP, Color(0, 0, 0, 0), 1.4)
+	else:
+		main.vfx.burst("sparks", at, Vector3.UP, Roster.TYPE_COLOR.get(ta, Color.WHITE), 0.8)
+		main.vfx.burst("sparks", at, Vector3.UP, Roster.TYPE_COLOR.get(tb, Color.WHITE), 0.8)
+
+
+## How strong a shot is against another (its power, what share of it this shot carries, its
+## damage bonus, by its type against the other's type).
+func clash_strength(p: Dictionary, other: Dictionary) -> float:
+	var d: Dictionary = Moves.DATA.get(p.hit.move_id, {})
+	var power: float = d.get("power", 0)
+	if power <= 0.0:
+		power = 60.0 if d.get("power_by", "") != "" else CLASH_STATUS
+	if d.has("power_at"):
+		power *= clampf(p.hit.damage / maxf(float(d.power_at), 0.01), 0.2, 2.0)
+	return power * p.hit.bonus * Roster.affinity(p.hit.type, [other.hit.type])
+
+
+func clash(a: Dictionary, b: Dictionary) -> void:
+	a.clashed = true
+	b.clashed = true
+	var sa := clash_strength(a, b)
+	var sb := clash_strength(b, a)
+	var mid: Vector3 = (a.pos + b.pos) * 0.5
+	main.vfx.impact(mid, a.hit.type, 1, false)
+	main.vfx.impact(mid, b.hit.type, 1, false)
+	main.shake_camera(0.12, mid)
+	if absf(sa - sb) <= CLASH_TIE * maxf(sa, sb):
+		main.vfx.text(mid + Vector3.UP * 0.8, main.tr("Clash!"), Color(0.9, 0.92, 1.0))
+		a.age_t = a.lifetime
+		b.age_t = b.lifetime
+		return
+	var win: Dictionary = a if sa > sb else b
+	var lose: Dictionary = b if win == a else a
+	var keep: float = 1.0 - minf(sa, sb) / maxf(sa, sb)
+	lose.age_t = lose.lifetime
+	var g: Hit = win.hit.copy()
+	g.bonus *= keep
+	win.hit = g
+	win.clashed = false              # it can meet another one
+	main.vfx.text(mid + Vector3.UP * 0.8, main.tr("Overpowered!"), Roster.TYPE_COLOR.get(g.type, Color.WHITE))
+
+
+## Deflecting projectiles, with the move itself: a move with "deflects" in its data (1 breaks
+## them, 2 sends them back) whose hit is active where a projectile passes stops it. Each
+## projectile says how far it can be deflected ("deflectable", 2 by default: a lobbed bomb or
+## a bursting ball only break). Sent back, it flies at whoever threw it DEFLECT_SPEED times as
+## fast and hits DEFLECT_BONUS times as hard, still with the thrower's stats; it belongs to
+## the deflector from then on and can be sent back again. It takes timing, but fair timing:
+## the first DEFLECT_WINDOW seconds of the hit count (a swing too early or too late lets it
+## through), the hit stops projectiles a little past its own reach (DEFLECT_REACH), and from
+## a wide arc in front (DEFLECT_FRONT, the cosine of the widest angle). A broken projectile is
+## gone: it does not burst or hit (a bomb broken in the air does no damage). Online the
+## deflector's own copy decides and tells the other one (Net event "deflect" with the
+## projectile's number).
+const DEFLECT_SPEED := 1.2
+const DEFLECT_BONUS := 1.25
+const DEFLECT_WINDOW := 0.3
+const DEFLECT_REACH := 0.6
+const DEFLECT_FRONT := 0.2
+## The wind-up's end counts too, like a parry: in the last DEFLECT_EARLY seconds of a
+## deflecting move's startup, a ball DEFLECT_GUARD wide just in front of the body stops
+## shots (fast ones would otherwise land before the hit comes out).
+const DEFLECT_EARLY := 0.12
+const DEFLECT_GUARD := 1.4
+
+
+## "step": where it goes this frame; the whole stretch is checked, not just where it is.
+func _try_deflect(p: Dictionary, step: Vector3) -> bool:
+	for g in hits:
+		if not g.active or not (g.user is Fighter) or not is_instance_valid(g.user) or g.user == p.user or g.user.is_remote:
+			continue
+		var level: int = int(Moves.DATA.get(g.move_id, {}).get("deflects", 0))
+		if level <= 0 or clock - g.born > DEFLECT_WINDOW:
+			continue
+		var from: Vector3 = p.pos - g.user.center()
+		if Vector2(from.x, from.z).normalized().dot(Vector2(g.user.forward().x, g.user.forward().z)) < DEFLECT_FRONT:
+			continue
+		var touches := false
+		for k in 4:
+			if _touches_point(g, p.pos + step * (k / 3.0), p.radius + DEFLECT_REACH):
+				touches = true
+				break
+		if not touches:
+			continue
+		level = mini(level, int(Moves.DATA.get(p.hit.move_id, {}).get("deflectable", 2)))
+		if level <= 0:
+			continue
+		deflect(p, g.user, level)
+		if main.net:
+			main.net.send_event({"t": "deflect", "seq": p.get("seq", -1), "level": level})
+		return true
+	# The wind-up's end.
+	for f in targets:
+		if not (f is Fighter) or not is_instance_valid(f) or f == p.user or f.is_remote:
+			continue
+		var a: Action = f.action
+		if a == null or a.phase != "startup" or a.t < a.startup_len() - DEFLECT_EARLY:
+			continue
+		var level: int = int(a.d.get("deflects", 0))
+		if level <= 0:
+			continue
+		var guard: Vector3 = f.center() + f.forward() * (float(f.data.radius) + 0.6)
+		var from: Vector3 = p.pos - f.center()
+		if Vector2(from.x, from.z).normalized().dot(Vector2(f.forward().x, f.forward().z)) < DEFLECT_FRONT:
+			continue
+		var touches := false
+		for k in 4:
+			if (p.pos + step * (k / 3.0)).distance_to(guard) < DEFLECT_GUARD + p.radius:
+				touches = true
+				break
+		if not touches:
+			continue
+		level = mini(level, int(Moves.DATA.get(p.hit.move_id, {}).get("deflectable", 2)))
+		if level <= 0:
+			continue
+		deflect(p, f, level)
+		if main.net:
+			main.net.send_event({"t": "deflect", "seq": p.get("seq", -1), "level": level})
+		return true
+	return false
+
+
+## Breaks the projectile (level 1) or sends it back at whoever threw it (2).
+func deflect(p: Dictionary, by: Fighter, level: int) -> void:
+	var col: Color = Roster.TYPE_COLOR.get(p.hit.type, Color.WHITE)
+	main.vfx.impact(p.pos, p.hit.type, 2, true)
+	main.vfx.burst("sparks_metal", p.pos, Vector3.UP, Color(0, 0, 0, 0), 1.2)
+	main.vfx.wave(p.pos - Vector3.UP * 0.4, 1.4, 0.25, col, 0.1)
+	main.audio.play_sound("armor", p.pos, 2.0, 1.15)
+	main.shake_camera(0.18, p.pos)
+	by.freeze(0.08)
+	var shooter: Node = p.user
+	if level < 2 or not (shooter is Fighter) or not is_instance_valid(shooter):
+		main.vfx.text(p.pos + Vector3.UP * 0.8, main.tr("Broken!"), Color(0.9, 0.92, 1.0))
+		p.age_t = p.lifetime
+		p.deflected = true
+		p.broken = true
+		return
+	main.vfx.text(p.pos + Vector3.UP * 0.8, main.tr("Sent back!"), Color("ffd21f"))
+	main.session.event("deflect", {"by": by.species, "move": p.hit.move_id})
+	var g: Hit = p.hit.copy()
+	g.user = by
+	if g.source == null:
+		g.source = shooter
+	g.bonus = minf(g.bonus * DEFLECT_BONUS, 2.0)
+	p.hit = g
+	p.user = by
+	p.target = shooter
+	var speed: float = p.velocity.length() * DEFLECT_SPEED
+	var to: Vector3 = shooter.center() - p.pos
+	p.velocity = to.normalized() * speed
+	p.gravity = 0.0
+	p.age_t = 0.0
+	p.lifetime = maxf(p.lifetime, to.length() / maxf(speed, 0.1) + 0.6)
+
+
+## Whether hit "g" covers a ball of radius r at c (sphere, capsule and cone hits).
+func _touches_point(g: Hit, c: Vector3, r: float) -> bool:
+	var m := g.base()
+	match g.shape:
+		"sphere":
+			return (m * g.center).distance_to(c) < g.radius + r
+		"capsule":
+			return closest_on_seg(c, m * g.a, m * g.b).distance_to(c) < g.radius + r
+		"cone":
+			var org := m * g.center
+			var v := c - org
+			var d := v.length()
+			return d - r <= g.length and d > 0.01 and v.angle_to((m.basis * g.dir).normalized()) <= g.angle + atan2(r, d)
+	return false
+
+
+## How fast (rad/s) a move's projectiles turn after their target: 160°/s for 100% accuracy
+## in the games, less for less accurate ones (80%: about 90°/s) and 320°/s for those that
+## never miss (Aura Sphere). "track" in the move data (degrees/s) overrides it.
+static func track_for(move_id: String) -> float:
+	var d: Dictionary = Moves.DATA.get(move_id, {})
+	if d.has("track"):
+		return deg_to_rad(float(d.track))
+	if not d.has("accuracy"):
+		return 0.0
+	var acc: float = d.accuracy
+	return deg_to_rad(320.0 if acc <= 0.0 else 160.0 * pow(acc / 100.0, 2.5))
+
+
 func _physics_process(delta: float) -> void:
 	clock += delta
+	_streams()
 	_move_projectiles(delta)
 	var i := 0
 	while i < hits.size():
@@ -80,9 +418,26 @@ func _move_projectiles(delta: float) -> void:
 	while i < projectiles.size():
 		var p: Dictionary = projectiles[i]
 		p.age_t += delta
-		if p.homing > 0.0 and p.target and is_instance_valid(p.target):
-			var toward: Vector3 = (p.target.center() - p.pos).normalized() * p.velocity.length()
-			p.velocity = p.velocity.lerp(toward, clampf(p.homing * delta, 0.0, 1.0))
+		var tgt: Node3D = p.target if p.target and is_instance_valid(p.target) else null
+		if tgt:
+			var to: Vector3 = tgt.center() - p.pos
+			var flat_v := Vector2(p.velocity.x, p.velocity.z)
+			var flat_to := Vector2(to.x, to.z)
+			# A dodge breaks the follow, and so does getting clearly behind it; a shot fired
+			# off to a side (free aim) keeps following, though it may not turn in time.
+			if (tgt is Fighter and tgt.state == "dodge") or flat_to.normalized().dot(flat_v.normalized()) < -0.2:
+				p.target = null
+			else:
+				if p.homing > 0.0:
+					var toward: Vector3 = to.normalized() * p.velocity.length()
+					p.velocity = p.velocity.lerp(toward, clampf(p.homing * delta, 0.0, 1.0))
+				if p.track > 0.0 and flat_v.length() > 0.1:
+					var turn := clampf(flat_v.angle_to(flat_to), -p.track * delta, p.track * delta)
+					flat_v = flat_v.rotated(turn)
+					p.velocity.x = flat_v.x
+					p.velocity.z = flat_v.y
+		if not p.get("deflected", false):
+			_try_deflect(p, p.velocity * delta)
 		p.velocity.y -= p.gravity * delta
 		var before: Vector3 = p.pos
 		var after: Vector3 = before + p.velocity * delta
@@ -118,13 +473,14 @@ func _move_projectiles(delta: float) -> void:
 				p.node.look_at(where + p.velocity, Vector3.UP if absf(p.velocity.normalized().y) < 0.98 else Vector3.RIGHT)
 		if finished:
 			p.alive = false
-			if p.has("on_impact") and p.on_impact.is_valid():
+			if p.has("on_impact") and p.on_impact.is_valid() and not p.get("broken", false):
 				p.on_impact.call(where, against)
 			if is_instance_valid(p.get("node")):
 				p.node.queue_free()
 			projectiles.remove_at(i)
 		else:
 			i += 1
+	_clashes(delta)
 
 
 # ---------------------------------------------------------------- tests
@@ -219,12 +575,22 @@ func apply(g: Hit, o: Node, point: Vector3) -> String:
 		for l in [attacker, o]:
 			if l and is_instance_valid(l) and l.has_method("rumble_pad"):
 				l.rumble_pad(0.2 + 0.25 * strength, 0.35 + 0.3 * strength, 0.08 + 0.06 * strength)
-		if mult > 1.05:
-			main.vfx.text(point + Vector3.UP * 0.8, main.tr("Effective!"), Color("ffd93a"))
-			main.hud.log_entry(main.tr("It's super effective!"))
-		elif mult < 0.95:
-			main.vfx.text(point + Vector3.UP * 0.8, main.tr("Not very effective"), Color("b8bcc8"))
-			main.hud.log_entry(main.tr("It's not very effective..."))
+		if g.quiet:
+			pass
+		else:
+			match Roster.tier(mult):
+				"super":
+					main.vfx.text(point + Vector3.UP * 0.8, main.tr("Super effective!"), Color("ff8a3a"), 1.15)
+					main.hud.log_entry(main.tr("It's extremely effective!"))
+				"effective":
+					main.vfx.text(point + Vector3.UP * 0.8, main.tr("Effective!"), Color("ffd93a"))
+					main.hud.log_entry(main.tr("It's super effective!"))
+				"barely":
+					main.vfx.text(point + Vector3.UP * 0.8, main.tr("Barely effective"), Color("8e93a3"))
+					main.hud.log_entry(main.tr("It barely affects it..."))
+				"not_very":
+					main.vfx.text(point + Vector3.UP * 0.8, main.tr("Not very effective"), Color("b8bcc8"))
+					main.hud.log_entry(main.tr("It's not very effective..."))
 	return res
 
 
@@ -233,6 +599,11 @@ func apply(g: Hit, o: Node, point: Vector3) -> String:
 func _predicted_hit(g: Hit, o: Fighter, point: Vector3, mult: float, flow: bool) -> String:
 	if o.invulnerable > 0.0 or o.state == "ko":
 		return ""
+	if g.cat == "status":
+		# The rival decides whether it takes (Fighter._status_move); nothing to predict.
+		if g.on_strike.is_valid():
+			g.on_strike.call(o, "status")
+		return "status"
 	var attacker: Node = g.user
 	var strength := g.strength
 	if attacker is Fighter and is_instance_valid(attacker):

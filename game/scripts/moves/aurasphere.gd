@@ -30,7 +30,7 @@ func _hand() -> Vector3:
 func _new_ball() -> Node3D:
 	if d.type == "fighting":
 		return l.main.vfx.pixel_ball("aurasphere_ball", 8, 0.9, _color(), 12.0)
-	return l.main.vfx.pixel_ball("shadowball", 6, 0.65, _color(), 10.0)
+	return l.main.vfx.pixel_ball("shadowball", 6, 0.85, _color(), 10.0)
 
 
 func on_start() -> void:
@@ -71,7 +71,6 @@ func on_active() -> void:
 	g.type = d.type
 	g.cat = "special"
 	g.damage = _v("damage")
-	g.push = _v("push")
 	g.stun = _v("stun")
 	g.strength = roundi(_v("strength"))
 	g.contact = false

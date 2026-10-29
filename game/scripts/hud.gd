@@ -13,7 +13,8 @@ const GUI := "res://gui/cobblemon/"
 const TYPE_ORDER := ["normal", "fire", "water", "grass", "electric", "ice", "fighting", "poison", "ground",
 	"flying", "psychic", "bug", "rock", "ghost", "dragon", "dark", "steel", "fairy"]
 const STATES := {
-	"burned": ["brn", "BRN"], "poisoned": ["psn", "PSN"], "chilled": ["frz", "CHL"], "charged": ["par", "CHG"], "asleep": ["slp", "SLP"], "ko": ["fnt", "FNT"],
+	"brn": ["brn", "BRN"], "par": ["par", "PAR"], "psn": ["psn", "PSN"], "tox": ["tox", "TOX"], "slp": ["slp", "SLP"],
+	"frz": ["frz", "FRZ"], "ko": ["fnt", "FNT"], "imm": ["fnt", "IMM"],
 }
 const INK := Color("f5f3ea")
 const LOG_LINES := 5
@@ -32,6 +33,7 @@ var _portraits: Array = []            # [{vp, model, cam, height, placed, t0}]
 var _t := 0.0
 var _dbg: MeshInstance3D
 var _dbg_im := ImmediateMesh.new()
+var _u := UiKit.new()                # the menus' kit, for the pause and the end of a battle
 
 
 func _ready() -> void:
@@ -244,6 +246,12 @@ func _draw_ui() -> void:
 		return
 	var gw: float = _c.size.x / _s
 	var gh: float = _c.size.y / _s
+	# The opening: the trainers' cards instead of the battle's HUD, which comes back with
+	# "START" once you can move.
+	if main.intro_t > 0.0:
+		_opening_cards()
+		return
+	_floating()
 	_frame_box(main.fighters[0], 0, Vector2(12, 10), false)
 	_frame_box(main.fighters[1], 1, Vector2(gw - 12 - 140, 10), true)
 	var j: Fighter = main.player
@@ -252,13 +260,23 @@ func _draw_ui() -> void:
 		_resources(j, Vector2(11, gh - 76))
 	if j:
 		_locked(j)
+	for f in main.fighters:
+		if is_instance_valid(f) and f._boost_t > 0.0 and f.boosted_hits > 0:
+			_boost_bar(f)
 	_log_box(Vector2(gw - 169 - 12, gh - 55 - 10))
+	# Weather and the turns it has left, under the ping.
+	if main.weather and main.weather.label() != "":
+		_text(Vector2(gw * 0.5, 18) * _s, main.weather.label(), _p_log(), Color("ffc94a"), 0)
 	if main.net and main.net.in_battle:
 		var ms: int = main.net.ping_ms()
 		var col := Color("7fd65b") if ms < 70 else (Color("ffc94a") if ms < 140 else Color("ff8a6a"))
 		_text(Vector2(gw * 0.5, 8) * _s, "Ping %d ms" % ms, _p_log(), col, 0)
+	if main.start_t >= 0.0 and main.start_t < 1.0:
+		_start_banner(main.start_t)
 	if main.paused:
 		_pause_menu(gw, gh)
+	elif main._end_t > main.RESULT_AT and main.fighters.size() == 2:
+		_result_screen(gw, gh)
 	if debug and main.ai:
 		var p := _p_log()
 		var green := Color(0.6, 1.0, 0.7)
@@ -302,6 +320,11 @@ func _frame_box(l: Fighter, i: int, g: Vector2, turned: bool) -> void:
 		var ex := g.x + (65.0 if turned else 38.0)
 		_piece(d[0], Vector2(ex, g.y + 28), Vector2(ew, 7), Rect2(0.0 if turned else 74.0 - ew, 0, ew, 7))
 		_text(Vector2(g.x + (86.0 if turned else 41.0), g.y + 27.5) * _s, tr(d[1]), _p_log(), INK)
+		# Time left: a one-pixel line in its color under the tab, shrinking toward the frame.
+		if e == l.status or e == "imm":
+			var left := clampf(l.status_t / Status.length(e), 0.0, 1.0) if e != "imm" else l.status_lock / Status.IMMUNE_AFTER
+			var lw := roundf((ew - 4.0) * left)
+			_rect(Vector2(ex + 2.0 + (0.0 if turned else ew - 4.0 - lw), g.y + 35), Vector2(lw, 1), Status.COLOR.get(e, INK))
 
 
 func _hp_color(f: float) -> Color:
@@ -314,16 +337,10 @@ func _state(l: Fighter) -> String:
 	if l.state == "ko":
 		return "ko"
 	if l.vulnerable > 1.0:
-		return "asleep"
-	if l.burned > 0.0:
-		return "burned"
-	if l.poisoned > 0.0:
-		return "poisoned"
-	if l.slow < 1.0:
-		return "chilled"
-	if l.static_mark > 0.0:
-		return "charged"
-	return ""
+		return "slp"                  # Rest
+	if l.status == "" and l.status_lock > 0.0:
+		return "imm"                  # just cured: no status for a while
+	return l.status
 
 
 ## BattleMoveSelection tiles: 92 × 24, tinted by type, icon straddling the left edge,
@@ -363,7 +380,7 @@ func _moves(l: Fighter, g0: Vector2) -> void:
 			_text((g + Vector2(75, 14)) * _s, datum, pl, Color(dcol, a), 0)
 		# Cooldown and charge: a line at the bottom of the tile.
 		if missing > 0.0:
-			_rect(g + Vector2(2, 21), Vector2(87 * (1.0 - missing / maxf(d.get("cd", 1.0), 0.01)), 1), Color(1, 1, 1, 0.55))
+			_rect(g + Vector2(2, 21), Vector2(87 * (1.0 - missing / maxf(Moves.cooldown(move), 0.01)), 1), Color(1, 1, 1, 0.55))
 		if using and d.get("chargeable", false) and l.action.phase == "startup":
 			_rect(g + Vector2(2, 21), Vector2(87 * l.action.charge, 1), INK)
 
@@ -384,6 +401,50 @@ func _resources(l: Fighter, g: Vector2) -> void:
 		_rect(Vector2(x, g.y + 1), Vector2(30, 5), Color(0.05, 0.06, 0.09, 0.85))
 		_rect(Vector2(x + 1, g.y + 2), Vector2(28 * l.flight / float(l.data.flight.stamina), 3),
 			Color(1.0, 0.62, 0.3) if l.flight > float(l.data.flight.stamina) * 0.25 else Color(0.95, 0.35, 0.25))
+
+
+## Swords Dance: over the boosted Pokémon, two crossed blades and a gold bar with the time
+## left, with a notch per boosted hit still to come.
+func _boost_bar(f: Fighter) -> void:
+	var cam: Camera3D = main.get_viewport().get_camera_3d()
+	var up: Vector3 = f.global_position + Vector3.UP * (f.data.height + 0.75)
+	if cam == null or cam.is_position_behind(up):
+		return
+	var p := cam.unproject_position(up) / _s
+	var w := 26.0
+	var x := p.x - w * 0.5 + 4.0
+	var gold := Color("ffc94a")
+	# Two crossed blades, pixel style.
+	for s in [-1.0, 1.0]:
+		_c.draw_line(Vector2(x - 6.0 - 2.5 * s, p.y - 3.0) * _s, Vector2(x - 6.0 + 2.5 * s, p.y + 3.0) * _s, gold, _s)
+	_rect(Vector2(x - 6.0 - 1.5, p.y + 1.5), Vector2(3, 1), Color(0.55, 0.4, 0.2))
+	_rect(Vector2(x, p.y - 2), Vector2(w, 4), Color(0.05, 0.06, 0.09, 0.85))
+	var dur: float = Moves.DATA.get("swordsdance", {}).get("boost_dur", 6.0)
+	_rect(Vector2(x + 1, p.y - 1), Vector2((w - 2) * clampf(f._boost_t / dur, 0.0, 1.0), 2), gold)
+	for k in f.boosted_hits:
+		_rect(Vector2(x + 1 + k * 4, p.y + 3), Vector2(3, 1), Color(gold, 0.9))
+
+
+## Floating texts and damage numbers (Vfx.texts), in the pixel font with the one-pixel
+## shadow, on the pixel grid. They pop in at double size for a moment, move in steps and
+## fade out in steps (no smooth fades).
+func _floating() -> void:
+	var cam: Camera3D = main.get_viewport().get_camera_3d()
+	if cam == null:
+		return
+	for c in main.vfx.texts:
+		if cam.is_position_behind(c.pos):
+			continue
+		var p := cam.unproject_position(c.pos) / _s
+		var k: float = c.t / c.dur
+		var size: int = _s * (2 if c.big else 1)
+		if c.t < 0.07:
+			size *= 2                       # pop
+		var a := 1.0 if k < 0.65 else (0.66 if k < 0.82 else 0.33)
+		var col: Color = c.col
+		col.a = a
+		var w := _text_width(c.s, size) / _s
+		_text(Vector2(roundf(p.x - w * 0.5), roundf(p.y - 6.0 * size / _s)) * _s, c.s, size, col)
 
 
 func _diamond(c: Vector2, filled: float) -> void:
@@ -413,8 +474,8 @@ func _log_box(g: Vector2) -> void:
 
 
 func _locked(j: Fighter) -> void:
-	var r := j.rival
-	if r == null or not j.locked or r.state == "ko":
+	var r: Node3D = j.aim_target()
+	if r == null or not is_instance_valid(r) or not j.locked or (r is Fighter and r.state == "ko"):
 		return
 	var cam: Camera3D = main.get_viewport().get_camera_3d()
 	var up: Vector3 = r.global_position + Vector3.UP * (r.data.height + 0.35)
@@ -425,26 +486,145 @@ func _locked(j: Fighter) -> void:
 	_piece("arrow_pointer_down", Vector2(p.x - 8.5, p.y - 10 + bounce), Vector2(17, 10))
 
 
-func _pause_menu(gw: float, gh: float) -> void:
-	_c.draw_rect(Rect2(Vector2.ZERO, _c.size), Color(0.02, 0.03, 0.05, 0.55))
-	var g := Vector2(floorf((gw - 169) * 0.5), floorf((gh - 101) * 0.5))
-	_piece("battle_log_expanded", g, Vector2(169, 101))
-	var p := _p_log()
-	var lines := [
-		[tr("Paused"), INK],
-		[tr("%s to resume") % ("Menu" if Controls.last_device == "xbox" else ("Options" if Controls.last_device == "playstation" else "Esc")), Color(INK, 0.7)],
-		["", INK],
-		[tr("%s jump") % Controls.glyph("jump"), INK],
-		[tr("%s dodge   %s lock on") % [Controls.glyph("dodge"), Controls.glyph("lock_on")], INK],
-		[tr("%s %s %s %s moves") % [Controls.glyph("mov1"), Controls.glyph("mov2"), Controls.glyph("mov3"), Controls.glyph("mov4")], INK],
-		["", INK],
-		[tr("%s back to menu") % Controls.glyph("menu_back"), Color("ffc94a")],
+## Pause, in the menus' look (UiKit): the floor darkened, a block with what each button
+## does and how to leave.
+func _pause_menu(_gw: float, _gh: float) -> void:
+	_u.begin(_c)
+	var u := _u
+	u.full(Color(0, 0, 0, 0.6))
+	u.slant(-80.0, 200.0, 1120.0, 110.0, UiKit.DARK)
+	u.slant(1040.0, 200.0, 18.0, 110.0, UiKit.RED)
+	u.title(140.0, 214.0, (tr("Paused") if main.net == null else tr("Menu (the battle goes on)")).to_upper(), 74.0, UiKit.INK, -1, 860.0)
+	var rows := [
+		[Controls.glyph("jump"), tr("Jump")],
+		[Controls.glyph("dodge"), tr("Dodge")],
+		[Controls.glyph("lock_on"), tr("Lock on")],
+		["%s %s %s %s" % [Controls.glyph("mov1"), Controls.glyph("mov2"), Controls.glyph("mov3"), Controls.glyph("mov4")], tr("Moves")],
 	]
-	var y := g.y + 7
-	for k in lines.size():
-		var ln: Array = lines[k]
-		_text(Vector2(g.x + 8, y) * _s, ln[0], _s if k == 0 else p, ln[1])
-		y += 12.0 * (_s if k == 0 else p) / _s
+	var y := 360.0
+	for r in rows:
+		var gw := maxf(u.width(r[0], 28.0, u.heavy) + 24.0, 48.0)
+		u.rect(140.0, y, gw, 44.0, UiKit.PANEL_HI)
+		u.text(140.0 + gw * 0.5, y + 6.0, r[0], 28.0, UiKit.INK, u.heavy, 0)
+		u.text(160.0 + gw, y + 6.0, r[1], 28.0, UiKit.INK, u.bold)
+		y += 58.0
+	var leave := (tr("%s back to menu") if main.net == null else tr("%s leave the online game")) % Controls.glyph("menu_back")
+	u.slant(140.0, y + 30.0, u.width(leave, 30.0, u.heavy) + 70.0, 60.0, UiKit.RED)
+	u.text(175.0, y + 42.0, leave, 30.0, UiKit.INK, u.heavy)
+	var resume := tr("%s to resume") % ("Menu" if Controls.last_device == "xbox" else ("Options" if Controls.last_device == "playstation" else "Esc"))
+	u.text(140.0, y + 120.0, resume, 26.0, UiKit.SOFT, u.bold)
+	u.text(140.0, y + 160.0, tr("F9 opens the log folder (to report bugs)"), 20.0, UiKit.SOFT, u.body)
+
+
+## End of the battle, Smash style: a band of the winner's color crosses the screen with the
+## result, big; then the two ways on, as blocks: rematch (A) and pick others or leave (B).
+## It stays until one is pressed.
+## Each trainer's card while they throw their Poké Ball: yours from the left, the rival's
+## from the right, along the bottom. The trainer's sprite, 1P / CPU (2P online), their name
+## and the Pokémon they send out with its types.
+func _opening_cards() -> void:
+	if main.trainers.size() < 2:
+		return
+	_u.begin(_c)
+	var u := _u
+	var e: float = main.INTRO - main.intro_t
+	for side in 2:
+		var t: Trainer = main.trainers[side]
+		if not is_instance_valid(t) or not is_instance_valid(t.fighter):
+			continue
+		var f: Fighter = t.fighter
+		var k := UiKit.ease((e - 0.1 - 0.2 * side) / 0.35) * (1.0 - UiKit.ease((e - (main.INTRO - 0.35)) / 0.3))
+		if k <= 0.001:
+			continue
+		var left := side == 0
+		var col: Color = UiKit.RED if left else (UiKit.BLUE if main.net else UiKit.GREY)
+		var w := 780.0
+		var h := 210.0
+		var x := (60.0 if left else 1920.0 - 60.0 - w) + (1.0 - k) * (-900.0 if left else 900.0)
+		var y := 820.0
+		u.slant(x, y, w, h, Color(col, 0.95))
+		u.slant(x + 14.0, y + 14.0, w - 28.0, h - 28.0, col.darkened(0.3))
+		u.stripes(x + 30.0, y + 14.0, w - 60.0, h - 28.0, Color(1, 1, 1, 0.035), 44.0)
+		# The sprite, spilling over the top.
+		u.tex(TrainerData.texture(t.id), u.edge(x, y, h, y + h) + 18.0, y - 70.0, 270.0, 270.0)
+		var tx := u.edge(x, y, h, y + 60.0) + 290.0
+		var tag := "1P" if left else ("2P" if main.net else "CPU")
+		u.slant(tx, y + 24.0, u.width(tag, 34.0, u.heavy) + 30.0, 46.0, UiKit.DARK)
+		u.title(tx + 15.0, y + 27.0, tag, 34.0, UiKit.INK)
+		u.title(tx + u.width(tag, 34.0, u.heavy) + 50.0, y + 18.0, t.display_name.to_upper(), 58.0, UiKit.INK, -1, w - 420.0)
+		var px := u.edge(x, y, h, y + 150.0) + 290.0
+		u.text_fit(px, y + 104.0, tr("sends out %s!") % tr(f.data.display_name), w - 420.0, 30.0, Color(UiKit.INK, 0.9), u.bold)
+		for i in f.data.types.size():
+			u.type_icon(f.data.types[i], px + i * 46.0, y + 146.0, 40.0)
+
+
+## "START" when you can move: a thin band across the upper part, gone within a second.
+func _start_banner(st: float) -> void:
+	_u.begin(_c)
+	var u := _u
+	var a := clampf(st / 0.12, 0.0, 1.0) * (1.0 - clampf((st - 0.6) / 0.35, 0.0, 1.0))
+	var slide := (1.0 - UiKit.ease(st / 0.25)) * 300.0
+	u.slant(-100.0 + slide, 262.0, 2120.0, 72.0, Color(UiKit.DARK, 0.45 * a))
+	u.slant(-100.0 + slide, 334.0, 2120.0, 4.0, Color(UiKit.YELLOW, a))
+	u.title(960.0 + slide, 266.0, "START", 60.0, Color(UiKit.INK, a), 0)
+
+
+func _result_screen(_gw: float, _gh: float) -> void:
+	var winner: Fighter = null
+	for f in main.fighters:
+		if is_instance_valid(f) and f.state != "ko":
+			winner = f
+	_u.begin(_c)
+	var u := _u
+	var k := UiKit.ease((main._end_t - main.RESULT_AT) / 0.35)
+	u.full(Color(0, 0, 0, 0.5 * k))
+	var title := tr("Draw")
+	var col := UiKit.GREY
+	if winner and main.player:
+		var won: bool = winner == main.player
+		title = tr("You win!") if won else tr("You lose")
+		col = UiKit.RED if won else UiKit.GREY
+	elif winner:
+		title = tr("%s wins!") % tr(winner.data.display_name)
+		col = UiKit.RED
+	var bx := lerpf(-2200.0, -200.0, k)
+	u.slant(bx, 250.0, 2400.0, 200.0, col)
+	u.slant(bx + 200.0, 462.0, 2200.0, 16.0, UiKit.YELLOW)
+	u.title(960.0, 262.0, title.to_upper(), 150.0, UiKit.INK, 0, 1600.0)
+	if winner and main.player:
+		u.text(960.0, 500.0, tr("%s wins!") % tr(winner.data.display_name), 36.0, Color(UiKit.INK, 0.85 * k), u.bold, 0)
+	if main._end_t < main.CHOICES_AT:
+		return
+	var k2 := UiKit.ease((main._end_t - main.CHOICES_AT) / 0.3)
+	var online: bool = main.net != null
+	var opts := [
+		[Controls.glyph("jump"), tr("Rematch"), tr("Same Pokémon, for both players.") if online else tr("Same Pokémon, same rival."), UiKit.YELLOW],
+		[Controls.glyph("menu_back"), tr("Pick other Pokémon") if online else tr("Back to the menu"),
+			tr("Both go back to the selection, still connected.") if online else tr("Pick Pokémon, rival and stage again."), UiKit.PANEL_HI],
+	]
+	for i in 2:
+		var o: Array = opts[i]
+		var x := 300.0 + i * 700.0 + (1.0 - k2) * 200.0
+		var y := 600.0
+		u.slant(x, y, 620.0, 180.0, Color(o[3], k2))
+		var ink := UiKit.DARK if i == 0 else UiKit.INK
+		var gw := maxf(u.width(o[0], 30.0, u.heavy) + 24.0, 52.0)
+		u.rect(x + 50.0, y + 30.0, gw, 48.0, Color(ink, k2))
+		u.text(x + 50.0 + gw * 0.5, y + 36.0, o[0], 30.0, Color(UiKit.INK if i == 0 else UiKit.DARK, k2), u.heavy, 0)
+		u.title(x + 70.0 + gw, y + 26.0, o[1].to_upper(), 52.0, Color(ink, k2), -1, 600.0 - gw - 110.0)
+		u.para(x + 54.0, y + 100.0, o[2], 520.0, 24.0, Color(ink, 0.8 * k2), u.bold, 1.25, 2)
+	# Online: who has asked for the rematch so far.
+	if online and not main.rematch_votes.is_empty():
+		var mine: bool = main.rematch_votes.has(main.net.me)
+		var n: int = main.rematch_votes.size()
+		var of: int = maxi(main.rematch_of, main.net.players())
+		var line := tr("Rematch: waiting for the rival (%d/%d)") % [n, of] if mine else tr("Your rival wants a rematch (%d/%d)") % [n, of]
+		u.text(960.0, 790.0, line, 26.0, Color(UiKit.YELLOW, k2), u.bold, 0)
+	# Nobody chooses: back to the selection on its own (online the host decides when).
+	if not online or main.net.host:
+		var left := int(ceilf(main.CHOICES_AT + main.AUTO_LEAVE - main._end_t))
+		if left <= 10:
+			u.text(960.0, 820.0, tr("Back to the selection in %d s") % maxi(left, 0), 24.0, Color(UiKit.SOFT, k2), u.bold, 0)
 
 
 # ---------------------------------------------------------------- menu

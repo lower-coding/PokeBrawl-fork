@@ -45,14 +45,14 @@ func _physics_process(delta: float) -> void:
 		if main._end_t >= 0.0 and (_battles.is_empty() or _battles.back().t < _t - 5.0):
 			_battles.append({"t": _t, "winner": "me" if l.state != "ko" else "rival", "my_hp": l.hp, "rival_hp": r.hp})
 			print("BATTLE %d: winner %s · my HP %d · rival HP %d" % [_battles.size(), _battles.back().winner, l.hp, r.hp])
-			# Automatic rematch: each side asks for it or accepts it.
-			get_tree().create_timer(2.0).timeout.connect(func():
+			# Rematch by votes: the guest asks first; nothing may start until the host asks
+			# too (two seconds later).
+			get_tree().create_timer(2.0 if not main.net.host else 4.0).timeout.connect(func():
 				if main.net:
-					if main.net.host:
-						main.net.send_event({"t": "rematch"})
-						main.rematch()
-					else:
-						main.net.send_event({"t": "asks_rematch"}))
+					main._vote_rematch(main.net.me))
+			if not main.net.host:
+				get_tree().create_timer(3.5).timeout.connect(func():
+					print("%s  REMATCH waits for everyone: still on the result after only the guest asked" % ("OK   " if main._end_t >= 0.0 else "FAIL ")))
 	_report -= delta
 	if _report <= 0.0:
 		_report = 5.0

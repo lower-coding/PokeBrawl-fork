@@ -1,12 +1,20 @@
 extends Action
-## Ice Beam: the cannons frost over (you can see it coming) and a short straight beam
-## fires, hitting along its whole line and chilling the rival (slowed). Where it passes
-## it leaves a strip of ice on the ground for a few seconds: whoever steps on it is
-## slowed. This is how Blastoise splits the field in two.
+## Ice Beam: the cannons frost over (you can see it coming) and a straight beam shoots
+## out, its front travelling at "beam_speed" (it is not instant: far away you can step out
+## of its line, up close you cannot), chilling the rival (slowed). Where it passes it
+## leaves a strip of ice on the ground for a few seconds: whoever steps on it is slowed.
+## This is how Blastoise splits the field in two.
 
 var _beam: MeshInstance3D
+var _head: Node3D
+var _g: Hit
 var _frost := 0.0
 var _done := false
+var _o := Vector3.ZERO
+var _dir := Vector3.FORWARD
+var _full := 0.0
+var _len := 0.5
+var _striped := false
 
 
 func on_start() -> void:
@@ -32,20 +40,24 @@ func in_startup(delta: float) -> void:
 
 
 func on_active() -> void:
-	var o := _origin_pos()
-	var dir := aim(0.6)
-	var q := PhysicsRayQueryParameters3D.create(o, o + dir * d.length, 1)
+	_o = _origin_pos()
+	_dir = beam_aim(_o, float(d.beam_speed))
+	var q := PhysicsRayQueryParameters3D.create(_o, _o + _dir * d.length, 1)
 	var r: Dictionary = l.main.get_world_3d().direct_space_state.intersect_ray(q)
-	var end_point: Vector3 = r.position if not r.is_empty() else o + dir * d.length
-	hit({"shape": "capsule", "local": false, "a": o, "b": end_point, "radius": d.radius})
+	_full = _o.distance_to(r.position) if not r.is_empty() else float(d.length)
+	_len = 0.5
+	_g = hit({"shape": "capsule", "local": false, "a": _o, "b": _o + _dir * _len, "radius": d.radius})
 	var vfx: Vfx = l.main.vfx
-	_beam = vfx.beam(Color(0.55, 0.9, 1.0), 0.2, Color(0.95, 1.0, 1.0), 14.0)
-	vfx.place_beam(_beam, o, end_point, 1.0)
-	vfx.light(o, Roster.TYPE_COLOR.ice, 3.0, 5.0, 0.2)
-	vfx.cobble("icebeam_actorspray", o, end_point, l.data.height)
-	_stripe(o, end_point)
+	_beam = vfx.ice_beam(0.2, 14.0)
+	vfx.place_beam(_beam, _o, _o + _dir * _len, 1.0)
+	# The bright ball rides the beam's front.
+	_head = vfx.pixel_ball("icebeam_head", 4, 0.75, Roster.TYPE_COLOR.ice, 16.0)
+	_head.global_position = _o
+	vfx.live(_head, d.active, func(_k: float): pass)
+	vfx.light(_o, Roster.TYPE_COLOR.ice, 3.0, 5.0, 0.2)
+	vfx.cobble("icebeam_actorspray", _o, _o + _dir * _full, l.data.height)
 	play_sound("icebeam", 0.0)
-	l.velocity -= dir * 1.5
+	l.velocity -= _dir * 1.5
 
 
 ## The ice strip: marks on the ground along the beam and a zone that slows whoever
@@ -74,10 +86,21 @@ func _stripe(from_pos: Vector3, to_pos: Vector3) -> void:
 				o.slow_down(0.6, 0.4))
 
 
-func in_active(_delta: float) -> void:
-	if is_instance_valid(_beam) and t > d.active * 0.5 and not _done:
+func in_active(delta: float) -> void:
+	_len = minf(_full, _len + float(d.beam_speed) * delta)
+	var front := _o + _dir * _len
+	if _g:
+		_g.b = front
+	if is_instance_valid(_beam) and not _done:
+		l.main.vfx.place_beam(_beam, _o, front, 1.0)
+	if is_instance_valid(_head):
+		_head.global_position = front
+	if _len >= _full and not _striped:
+		_striped = true
+		_stripe(_o, front)
+	if is_instance_valid(_beam) and t > d.active * 0.8 and not _done:
 		_done = true
-		l.main.vfx.stop_beam(_beam, d.active * 0.6)
+		l.main.vfx.stop_beam(_beam, d.active * 0.3)
 
 
 func on_recovery() -> void:

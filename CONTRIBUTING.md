@@ -28,8 +28,9 @@ not build the same move.
 ## Recipe: add a move
 
 Use an existing move as a model. `thundershock` (projectile), `quickattack` (dash, through the
-shared `dash.gd`), `flamethrower` (held stream), `aurasphere` (chargeable) and `earthquake`
-(ground wave) cover the common shapes.
+shared `dash.gd`), `flamethrower` (held stream), `hyperbeam` (held beam, through the shared
+`energystream.gd`), `aurasphere` (chargeable) and `earthquake` (ground wave) cover the common
+shapes.
 
 1. **Research.** Look the move up in Pokkén and Smash (button, does it charge, is it a counter,
    what punishes it) and how it looks in the anime. Add a short entry to
@@ -75,13 +76,16 @@ shared `dash.gd`), `flamethrower` (held stream), `aurasphere` (chargeable) and `
    plain dash, punch or body slam, point `"script"` at the shared `dash.gd`, `punch.gd` or
    `bodyslam.gd` and only add data.
 
-5. **Give it to a Pokémon** in `game/scripts/data/roster.gd` (`"moves": [...]`) to try it.
+5. **Give it to a Pokémon.** Every Pokémon that learns it in the games (its learnset in
+   `species.gd`) can pick it in the Moves screen as soon as its script exists. To make it one
+   of a Pokémon's default four, put it in `"moves": [...]` in `game/scripts/data/roster.gd`.
 
 6. **Test it:**
 
    ```bash
    godot --path game -- --test=moves --p1=<pokemon> --sequence   # capture strip of each move
    godot --headless --path game -- --test=mechanics               # must stay all OK
+   godot --headless --path game -- --test=loadouts                # every Pokémon with every move it can pick
    godot --headless --path game -- --test=animations --p1=<pokemon>
    ```
 
