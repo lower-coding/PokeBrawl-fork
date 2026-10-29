@@ -2,7 +2,13 @@
 
 Thanks for helping. The long-term goal is every Pokémon with its real learnset and abilities
 ([docs/roster-plan.md](docs/roster-plan.md)), and that only works if moves and abilities can be
-added one at a time by different people. These recipes are how.
+added one at a time by different people. These recipes are how. Sound, music and art are just
+as welcome: see [Sound effects](#sound-effects), [Music](#music) and [Art](#art).
+
+Everything here is the approach I took, not the only one or necessarily the best. If you would
+rather tackle real-time Pokémon battles from the ground up in a completely different way, you
+do not need to contribute here first: take whatever you want from this work for your own
+project (the code is MIT; the assets keep their own licenses, see [CREDITS.md](CREDITS.md)).
 
 Before starting something big, open an issue (or comment on an existing one) so two people do
 not build the same move.
@@ -22,8 +28,9 @@ not build the same move.
 - **Visual style:** Cobblemon's own particle pieces first; whatever is missing, pixel art at
   Cobblemon's density (16 px per meter) with flat color bands and stepped transparency. No smooth
   gradients or soft glows, and nothing that flashes faster than twice per second.
-- **Assets:** only Cobblemon assets (respecting their licenses) or your own work. Never assets
-  ripped from the official games.
+- **Assets:** only Cobblemon assets (respecting their licenses) or your own work. Never new
+  assets ripped from the official games; the trainer sprites are the one exception left, and
+  original ones are welcome (see [Art](#art)).
 
 ## Recipe: add a move
 
@@ -108,6 +115,78 @@ shapes.
    mobility, dodge, passive, moves) and its style to `PROFILE` in `game/scripts/ai.gd`.
 4. **Test:** `--test=animations --p1=<species>` must report no failures, then
    `--aivsai --test=aivsai --p1=<species>` and play it.
+
+## Sound effects
+
+Move and impact sounds and the cries come from Cobblemon. What it does not have is synthesized
+in code as a placeholder (`game/scripts/audio.gd`), and those are the first sounds to replace:
+
+| Key | When it plays |
+|---|---|
+| `dodge`, `jump` | dodging and jumping |
+| `footstep`, `fall` | running, landing, being knocked down |
+| `light_hit`, `heavy_hit` | hits whose type has no impact sound of its own |
+| `armor`, `ko` | a hit that does not interrupt (poise), a KO |
+| `charge` | Aura Sphere's charge and the League Stadium's warning before it closes in |
+| `ui_ok`, `ui_back` | the menus: accepting and going back |
+
+Also missing: the crowd of the stadiums, the League Stadium's barrier closing in, and the wind of
+the Floating Stadium.
+
+- **Format:** OGG Vorbis, 44.1 or 48 kHz, mono for anything placed in the world, short and with
+  no silence at the start. Two or three variants of the same sound help (one is picked at
+  random): name them `<prefix>_1.ogg`, `<prefix>_2.ogg`...
+- **Where:** a folder of its own under `game/sounds/`, and point the key to it in `audio.gd`:
+  the `COBBLEMON` map (folder and file prefix) for most keys, which wins over the synthesized
+  sound; hits and menu sounds are picked in `impact()` and `ui()`.
+- Keep them clear and dry: every move already has its own sound, and the effects must not bury
+  them.
+
+## Music
+
+The released builds carry Pokémon arrangements by The Noble Demon, which cannot live in the
+repository; the game picks tracks by file name from `game/music/` (see its
+[README](game/music/README.md)):
+
+| Prefix | Plays in |
+|---|---|
+| `menu_` | the menus |
+| `select_` | the Pokémon selection and the Moves screen |
+| `battle_` | the battles (a new track every battle) |
+
+- **Original music** is the most welcome: menu, selection and battle themes, and one per
+  stadium would be even better. If it is yours and released under a license that lets it live
+  in the repository (CC BY 4.0 or CC0), it can ship with the source too, not only with the
+  builds.
+- **Arrangements of Pokémon music** are welcome too, with the arranger's permission; like the
+  current ones, they go only inside the released builds.
+- **Format:** OGG Vorbis or MP3, any bitrate, made to loop cleanly. It plays quietly under the
+  battle, so keep the mix gentle and leave room for the effects.
+
+## Art
+
+The stadiums, the effects and the menus are drawn by code; the Pokémon are Cobblemon's. Art is
+welcome where the game still leans on others or on placeholders:
+
+- **Trainer sprites:** original trainers to replace the games' ones, front and back (today
+  there are only front ones; a back one would show when the camera is behind the trainer).
+  80 × 80 px, feet on the bottom rows, listed in `game/scripts/data/trainers.gd`.
+- **Effect sprites** (`game/fx/tex/custom/`): pieces Cobblemon does not have, in its pixel style.
+- **Stadium details:** textures and props for the stadiums, or ideas for new ones.
+- **Logo, key art and icons** for the menus, the window and the release page.
+
+Follow the visual style of the [ground rules](#ground-rules): hard pixel art at Cobblemon's
+density (16 px per meter), flat color bands, no smooth gradients or soft glows. PNG with
+transparency.
+
+## Sending sound, music or art
+
+1. **Open an issue first** with a sample (a clip, a track, a picture) so we agree on the
+   direction before you make the whole set.
+2. **Send it as a pull request**, or attached to the issue if you do not use Git.
+3. **It must be yours**, with a license that allows it in a non-profit fan project (CC BY 4.0
+   or CC0 is simplest), and say which in the pull request. Your name, the work and its license
+   go into [CREDITS.md](CREDITS.md) and the in-game credits.
 
 ## Translations
 

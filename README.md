@@ -9,6 +9,12 @@ PokeBrawl is a non-profit fan project; this is its demo, the first version to pl
 pick each Pokémon's four moves and its ability from what it learns in the games, and fight in
 three stadiums. The game is in English and Spanish and follows your system language.
 
+> **This is one way to do it, not the way.** PokeBrawl is the approach I took to real-time
+> Pokémon battles, and it is not necessarily the best one. If you want to build them from the
+> ground up in a completely different way, feel free to take whatever you want from this work
+> for it: the code is MIT, and the assets keep their own licenses (see
+> [Credits](#credits-and-licenses)).
+
 | | |
 |---|---|
 | ![Picking the Pokémon](docs/images/selection.png) | ![The Moves screen](docs/images/moves.png) |
