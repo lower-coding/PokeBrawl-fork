@@ -90,7 +90,7 @@ mouse wheel scrolls.
 
 ## How battles work
 
-- **Four moves, no basic attack.** Each move costs energy and has its own cooldown. Strong moves
+- **Four moves.** Each move costs energy and has its own cooldown. Strong moves
   recharge slowly, so it pays to carry something weak and fast too; or you can play around your
   big moves and wait for them.
 - **Every move has a readable startup.** What the opponent sees coming is what they can answer:
