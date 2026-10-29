@@ -138,3 +138,71 @@ Use the official Pokémon names of that language.
 - Describe how the move plays and what counters it, with captures.
 
 By contributing you agree that your code is released under the project's [MIT license](LICENSE).
+
+## Where it can go
+
+PokeBrawl is small on purpose, but it was built to grow. These are the lines of work it is
+ready for, from the most direct to the most ambitious. Any of them is a good place to help.
+
+### More moves, Pokémon and abilities
+
+The content is data first, so adding to it does not mean touching the battle system.
+
+- **Moves.** Each move is an entry in `moves.gd` plus a script, and the scripts share bases
+  (dashes, punches, body slams, projectiles, held beams): the 79 moves done today come from 52
+  scripts, and many new ones only need data. The ten Pokémon learn 404 moves in the games,
+  grouped into families to design them together in
+  [docs/learnset-plan.md](docs/learnset-plan.md). As soon as a move's script exists, every
+  Pokémon that learns it can pick it in the Moves screen.
+- **Pokémon.** Their stats, types, abilities, weights and learnsets are generated from
+  Cobblemon's data (`tools/import_species.py`), and their models and animations are converted
+  by `tools/import_cobblemon.py`. Cobblemon's data covers all 1025 species and its models a
+  large part of them, so a new Pokémon is mostly its roster entry (how it moves and dodges), its AI style and a check of its
+  animations. The plan is in [docs/roster-plan.md](docs/roster-plan.md).
+- **Abilities** hook into battle events, the way Pokémon Showdown does it, so each new one is
+  a small piece of code next to the 22 already working.
+- **Tests keep it safe:** `loadouts` fights every Pokémon with every move it can pick,
+  `mechanics` checks the rules and the AI can play itself (`--aivsai`).
+
+### The battle system
+
+- **Teams:** several Pokémon per side and switching between them. The trainers already stand
+  on the field and throw their Poké Balls; they are the base for it.
+- **Doubles, 2 vs 2:** moves that hit an ally or both rivals, which today are left out.
+- **Items, terrains and more weather**, on top of the statuses and weather already in.
+- **Online:** more players and spectators. The rematch already counts the votes of every
+  player, not just two.
+- **AI:** each species has its own style; it could learn the matchups, read the stadium and
+  play teams.
+
+### Balance
+
+Every number lives in data: the games' stats at level 50, the games' damage formula, cooldowns
+from each move's PP and power, and softened type matchups. Balancing is changing data and
+playing again. What would help most:
+
+- AI vs AI runs in bulk (`--aivsai`) that give win rates per matchup and per move.
+- The session logs (F9 opens them, no personal data) from real matches, to see which moves get
+  picked, which win and which nobody uses.
+
+### Inside the Pokémon games
+
+The battle system can take the place of the turn-based battles of an existing Pokémon game.
+We tried it with Pokémon Black, through a PC port built from its decompilation, running inside
+the Godot window: when a battle starts, the DS battle never runs. It is fought in 3D in a copy
+of the place where it happens, captured from the game's own map, and the result goes back to
+the game (HP, experience with Black's formula, level, money), which goes on as usual.
+
+![Pokémon Black: the first rival battle, fought in 3D in the player's bedroom](docs/images/black_battle.gif)
+
+<sub>A private experiment, shown here only as an example: it is not part of this repository or
+of PokeBrawl, and it will not be released. It runs on the player's own copy of the game; nothing
+of Pokémon Black is distributed.</sub>
+
+The same approach fits any game with a decompilation.
+
+### Fan games from the ground up
+
+PokeBrawl can also be the battle engine of a new fan game: an overworld, a story and captures,
+with real-time battles instead of turns. The code is MIT, so take it; remember that
+Cobblemon's models are CC BY-NC 3.0, which rules out any commercial use.

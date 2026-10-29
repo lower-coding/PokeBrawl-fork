@@ -200,7 +200,9 @@ docs/                 design documents
 ## Contributing
 
 Contributions are welcome, especially new moves and abilities: see
-[CONTRIBUTING.md](CONTRIBUTING.md) for the recipes and the rules.
+[CONTRIBUTING.md](CONTRIBUTING.md) for the recipes and the rules, and
+[where it can go](CONTRIBUTING.md#where-it-can-go): more Pokémon, teams and doubles, balance,
+the system inside the Pokémon games themselves, or new fan games built on it.
 
 ## Credits and licenses
 
