@@ -300,7 +300,7 @@ func _pack() -> PackedByteArray:
 	b.put_u8(code)
 	b.put_u8(["startup", "active", "recovery"].find(l.action.phase) if l.action else 0)
 	b.put_float(l.action.t if l.action else 0.0)
-	# The status travels in the old burned / poisoned / static slots: code, time left, toxic turns.
+	# The status: code, time left, toxic turns.
 	for v in [l.hp, l.energy, l.charges, l.flight, l.slow, l._slow_t, float(STATUSES.find(l.status)), l.status_t, l._status_age,
 			l.steadfast_t, l.translucent, l.invulnerable]:
 		b.put_float(v)

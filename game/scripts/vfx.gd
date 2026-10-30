@@ -838,9 +838,8 @@ func outline(f: Node, col: Color, dur: float, width := 0.14) -> void:
 
 
 ## Pixel energy ball (fx/tex/custom/*.png, from tools/move_sprites.py): a quad that
-## faces the camera and runs through its strip, with a soft light of its color.
-## It replaces the old smooth glowing sphere, which did not fit Cobblemon. It lasts until
-## its creator removes it. glow = false for matter that is not energy (sludge, rock):
+## faces the camera and runs through its strip, with a soft light of its color. It lasts
+## until its creator removes it. glow = false for matter that is not energy (sludge, rock):
 ## no bloom and no light of its own.
 func pixel_ball(key: String, frames: int, dims: float, col: Color, fps := 14.0, glow := true) -> Node3D:
 	var root := Node3D.new()

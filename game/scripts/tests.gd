@@ -1220,7 +1220,7 @@ func _mechanics() -> void:
 	_ok("Knockback by weight: Pikachu flies further than Snorlax", slides.flareblitz_on_pikachu > slides.flareblitz_on_snorlax * 2.0,
 		"Flare Blitz: Pikachu %.1f m, Snorlax %.1f m" % [slides.flareblitz_on_pikachu, slides.flareblitz_on_snorlax])
 	# 3e. A move that cancels into moves cannot chain into itself, and the cancelled one
-	# still goes on cooldown (Night Slash used to be spammable).
+	# still goes on cooldown.
 	ab = await _setup("greninja", "snorlax", Vector3(-3, 0, 0), Vector3(0, 0, 0))
 	a = ab[0]
 	b = ab[1]
@@ -1490,8 +1490,7 @@ func _mechanics() -> void:
 		await get_tree().physics_frame
 	a.ctrl.release("mov1")
 	_ok("Flying, Flamethrower does not carry inertia", absf(a.global_position.z - before_z) < 0.6, "moved %.2f m" % absf(a.global_position.z - before_z))
-	# 4i. Body Slam lands on a rival that stands still (the landing hit used to be removed
-	# by the phase change before combat checked it).
+	# 4i. Body Slam lands on a rival that stands still.
 	ab = await _setup("snorlax", "pikachu", Vector3(0, 0, 0), Vector3(7, 0, 0))
 	a = ab[0]
 	b = ab[1]

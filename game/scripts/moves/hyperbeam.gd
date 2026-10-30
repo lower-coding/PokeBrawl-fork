@@ -83,7 +83,7 @@ func _beam_off(dur: float) -> void:
 
 func on_recovery() -> void:
 	super()
-	# The recharge: no longer rooted, but very slow for a while.
+	# The recharge: very slow for a while.
 	l.slow_down(float(d.tired_slow), float(d.tired))
 	l.main.vfx.text(l.center() + Vector3.UP * 1.0, l.tr("Must recharge!"), Color(1.0, 0.75, 0.45))
 

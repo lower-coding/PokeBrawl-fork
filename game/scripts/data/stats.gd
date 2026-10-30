@@ -5,7 +5,7 @@ extends RefCounted
 ## differences between Pokémon are exactly the ones in the games. The formulas are the same
 ## for everyone: tune them here, never a single Pokémon. Design notes: docs/roster-plan.md.
 ## What stats do not cover (size, jump, flight, dodge style, passive, moves) stays in
-## data/roster.gd. Launch with --hand-stats to play with the old hand-tuned numbers instead.
+## data/roster.gd. Launch with --hand-stats to use roster.gd's hand-tuned numbers.
 
 const LEVEL := 50
 ## Health = HP at level 50 × this. Battles take about this many times more hits than in the

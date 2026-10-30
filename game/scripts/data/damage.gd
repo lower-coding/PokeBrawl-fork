@@ -8,8 +8,7 @@ extends RefCounted
 ## Physical moves use Attack and Defense; special ones, Sp. Atk and Sp. Def, each with its
 ## stage (Fighter.stages: +1 is x1.5).
 ## Health is HP × Stats.HP_MULT, so damage is scaled the same way and then divided by
-## BATTLE_LENGTH: battles take that many times more hits than in the games (measured on
-## the 36 moves with the old hand-tuned damage: 4.2, so they last as long as before).
+## BATTLE_LENGTH: battles take that many times more hits than in the games.
 ## A hit that is only part of a use (a stream tick, one of two swipes) deals its share
 ## (Moves.DATA "split", "power_at"). The weather changes it too (Weather: sun, rain, sand,
 ## snow; Solar Power).

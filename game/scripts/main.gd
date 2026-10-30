@@ -458,8 +458,8 @@ func _setup_net(a: Fighter, b: Fighter) -> void:
 	b.is_player = false
 	net.local = a
 	net.remote = b
-	# net.frame is NOT reset here: it counts the whole connection. Resetting it made the
-	# rival drop every packet of a second battle as "old" (both copies froze).
+	# net.frame counts the whole connection: reset, the rival would drop a second
+	# battle's packets as old.
 	net.in_battle = true
 	if _args.has("bot"):
 		ai = AI.new()

@@ -51,8 +51,8 @@ func remove_from(user: Node) -> void:
 ## in the games unless set), so stepping aside at mid range does not shake it off; only up
 ## close, where it cannot turn fast enough, or jumping at the right time. A dodge breaks the
 ## lock for good, like a step in Gundam Versus: from then on it flies straight. It also
-## stops following once it has gone past the target (no U-turns). "homing" is the older,
-## stronger pull in 3D (Aura Sphere), with the same rules.
+## stops following once it has gone past the target (no U-turns). "homing" is a stronger
+## pull in 3D (Aura Sphere), with the same rules.
 func projectile(p: Dictionary) -> Dictionary:
 	p.merge({"radius": 0.3, "lifetime": 2.0, "gravity": 0.0, "pierces": false, "age_t": 0.0, "alive": true,
 		"homing": 0.0, "target": null, "track": -1.0}, false)

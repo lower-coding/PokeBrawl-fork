@@ -36,7 +36,7 @@ func in_startup(delta: float) -> void:
 
 
 func on_active() -> void:
-	# Always comes down from the air now (the leap, or a jump): tail first.
+	# Always comes down from the air (the leap, or a jump): tail first.
 	no_gravity = true
 	var fwd := Vector3(l.velocity.x, 0.0, l.velocity.z).limit_length(6.0)
 	l.velocity = fwd + Vector3.DOWN * 18.0

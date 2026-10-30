@@ -198,8 +198,7 @@ func _combat(delta: float) -> void:
 	# (each copy controls its own); the next hit ends it.
 	if _combat_t > 10.0 and _combat_t - delta <= 10.0:
 		l.hp = minf(l.hp, 1.0)
-	# In sync: the rival's states keep arriving during the battle (after "pick another"
-	# they used to be thrown away as old, and each side saw the other frozen).
+	# In sync: the rival's states keep arriving during the battle, also after "pick another".
 	if _combat_t > 8.0 and _combat_t - delta <= 8.0 and net.states_applied - _states_at_start < 120:
 		_finish("battle %d out of sync: only %d rival states applied in 8 s" % [_round + 1, net.states_applied - _states_at_start])
 		return
