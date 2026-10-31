@@ -54,6 +54,9 @@ const COBBLEMON := {
 	"sleeppowder": ["sleeppowder", "sleeppowder_actor"], "sleeppowder_hit": ["sleeppowder", "sleeppowder_target"],
 	"poisonpowder": ["poisonpowder", "poisonpowder_actor"], "poisonpowder_hit": ["poisonpowder", "poisonpowder_target"],
 	"nuzzle": ["thundershock", "thundershock_actor"],
+	"waterpulse": ["waterpulse", "waterpulse_actor"], "waterpulse_hit": ["waterpulse", "waterpulse_target"],
+	"mudshot": ["mudbomb", "mudbomb_actor"], "mudshot_hit": ["mudbomb", "mudbomb_target"],
+	"acidspray": ["acidspray", "acidspray_actor"], "acidspray_hit": ["acidspray", "acidspray_target"],
 }
 
 var main: Node

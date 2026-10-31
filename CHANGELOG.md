@@ -3,6 +3,23 @@
 All notable changes to this project are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [demo-goodra] - 2026-10-31
+
+### Added
+- Goodra, the 11th Pokémon: a heavy special wall that controls the mid range. Gooey (default) slows
+  whoever hits it with a contact move, at most once a second.
+- Three moves, for everyone who learns them: Water Pulse (a ring that widens as it flies and can
+  confuse), Mud Shot (a straight shot that always lowers Speed) and Acid Spray (a lobbed glob that
+  always lowers Sp. Def two stages).
+- Three abilities: Sap Sipper, Hydration and Overcoat. Overcoat is not Goodra's in the games; it is a
+  deliberate exception through the new roster field `extra_abilities`.
+- Roster fields `points` (a model's own bones for the locators shared moves ask for) and
+  `model_height` (the size a model is drawn at, when that is not its body's height).
+
+### Changed
+- Hydro Pump's and Ice Beam's text no longer mentions cannons: more than Blastoise uses them.
+- The version is now `demo-goodra`: it cannot play online against `demo-3v3`.
+
 ## [demo-3v3] - 2026-10-31
 
 ### Added

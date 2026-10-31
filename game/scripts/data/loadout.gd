@@ -29,7 +29,8 @@ static func moves_for(sp: String) -> Array:
 
 
 ## Abilities it can pick: its default one first, then those of its own in the games that
-## are done (Abilities.DATA). Each one with its id.
+## are done (Abilities.DATA) and its deliberate exceptions (Roster "extra_abilities"). Each
+## one with its id.
 static func abilities_for(sp: String) -> Array:
 	var own: Dictionary = Roster.POKEMON[sp].passive
 	var out: Array = [own]
@@ -40,6 +41,11 @@ static func abilities_for(sp: String) -> Array:
 				var d: Dictionary = Abilities.DATA[a.id].duplicate()
 				d.id = a.id
 				out.append(d)
+	for id in Roster.POKEMON[sp].get("extra_abilities", []):
+		if Abilities.DATA.has(id) and out.all(func(o): return o.id != id):
+			var d: Dictionary = Abilities.DATA[id].duplicate()
+			d.id = id
+			out.append(d)
 	return out
 
 

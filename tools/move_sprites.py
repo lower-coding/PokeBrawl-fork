@@ -732,6 +732,26 @@ def poke_ball(px, side, f, n, rnd):
     put(px, side, round(gx), round(gy), hexc("ffd0d0"))
 
 
+def _glob(px, side, f, n, bands):
+    """A lumpy blob that wobbles (Mud Shot, Acid Spray: only their colors differ)."""
+    c = (side - 1) / 2.0
+    phase = f / n * math.tau
+
+    def lumps(x, y):
+        a = math.atan2(y - c, x - c)
+        return 1.0 * math.sin(a * 3 + phase) + 0.6 * math.sin(a * 2 - phase)
+
+    disc(px, side, side * 0.34, bands, rim_noise=lumps)
+
+
+def mud_shot(px, side, f, n, rnd):
+    _glob(px, side, f, n, [(0.25, hexc("b58a58")), (0.55, hexc("8a6238")), (0.9, hexc("664625")), (2.0, hexc("3e2a15"))])
+
+
+def acid_spray(px, side, f, n, rnd):
+    _glob(px, side, f, n, [(0.25, hexc("d7e86a")), (0.55, hexc("a5c23c")), (0.9, hexc("9152b8")), (2.0, hexc("4c1f6b"))])
+
+
 if __name__ == "__main__":
     os.makedirs(OUTPUT, exist_ok=True)
     strip(6, 30, electro_ball, "electroball.png", 7)
@@ -751,3 +771,5 @@ if __name__ == "__main__":
     strip(6, 40, focus_blast, "focusblast.png", 71)
     strip(4, 32, flash_ball, "flashcannon_ball.png", 73)
     strip(4, 14, poke_ball, "pokeball.png", 79)
+    strip(6, 20, mud_shot, "mudshot_ball.png", 83)
+    strip(6, 20, acid_spray, "acidspray_ball.png", 89)

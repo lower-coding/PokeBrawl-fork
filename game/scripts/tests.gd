@@ -490,6 +490,9 @@ func _loadouts() -> void:
 	var fails := 0
 	var count := 0
 	for sp in Roster.POKEMON:
+		# --p1: only that Pokémon (the whole roster takes about a quarter of an hour).
+		if main._args.has("p1") and main._args.p1 != sp:
+			continue
 		var own: Array = Roster.POKEMON[sp].moves
 		for m in Loadout.moves_for(sp):
 			if m in own:
@@ -1659,9 +1662,131 @@ func _mechanics() -> void:
 			"off %s, state %s, position %s" % [went_off, b.state, b.global_position.snapped(Vector3.ONE * 0.1)])
 		main.ai.mode = "still"
 	main.set_stage(stage_before)
+	await _goodra_cases()
 	var fails := _results.filter(func(r): return not r[1]).size()
 	print("RESULT: %d of %d" % [_results.size() - fails, _results.size()])
 	get_tree().quit()
+
+
+## Goodra: its abilities, its three moves and where its moves come out of.
+func _goodra_cases() -> void:
+	# Gooey: contact hits only, and one use of a move is one stage (Dragon Claw is two hits).
+	var dealt := await _one_hit("garchomp", "goodra", "mov2", 2.2)
+	var a: Fighter = main.fighters[0]
+	_ok("Gooey: Dragon Claw's two hits lower Speed only once", dealt > 0.0 and a.stages.spe == -1, "damage %d, Speed %+d" % [dealt, a.stages.spe])
+	dealt = await _one_hit("pikachu", "goodra", "mov1", 6.0)
+	a = main.fighters[0]
+	_ok("Gooey: a projectile does not", dealt > 0.0 and a.stages.spe == 0, "damage %d, Speed %+d" % [dealt, a.stages.spe])
+	# Sap Sipper: Grass does nothing and raises Attack; status moves too (Sleep Powder).
+	main._args["moves"] = "energyball,solarbeam,sludgebomb,razorleaf"
+	dealt = await _one_hit("venusaur", "goodra", "mov1", 8.0, "", "sapsipper")
+	main._args.erase("moves")
+	var b: Fighter = main.fighters[1]
+	_ok("Sap Sipper: Grass does nothing and raises Attack", dealt == 0.0 and b.stages.atk == 1, "damage %d, Attack %+d" % [dealt, b.stages.atk])
+	# Hydration: in the rain a status clears within a turn; without rain it stays.
+	var ab: Array = await _setup("pikachu", "goodra", Vector3(-8, 0, 0), Vector3(0, 0, 0))
+	b = ab[1]
+	b.data.passive = Loadout.ability("goodra", "hydration")
+	main.weather.start("rain")
+	b.inflict("brn")
+	await _wait(Weather.TURN + 0.2)
+	_ok("Hydration: in the rain its status clears within a turn", b.status == "", "status '%s'" % b.status)
+	b.status_lock = 0.0
+	b.inflict("slp")
+	await _wait(Weather.TURN + 0.5)
+	_ok("Hydration: it wakes up and can act right away", b.status == "" and b.state == "free", "status '%s', state %s" % [b.status, b.state])
+	main.weather.clear()
+	b.status_lock = 0.0
+	b.inflict("brn")
+	await _wait(Weather.TURN + 0.2)
+	_ok("Hydration: without rain it stays", b.status == "brn", "status '%s'" % b.status)
+	# Overcoat: no sandstorm damage, no powders. It is Goodra's exception and nobody else's.
+	ab = await _setup("pikachu", "goodra", Vector3(-8, 0, 0), Vector3(0, 0, 0))
+	b = ab[1]
+	b.data.passive = Loadout.ability("goodra", "overcoat")
+	main.weather.start("sand")
+	await _wait(Weather.TURN + 0.2)
+	_ok("Overcoat: the sandstorm does not hurt it", b.hp == b.hp_max, "HP %d/%d" % [b.hp, b.hp_max])
+	main.weather.clear()
+	main._args["moves"] = "sleeppowder,poisonpowder,toxic,solarbeam"
+	ab = await _setup("venusaur", "goodra", Vector3(-2.5, 0, 0), Vector3(0, 0, 0))
+	main._args.erase("moves")
+	b = ab[1]
+	b.data.passive = Loadout.ability("goodra", "overcoat")
+	ab[0].ctrl.press("mov1")
+	await _wait(0.15)
+	ab[0].ctrl.release("mov1")
+	await _wait(1.2)
+	_ok("Overcoat: Sleep Powder has no effect", b.status == "", "status '%s'" % b.status)
+	var set_with := {"moves": Roster.POKEMON.goodra.moves, "ability": "overcoat"}
+	_ok("Overcoat: valid for Goodra", Loadout.valid("goodra", set_with).ability == "overcoat")
+	set_with = {"moves": Roster.POKEMON.snorlax.moves, "ability": "overcoat"}
+	_ok("Overcoat: rejected for everyone else", Loadout.valid("snorlax", set_with).ability != "overcoat")
+	# Acid Spray: -2 Sp. Def, and the next special hit deals more; nothing on Steel types.
+	main._args["moves"] = "acidspray,dragonpulse,surf,icebeam"
+	var plain := await _one_hit("goodra", "snorlax", "mov2", 8.0)
+	ab = await _setup("goodra", "snorlax", Vector3(-8, 0, 0), Vector3(0, 0, 0))
+	main._args.erase("moves")
+	ab[0].ctrl.press("mov1")
+	await _wait(0.15)
+	ab[0].ctrl.release("mov1")
+	await _wait(1.6)
+	var drop: int = ab[1].stages.spd
+	var hp0: float = ab[1].hp
+	_ok("Acid Spray: -2 Sp. Def on a hit", drop == -2 and hp0 < ab[1].hp_max, "Sp. Def %+d, HP %d/%d" % [drop, hp0, ab[1].hp_max])
+	ab[0].ctrl.press("mov2")
+	await _wait(0.15)
+	ab[0].ctrl.release("mov2")
+	await _wait(1.6)
+	_ok("Acid Spray: later special hits deal more", hp0 - ab[1].hp > plain * 1.5, "%d after it, %d without" % [hp0 - ab[1].hp, plain])
+	b = await _use("goodra", "acidspray,dragonpulse,surf,icebeam", "lucario", 8.0)
+	_ok("Acid Spray: no drop on Steel types", b.stages.spd == 0 and b.hp < b.hp_max, "Sp. Def %+d, HP %d/%d" % [b.stages.spd, b.hp, b.hp_max])
+	# It comes down where the rival was going: walking out from under it works.
+	main._args["moves"] = "acidspray,dragonpulse,surf,icebeam"
+	ab = await _setup("goodra", "pikachu", Vector3(-10, 0, 0), Vector3(0, 0, 0))
+	main._args.erase("moves")
+	ab[0].ctrl.press("mov1")
+	await _wait(0.45)
+	ab[0].ctrl.release("mov1")
+	ab[1].ctrl.yaw = 0.0
+	ab[1].ctrl.move_input = Vector2(0, 1)
+	await _wait(1.5)
+	ab[1].ctrl.move_input = Vector2.ZERO
+	_ok("Acid Spray: walking out from under it avoids it", ab[1].hp == ab[1].hp_max, "HP %d/%d" % [ab[1].hp, ab[1].hp_max])
+	# Mud Shot: -1 Speed on a hit; nothing on an immune type.
+	b = await _use("goodra", "mudshot,dragonpulse,surf,icebeam", "snorlax", 8.0)
+	_ok("Mud Shot: -1 Speed on a hit", b.stages.spe == -1 and b.hp < b.hp_max, "Speed %+d, HP %d/%d" % [b.stages.spe, b.hp, b.hp_max])
+	b = await _use("goodra", "mudshot,dragonpulse,surf,icebeam", "charizard", 8.0)
+	_ok("Mud Shot: no drop on Charizard", b.stages.spe == 0 and b.hp < b.hp_max, "Speed %+d, HP %d/%d" % [b.stages.spe, b.hp, b.hp_max])
+	# Water Pulse: it widens as it flies, and its 20% can confuse (the roll forced here).
+	main._args["moves"] = "waterpulse,dragonpulse,surf,icebeam"
+	ab = await _setup("goodra", "snorlax", Vector3(-14, 0, 0), Vector3(0, 0, 0))
+	main._args.erase("moves")
+	ab[0].ctrl.press("mov1")
+	await _wait(0.15)
+	ab[0].ctrl.release("mov1")
+	await _wait(0.6)
+	var widest := 0.0
+	for p in main.combat.projectiles:
+		widest = maxf(widest, p.radius)
+	_ok("Water Pulse: it widens as it flies", widest > float(Moves.DATA.waterpulse.radius) * 1.3, "radius %.2f" % widest)
+	await _wait(1.2)
+	_ok("Water Pulse: it hits", ab[1].hp < ab[1].hp_max, "HP %d/%d" % [ab[1].hp, ab[1].hp_max])
+	b = ab[1]
+	b.confused = 0.0
+	var g := Hit.new()
+	g.type = "water"
+	b._secondary({"secondary": {"chance": 1.0, "confuse": 3.0}}, {"hit": g}, null)
+	_ok("Water Pulse: a secondary can confuse", b.confused > 2.0, "confused %.1f s" % b.confused)
+	b.confused = 0.0
+	b.effect("confuse", 3.0)
+	_ok("Confusion arrives as an effect (what an online rival gets)", b.confused > 2.0, "confused %.1f s" % b.confused)
+	# Moves written for other bodies come out of its mouth, not its chest.
+	ab = await _setup("goodra", "snorlax", Vector3(-8, 0, 0), Vector3(0, 0, 0))
+	var mouth_at: Vector3 = ab[0].model.bone_world("mouth")
+	_ok("Points: cannons map to Goodra's mouth", ab[0].point("locator_cannon_left").distance_to(mouth_at) < 0.01, "%s" % mouth_at.snapped(Vector3.ONE * 0.01))
+	var low: float = absf(mouth_at.y - float(ab[0].data.height) * 0.7)
+	_ok("Mouth height: moves that use Action.mouth() leave from around its real mouth", low < 0.3, "bone %.2f m up, off by %.2f m" % [mouth_at.y, low])
 
 
 # ---------------------------------------------------------------- trainers

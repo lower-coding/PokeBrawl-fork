@@ -92,6 +92,7 @@ var _para_roll := 0.0
 var _status_fx := 0.0
 var translucent := 0.0               # Substitute (Gengar)
 var _skin_t := 0.0
+var _goo_t := 0.0                    # Gooey: until it can slow an attacker again
 var fooled_by: Node3D = null         # decoy it is locked on (the AI falls for it; a player picks it)
 var ai_aim = null                    # AI only: where it thinks the rival is (delayed, with error)
 var aim_lead := 1.0                  # how much projectiles lead a moving target (the AI uses less)
@@ -171,7 +172,7 @@ func setup(m: Node, sp: String, eq: int, loadout := {}) -> void:
 	model = PokeModel.new()
 	model.setup(sp)
 	var box: AABB = model._res.mesh.get_aabb()
-	_scale = data.height / maxf(box.size.y, 0.05)
+	_scale = float(data.get("model_height", data.height)) / maxf(box.size.y, 0.05)
 	model.scale = Vector3.ONE * _scale
 	model.rotation.y = PI
 	pivot.add_child(model)
@@ -233,10 +234,12 @@ func center() -> Vector3:
 	return global_position + Vector3.UP * data.height * 0.5
 
 
-## A body point from Cobblemon's locators (mouth, hands, tail...).
+## A body point from Cobblemon's locators (mouth, hands, tail...), or the bone this model
+## has in their place (Roster "points").
 func point(locator: String) -> Vector3:
-	if model and model.skel.find_bone(locator) >= 0:
-		return model.bone_world(locator)
+	var bone: String = data.get("points", {}).get(locator, locator)
+	if model and model.skel.find_bone(bone) >= 0:
+		return model.bone_world(bone)
 	return center() + forward() * data.radius
 
 
@@ -459,6 +462,8 @@ func effect(type: String, value: float, move := "") -> void:
 			stun_target(value)
 		"status":
 			inflict(move)
+		"confuse":
+			confuse(value)
 		"self_boost":
 			if stages.has(move):
 				boost(move, int(value))
@@ -665,8 +670,9 @@ func _edge_stop(before: Vector3) -> void:
 	velocity.z = 0.0
 
 
-## A move's secondary effect as in the games ("secondary": {"chance", and "status", "boost"
-## on the target or "self" on the user}). A stream's ticks share the chance of one use.
+## A move's secondary effect as in the games ("secondary": {"chance", and "status", "boost",
+## "confuse" (seconds) on the target or "self" on the user}). A stream's ticks share the
+## chance of one use.
 ## A status move that touched it (Toxic, Will-O-Wisp, the powders...): no damage or stun,
 ## only its status, if it can get it. As in the games, the type chart stops some ("respects_
 ## types": Thunder Wave does nothing to Ground types) and Grass types and Overcoat ignore
@@ -708,6 +714,8 @@ func _secondary(md: Dictionary, info: Dictionary, at: Fighter) -> void:
 		return
 	if sec.has("status"):
 		inflict(sec.status)
+	if sec.has("confuse"):
+		effect("confuse", float(sec.confuse))
 	for stat in sec.get("boost", {}):
 		boost(stat, int(sec.boost[stat]))
 	if at and is_instance_valid(at):
@@ -780,6 +788,7 @@ func _timers(delta: float) -> void:
 		model.mesh_instance.transparency = 0.85 if hidden and sees_self else 0.0
 		model.mesh_instance.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF if hidden else GeometryInstance3D.SHADOW_CASTING_SETTING_ON
 	_skin_t -= delta
+	_goo_t -= delta
 	if boosted_hits > 0:
 		_boost_t -= delta
 		if _boost_t <= 0.0:
@@ -1211,6 +1220,8 @@ func outgoing_mod(g: Hit, target: Fighter) -> float:
 
 
 const PINCH := {"blaze": "fire", "torrent": "water", "overgrow": "grass", "swarm": "bug"}
+## Lightning Rod, Sap Sipper: moves of this type do nothing to it and raise this stat.
+const ABSORB := {"lightningrod": ["electric", "spa"], "sapsipper": ["grass", "atk"]}
 ## Flinching (Headbutt...), adapted: this much longer stunned instead of a lost turn.
 const FLINCH_T := 0.35
 ## Paralysis (Static), adapted to real time: half speed this long, no lost turns.
@@ -1275,10 +1286,11 @@ func receive(info: Dictionary) -> String:
 	# Flinch ("flinch": chance, as in the games): a longer stun. Inner Focus does not flinch;
 	# Steadfast speeds up when it does.
 	var flinched: bool = not info.get("flow", false) and randf() < float(md.get("flinch", 0.0)) and data.passive.id != "innerfocus"
-	# Lightning Rod: Electric moves do nothing to it and raise its Sp. Atk.
-	if data.passive.id == "lightningrod" and g.type == "electric" and g.move_id != "":
+	# Lightning Rod, Sap Sipper: the move does nothing to it and raises a stat.
+	var absorb: Array = ABSORB.get(data.passive.id, [])
+	if not absorb.is_empty() and g.type == absorb[0] and g.move_id != "":
 		if not info.get("flow", false):
-			boost("spa", 1, "Lightning Rod")
+			boost(absorb[1], 1, data.passive.display_name)
 		return "absorbed"
 	if g.cat == "status":
 		return _status_move(md, info)
@@ -1315,6 +1327,12 @@ func receive(info: Dictionary) -> String:
 		if _skin_t <= 0.0:
 			_skin_t = 1.5
 			main.vfx.text(at.center() + Vector3.UP * 0.7, tr("Rough Skin"), Color(0.85, 0.8, 0.7))
+	# Gooey: a contact hit lowers the attacker's Speed, once a second at most (one use of a
+	# move can be several of our hits; Dragon Claw is two).
+	if data.passive.id == "gooey" and g.contact and at and is_instance_valid(at) and not info.get("flow", false) and _goo_t <= 0.0:
+		_goo_t = 1.0
+		at.effect("self_boost", -1.0, "spe")
+		main.vfx.text(at.center() + Vector3.UP * 0.7, tr("Gooey"), Roster.TYPE_COLOR.dragon)
 	# Flow: consecutive impacts from a stream (Flamethrower, Hydro Pump). The first one
 	# stuns like any hit; the next ones only deal damage, push a little and slow,
 	# without locking: you can dodge or walk out, even if it is hard.
@@ -1596,6 +1614,7 @@ func reset(pos: Vector3, yaw: float) -> void:
 	boosted_hits = 0
 	stages = {"atk": 0, "def": 0, "spa": 0, "spd": 0, "spe": 0}
 	_berry_used = false
+	_goo_t = 0.0
 	cure_status(false)
 	status_lock = 0.0
 	shots = 0
@@ -1707,6 +1726,7 @@ func _process(delta: float) -> void:
 	for k in _pose:
 		var quickness := 18.0 if k in ["turn"] else 12.0
 		_pose[k] = lerpf(_pose[k], obj[k], 1.0 - exp(-quickness * delta))
+	_pose.tilt = minf(_pose.tilt, float(data.get("tilt_max", INF)))
 	if state == "dodge" and data.height < 1.3:
 		_pose.turn = obj.turn
 	# Spinning in place (Rapid Spin): unsmoothed, since it is a continuous turn.

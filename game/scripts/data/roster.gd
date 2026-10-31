@@ -2,7 +2,11 @@ class_name Roster
 extends RefCounted
 ## The playable Pokémon: how they move, how much they can take, their passive and their
 ## moves. Every mobility number is here so it can be tuned without touching code.
-##   height      model height in game (m); radius, the body radius used for hits
+##   height      body height in game (m), what hits and effects go by; radius, the body radius
+##               used for hits; model_height, the height the model is fitted to, if not that
+##               (Goodra's raised antennae make its model far taller than its body)
+##   tilt_max    how far moves can lean it forward (rad), for a head that would go through
+##               the floor (lean turns around the feet; Goodra's long neck)
 ##   speed/accel top speed (m/s) and ground acceleration
 ##   turn        how fast it turns to face (rad/s)
 ##   jump        initial jump speed; gravity; air_control = control in the air (0 to 1)
@@ -18,6 +22,11 @@ extends RefCounted
 ##               recharge (s to refill on the ground), speed (multiplies air speed).
 ##               Jump, then jump again in the air to take off
 ##   item        what it holds, as in the games (Stats.ITEMS): Ash's Pikachu, a Light Ball
+##   points      locators shared moves ask for -> this model's own bone, for a model without
+##               them (Goodra has a mouth, no cannons): moves stay as they are
+##   extra_abilities  abilities it can pick that it does not have in the games
+##               (Species.DATA is generated, so they cannot go there). Only for deliberate
+##               exceptions: Goodra's Overcoat
 ## Player-facing text (style, passive name and text) is in English and is translated
 ## through game/i18n/translations.csv.
 
@@ -127,6 +136,19 @@ const POKEMON := {
 		"moves": ["bulletpunch", "xscissor", "swordsdance", "wingattack"],
 		"passive": {"id": "technician", "display_name": "Technician",
 			"text": "Its moves of 60 power or less hit 1.5 times as hard: Bullet Punch hits above its weight."},
+	},
+	"goodra": {
+		"display_name": "Goodra", "types": ["dragon"], "cat": "special",
+		"style": "Heavy and slimy. Controls the mid range with water and ice, and whoever hits it up close gets slower and slower.",
+		"height": 2.4, "model_height": 4.0, "radius": 0.7, "tilt_max": 0.9, "poise": 1, "hp": 1070.0, "knockback": 0.6,
+		"speed": 7.2, "accel": 28.0, "turn": 8.0, "jump": 7.6, "gravity": 30.0, "air_control": 0.4,
+		"dodge": {"dist": 5.0, "dur": 0.28, "iframes": [0.05, 0.21], "recovery": 0.26, "charges": 3, "recharge": 1.3},
+		"points": {"locator_cannon_left": "mouth", "locator_cannon_right": "mouth", "locator_mouth": "mouth", "locator_head": "head",
+			"locator_hand_primary": "hand_right", "locator_tail": "tail3", "locator_tail_tip": "tail5"},
+		"extra_abilities": ["overcoat"],
+		"moves": ["dragonpulse", "surf", "icebeam", "bodyslam"],
+		"passive": {"id": "gooey", "display_name": "Gooey",
+			"text": "Each contact move that hits it lowers the attacker's Speed one stage for the battle."},
 	},
 }
 

@@ -35,6 +35,8 @@ extends RefCounted
 ##                                 (Combat.deflect); deflectable on a projectile: how far it can
 ##                                 be deflected (2 by default, 1 only breaks)
 ##   inflicts                      status moves: the status they give ("drowsy": Yawn)
+##   secondary                     what a hit also does, as in the games: "chance", and "status",
+##                                 "boost" or "confuse" (seconds) on the target, "self" on the user
 ##   counterplay                   what the opponent can do (for design and the selection screen)
 ## Player-facing text (display_name, desc, counterplay) is in English and is translated
 ## through game/i18n/translations.csv.
@@ -290,9 +292,9 @@ const DATA := {
 		"cost": 18.0, "drain": 30.0, "cd": 6.5, "startup": 0.55, "active": 0.45, "max": 1.6, "hold": true, "recovery": 0.6,
 		"damage": 27.0, "interval": 0.15, "length": 15.0, "radius": 0.6, "stun": 0.2, "strength": 1,
 		"hitstop": 0.02, "contact": false, "emit_turn": 0.3, "manual_turn": 0.45, "manual_aim": true, "poise": 1,
-		"desc": "Hold to fire both cannons. Pushes very hard; it cannot move while firing.",
+		"desc": "Hold to fire a high-pressure stream. Pushes very hard; it cannot move while firing.",
 		"ai": {"min": 2.0, "max": 12.0, "kind": "stream", "value": 1.4},
-		"counterplay": "The cannons charge up first. It turns very slowly: step out of the line sideways."},
+		"counterplay": "The water gathers first. It turns very slowly: step out of the line sideways."},
 	"rapidspin": {"fx_hit": ["tackle_target", "tackle_targetsparks"],
 		"deflects": 1, "display_name": "Rapid Spin", "script": "res://scripts/moves/rapidspin.gd", "type": "normal", "cat": "physical", "power": 50, "pp": 40, "accuracy": 100, "secondary": {"chance": 1.0, "self": {"spe": 1}}, "priority": 0, "split": 3,
 		"cost": 18.0, "cd": 4.0, "startup": 0.16, "active": 0.9, "recovery": 0.35, "damage": 28.0, "stun": 0.32,
@@ -307,7 +309,7 @@ const DATA := {
 		"beam_speed": 30.0,
 		"desc": "A fast straight beam that leaves ice on the ground. The ice slows whoever steps on it.",
 		"ai": {"min": 3.0, "max": 15.0, "kind": "stream", "value": 1.3},
-		"counterplay": "The cannons frost over before firing; from afar, step out of its line. Walk around the ice strip or jump it."},
+		"counterplay": "Frost gathers before it fires; from afar, step out of its line. Walk around the ice strip or jump it."},
 
 	# ---------------------------------------------------------------- Venusaur
 	"vinewhip": {"fx_hit": ["scratch_target", "scratch_targetsparks"],
@@ -465,6 +467,29 @@ const DATA := {
 		"desc": "Rises on its wings and charges a short way.",
 		"ai": {"min": 2.0, "max": 6.5, "kind": "engage", "value": 1.1},
 		"counterplay": "Short and straight: step aside."},
+	# ---------------------------------------------------------------- Goodra
+	"waterpulse": {"fx_startup": [["waterpulse_actorsuds", "foot"]], "fx_hit": ["waterpulse_target", "waterpulse_targetsplash"],
+		"deflectable": 1, "display_name": "Water Pulse", "script": "res://scripts/moves/waterpulse.gd", "type": "water", "cat": "special", "power": 60, "pp": 20, "accuracy": 100, "secondary": {"chance": 0.2, "confuse": 3.0}, "priority": 0,
+		"cost": 14.0, "startup": 0.3, "active": 0.1, "recovery": 0.3, "damage": 60.0, "stun": 0.4,
+		"strength": 1, "contact": false, "speed": 17.0, "reach": 16.0, "radius": 0.6, "widen": 1.2,
+		"desc": "A ring of water that widens as it flies. It can confuse.",
+		"ai": {"min": 3.0, "max": 15.0, "kind": "projectile", "value": 1.0},
+		"counterplay": "The further it goes the wider it gets: step aside early or dodge through it."},
+	"mudshot": {"fx_hit": ["mudbomb_target", "mudbomb_targetdust"],
+		"display_name": "Mud Shot", "script": "res://scripts/moves/mudshot.gd", "type": "ground", "cat": "special", "power": 55, "pp": 15, "accuracy": 95, "secondary": {"chance": 1.0, "boost": {"spe": -1}}, "priority": 0,
+		"cost": 14.0, "startup": 0.24, "active": 0.1, "recovery": 0.3, "damage": 55.0, "stun": 0.35,
+		"strength": 1, "contact": false, "speed": 26.0, "reach": 18.0, "radius": 0.45,
+		"desc": "A straight shot of mud. It always lowers the target's Speed.",
+		"ai": {"min": 3.0, "max": 16.0, "kind": "projectile", "value": 1.1},
+		"counterplay": "It flies straight: sidestep it or dodge through it."},
+	"acidspray": {"fx_startup": [["acidspray_actorfling", "center"]], "fx_hit": ["acidspray_target", "acidspray_targetsizzle", "acidspray_targetsmoke"],
+		"display_name": "Acid Spray", "script": "res://scripts/moves/acidspray.gd", "type": "poison", "cat": "special", "power": 40, "pp": 20, "accuracy": 100, "secondary": {"chance": 1.0, "boost": {"spd": -2}}, "priority": 0,
+		"cost": 12.0, "startup": 0.32, "active": 0.1, "recovery": 0.34, "damage": 40.0, "stun": 0.3,
+		"strength": 0, "contact": false, "speed": 13.0, "reach": 13.0, "radius": 0.55, "gravity": 14.0, "track": 0.0,
+		"desc": "A lobbed glob of acid. It always sharply lowers the target's Sp. Def.",
+		"ai": {"min": 3.0, "max": 12.0, "kind": "projectile", "value": 1.0},
+		"counterplay": "It is slow and arcs: walk out from under it or dodge through it."},
+
 	# ---------------------------------------------------------------- common physical blows (many learn them)
 	"takedown": {"fx_hit": ["tackle_target", "tackle_targetsparks"],
 		"deflects": 1, "display_name": "Take Down", "script": "res://scripts/moves/dash.gd", "type": "normal", "cat": "physical", "power": 90, "pp": 20, "accuracy": 85, "priority": 0,

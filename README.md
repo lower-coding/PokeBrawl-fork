@@ -47,7 +47,7 @@ godot --path game -- --p1=charizard --p2=pikachu --diff=hard --stage=league
 
 | Argument | Values |
 |---|---|
-| `--p1`, `--p2` | `pikachu`, `snorlax`, `charizard`, `blastoise`, `venusaur`, `lucario`, `gengar`, `garchomp`, `greninja`, `scizor` |
+| `--p1`, `--p2` | `pikachu`, `snorlax`, `charizard`, `blastoise`, `venusaur`, `lucario`, `gengar`, `garchomp`, `greninja`, `scizor`, `goodra` |
 | `--team`, `--team2` | a 3 vs 3 against the AI (prototype): `--team=charizard,lucario,venusaur`; the first one leads, a missing `--team2` is filled from the roster. See [3 vs 3](#3-vs-3-prototype) |
 | `--rules` | that battle's 3 vs 3 rules: `--rules=recall:0.4,lockout:5,bench_heal:0.5` (the ids and limits are in [battle_rules.gd](game/scripts/data/battle_rules.gd)) |
 | `--diff` | `easy`, `normal`, `hard` |
@@ -59,7 +59,7 @@ godot --path game -- --p1=charizard --p2=pikachu --diff=hard --stage=league
 
 - **Battle** against the AI (easy, normal, hard), **Online** and **Training**, 1 vs 1 or 3 vs 3.
 - **Moves:** each Pokémon's four moves and its ability, picked from the ones it learns in the
-  games (79 moves and 22 abilities so far). Every move has its details: power, cooldown, reach,
+  games (82 moves and 26 abilities so far). Every move has its details: power, cooldown, reach,
   timings and how to counter it. **Restore defaults** puts them back.
 - **Profile:** your trainer (nine, with the games' sprites) and your name. Your trainer stands
   by the field, throws the Poké Ball at the start and reacts to the battle; online, your rival
@@ -160,13 +160,14 @@ Default moves and ability, and the abilities each one can pick. The Moves screen
 | **Ash's Pikachu** | Electric | Thunder Shock · Quick Attack · Iron Tail · Electro Ball | Static, Lightning Rod | 26 |
 | **Snorlax** | Normal | Body Slam · Ice Punch · Earthquake · Rest | Thick Fat, Immunity, Gluttony | 37 |
 | **Charizard** | Fire / Flying | Flamethrower · Air Slash · Dragon Claw · Flare Blitz | Blaze, Solar Power | 38 |
-| **Blastoise** | Water | Aqua Jet · Hydro Pump · Rapid Spin · Ice Beam | Torrent, Rain Dish | 34 |
-| **Venusaur** | Grass / Poison | Vine Whip · Razor Leaf · Sludge Bomb · Solar Beam | Overgrow, Chlorophyll | 22 |
-| **Lucario** | Fighting / Steel | Aura Sphere · Meteor Mash · Extreme Speed · Detect | Steadfast, Inner Focus, Justified | 40 |
-| **Gengar** | Ghost / Poison | Shadow Ball · Sludge Bomb · Hex · Substitute | Levitate, Cursed Body | 32 |
-| **Garchomp** | Dragon / Ground | Dig · Dragon Claw · Earthquake · Stone Edge | Rough Skin, Sand Veil | 30 |
-| **Greninja** | Water / Dark | Water Shuriken · Night Slash · Double Team · Hydro Pump | Protean, Torrent | 23 |
+| **Blastoise** | Water | Aqua Jet · Hydro Pump · Rapid Spin · Ice Beam | Torrent, Rain Dish | 36 |
+| **Venusaur** | Grass / Poison | Vine Whip · Razor Leaf · Sludge Bomb · Solar Beam | Overgrow, Chlorophyll | 23 |
+| **Lucario** | Fighting / Steel | Aura Sphere · Meteor Mash · Extreme Speed · Detect | Steadfast, Inner Focus, Justified | 41 |
+| **Gengar** | Ghost / Poison | Shadow Ball · Sludge Bomb · Hex · Substitute | Levitate, Cursed Body | 33 |
+| **Garchomp** | Dragon / Ground | Dig · Dragon Claw · Earthquake · Stone Edge | Rough Skin, Sand Veil | 31 |
+| **Greninja** | Water / Dark | Water Shuriken · Night Slash · Double Team · Hydro Pump | Protean, Torrent | 25 |
 | **Scizor** | Bug / Steel | Bullet Punch · X-Scissor · Swords Dance · Wing Attack | Technician, Swarm, Light Metal | 24 |
+| **Goodra** | Dragon | Dragon Pulse · Surf · Ice Beam · Body Slam | Gooey, Sap Sipper, Hydration, Overcoat | 35 |
 
 Stats, weights and learnsets are the games' (stats at level 50). How each one moves (speed,
 jumps, dodges, flight) is its own. References from Pokkén, Smash and the anime for the moves
