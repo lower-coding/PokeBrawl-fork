@@ -13,6 +13,8 @@ extends Node
 ##   menu_rules  with a window: the selection's Rules screen, on to a battle by those rules
 ##   team_battles --aivsai [--battles=N] [--speed=x] [--diff=...]: random teams, AI against
 ##               AI; how long they last, how often they switch, who wins
+##   hud         with a window: the crosshair with nothing locked on and the stat stage tags,
+##               with captures
 ## Captures go to captures/ and a dated copy to captures/history/.
 
 var main: Node
@@ -176,6 +178,8 @@ func _ready() -> void:
 			_team_battles()
 		"team_shots":
 			_team_shots()
+		"hud":
+			_hud_test()
 		"music":
 			# The tracks the game finds (in the exported build, inside its package).
 			await get_tree().process_frame
@@ -2468,6 +2472,59 @@ func _team_battles() -> void:
 ## Substitute locks the rival on the doll; a flick switches to the real one and back; when
 ## the doll goes, the camera is free. Free, a shot leaves where the camera looks and still
 ## follows its target. Locking on picks what the camera looks at.
+func _hud_test() -> void:
+	await get_tree().physics_frame
+	var ab: Array = await _setup("pikachu", "snorlax", Vector3(-5, 0, 0), Vector3(5, 0, 0))
+	var a: Fighter = ab[0]
+	var b: Fighter = ab[1]
+	# Showdown's words and multipliers, in its order, and nothing for a stat left alone.
+	_ok("No tags without changes", main.hud.stage_tags(a).is_empty())
+	var raised := [["1.5× Atk", true], ["0.67× Def", false], ["2× SpA", true], ["0.25× SpD", false], ["4× Spe", true]]
+	a.boost("spe", 6)
+	a.boost("atk", 1)
+	a.boost("spd", -6)
+	a.boost("def", -1)
+	a.boost("spa", 2)
+	_ok("A tag per changed stat", main.hud.stage_tags(a) == raised, str(main.hud.stage_tags(a)))
+	# Free aim on the rival: the crosshair lands on the rival. Locked on, there is an arrow.
+	a.is_player = true
+	main._no_input = 0.0
+	a.locked = false
+	var toward: Vector3 = b.global_position - a.global_position
+	main.camera.yaw = atan2(-toward.x, -toward.z)
+	main.camera.pitch = -0.2
+	await _wait(0.8)
+	var cam: Camera3D = main.get_viewport().get_camera_3d()
+	var on_rival: Vector2 = cam.unproject_position(b.center()) / main.hud._s
+	var cross: Vector2 = main.hud.crosshair_at(a)
+	_ok("Aimed at the rival, the crosshair is on it", absf(cross.x - on_rival.x) < 16.0 and absf(cross.y - on_rival.y) < 30.0,
+		"crosshair %s, rival %s" % [cross, on_rival])
+	_capture("hud_free_aim")
+	main.camera.yaw += 0.5
+	await _wait(0.5)
+	_capture("hud_free_aim_off_target")
+	# Looking steeply down it stays on screen.
+	main.camera.pitch = -1.1
+	await _wait(0.5)
+	cross = main.hud.crosshair_at(a)
+	_ok("With the camera steeply down it stays on screen", cross.y >= 30.0 and cross.y < main.get_viewport().get_visible_rect().size.y / main.hud._s, str(cross))
+	_capture("hud_camera_down")
+	main.camera.pitch = -0.2
+	a.locked = true
+	a.inflict("brn")
+	b.boost("atk", 2)
+	b.boost("spe", -1)
+	b.inflict("par")
+	await _wait(0.5)
+	_capture("hud_locked_tags_status")
+	a.clear_stages()
+	_ok("Stages gone, tags gone", main.hud.stage_tags(a).is_empty())
+	a.is_player = false
+	var fails := _results.filter(func(r): return not r[1]).size()
+	print("RESULT: %d of %d" % [_results.size() - fails, _results.size()])
+	get_tree().quit(1 if fails > 0 else 0)
+
+
 func _lockon_test() -> void:
 	await get_tree().physics_frame
 	var ab: Array = await _setup("pikachu", "gengar", Vector3(-5, 0, 0), Vector3(3, 0, 0))

@@ -7,7 +7,7 @@ extends CanvasLayer
 ##   above them     the player's dodges and energy; in a 3 vs 3 its switches and bench
 ##   under the top  in a 3 vs 3, each side's bench and switches; after a KO, the next one to pick
 ##   bottom right   the battle log
-##   over the rival the lock-on arrow
+##   over the rival the lock-on arrow; with nothing locked on, a crosshair where moves go
 ## Everything is measured in GUI pixels (G) and multiplied by the integer scale _s.
 
 const GUI := "res://gui/cobblemon/"
@@ -21,6 +21,8 @@ const INK := Color("f5f3ea")
 const GOLD := Color("ffc94a")
 const PANEL_DARK := Color(0.05, 0.06, 0.09, 0.85)
 const RED_MARK := Color("e0553e")
+const STAGE_UP := [Color("e5ffe0"), Color("33aa00")]    # Showdown's: background, text and edge
+const STAGE_DOWN := [Color("ffe5e0"), Color("ff4400")]
 const LOG_LINES := 5
 
 var main: Node
@@ -377,6 +379,43 @@ func _frame_box(l: Fighter, i: int, g: Vector2, turned: bool) -> void:
 			var left := clampf(l.status_t / Status.length(e), 0.0, 1.0) if e != "imm" else l.status_lock / Status.IMMUNE_AFTER
 			var lw := roundf((ew - 4.0) * left)
 			_rect(Vector2(ex + 2.0 + (0.0 if turned else ew - 4.0 - lw), g.y + 35), Vector2(lw, 1), Status.COLOR.get(e, INK))
+	_stage_row(l, g, turned, e != "")
+
+
+## Stat stages as Pokémon Showdown shows them: a tag per changed stat, under the HP bar and
+## beside the status tab, growing toward the center of the screen. [text, raised]
+func stage_tags(l: Fighter) -> Array:
+	var names := {"atk": tr("Atk"), "def": tr("Def"), "spa": tr("SpA"), "spd": tr("SpD"), "spe": tr("Spe")}
+	var tags: Array = []
+	for stat in names:
+		var n: int = l.stages.get(stat, 0)
+		if n != 0:
+			var mult := ("%.2f" % l.stage_mult(stat)).rstrip("0").trim_suffix(".")
+			tags.append(["%s× %s" % [mult, names[stat]], n > 0])
+	return tags
+
+
+func _stage_row(l: Fighter, g: Vector2, turned: bool, has_status: bool) -> void:
+	var p := _p_log()
+	var dir := -1.0 if turned else 1.0
+	# The edge of the frame's HP bar nearest the center, then past the status tab if there is one.
+	var start := g.x + (102.0 if turned else 38.0)
+	if has_status:
+		start = g.x + (63.0 if turned else 77.0)
+	var x := start
+	var y := g.y + 28.0
+	var limit: float = _c.size.x / _s * 0.5
+	for tag in stage_tags(l):
+		var w := _text_width(tag[0], p) / _s + 4.0
+		if (x + w * dir - limit) * dir > 0.0 and x != start:
+			x = start
+			y += 8.0
+		var left := x if not turned else x - w
+		var col: Array = STAGE_UP if tag[1] else STAGE_DOWN
+		_rect(Vector2(left, y), Vector2(w, 7), col[1])
+		_c.draw_rect(Rect2((Vector2(left, y) * _s).round() + Vector2.ONE, (Vector2(w, 7) * _s).round() - Vector2(2, 2)), col[0])
+		_c.draw_string(_font, Vector2(roundf((left + 2.0) * _s), roundf((y - 0.5) * _s) + 9 * p), tag[0], HORIZONTAL_ALIGNMENT_LEFT, -1, 12 * p, col[1])
+		x += (w + 1.0) * dir
 
 
 func _hp_color(f: float) -> Color:
@@ -661,6 +700,7 @@ func _log_box(g: Vector2) -> void:
 func _locked(j: Fighter) -> void:
 	var r: Node3D = j.aim_target()
 	if r == null or not is_instance_valid(r) or not j.locked or (r is Fighter and r.state == "ko"):
+		_crosshair(j)
 		return
 	var cam: Camera3D = main.get_viewport().get_camera_3d()
 	var up: Vector3 = r.global_position + Vector3.UP * (r.data.height + 0.35)
@@ -669,6 +709,40 @@ func _locked(j: Fighter) -> void:
 	var p := cam.unproject_position(up) / _s
 	var bounce := sin(_t * TAU * 1.2) * 1.5
 	_piece("arrow_pointer_down", Vector2(p.x - 8.5, p.y - 10 + bounce), Vector2(17, 10))
+
+
+## Where free aim goes, in GUI pixels: on the line moves fly along (Action.aim), level, at
+## mouth height, where the camera looks. As far off as the rival, so aiming at the rival puts
+## it on the rival. Moves do not go up or down, so with the camera steeply up or down it just
+## stays on screen, at the edge.
+func crosshair_at(j: Fighter) -> Vector2:
+	var cam: Camera3D = main.get_viewport().get_camera_3d()
+	var far := 12.0
+	if j.rival and is_instance_valid(j.rival):
+		var to: Vector3 = j.rival.global_position - j.global_position
+		far = clampf(Vector2(to.x, to.z).length(), 6.0, 24.0)
+	var at: Vector3 = j.global_position + Vector3.UP * j.data.height * 0.7 + j.camera_forward() * far
+	if cam == null or cam.is_position_behind(at):
+		return Vector2(-1.0, -1.0)
+	var p := cam.unproject_position(at) / _s
+	p.y = clampf(p.y, 30.0, _c.size.y / _s - 12.0)
+	return p.round()
+
+
+## Four ticks and a dot, light on a dark outline so it reads on any floor.
+func _crosshair(j: Fighter) -> void:
+	if j.state == "ko" or main.paused or main._end_t >= 0.0:
+		return
+	var c := crosshair_at(j)
+	if c.x < 0.0:
+		return
+	var parts := [[c, Vector2(1, 1)]]
+	for v in [Vector2.RIGHT, Vector2.LEFT, Vector2.DOWN, Vector2.UP]:
+		parts.append([c + v * 4.0, Vector2(1, 1) + v.abs() * 2.0])
+	for part in parts:
+		_rect(part[0] - part[1] * 0.5 - Vector2(1, 1), part[1] + Vector2(2, 2), PANEL_DARK)
+	for part in parts:
+		_rect(part[0] - part[1] * 0.5, part[1], INK)
 
 
 ## Pause, in the menus' look (UiKit): the floor darkened, a block with what each button

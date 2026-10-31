@@ -3,6 +3,14 @@
 All notable changes to this project are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [Unreleased]
+
+### Added
+- A crosshair when nothing is locked on, on the line your moves fly along. Moves stay level, so
+  it sits on the rival when you aim at it. New test: `--test=hud`.
+- Stat changes under each HP bar, for both Pokémon, as in Pokémon Showdown: `1.5× Atk` in green,
+  `0.67× Def` in red.
+
 ## [demo-goodra] - 2026-10-31
 
 ### Added

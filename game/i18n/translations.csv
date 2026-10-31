@@ -696,3 +696,8 @@ In the rain it cures its status condition at the end of every turn (3 s).,In the
 "The sandstorm does not hurt it, and powder moves do nothing to it.","The sandstorm does not hurt it, and powder moves do nothing to it.",La tormenta de arena no le hace daño y los movimientos de polvos no le afectan.
 1,1,1
 2,2,2
+Atk,Atk,Atq
+Def,Def,Def
+SpA,SpA,AtE
+SpD,SpD,DfE
+Spe,Spe,Vel
