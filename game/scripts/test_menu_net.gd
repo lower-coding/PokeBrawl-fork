@@ -7,9 +7,14 @@ extends Node
 ## first KO the host goes back to selection; both pick another, the host picks the floating
 ## stage (the guest must get it too), another battle, and at
 ## the end the host leaves: the guest must return to the online menu with the notice.
+## With --format=3v3 (both) each picks a team, which the other must not see until both are
+## ready, and the host's --rules hold for both. Each side keeps dropping itself to 1 HP, so all
+## three go; AI and KOs make the switches, and the final line has who came out on each side.
 ## Prints a MENU_NET_FINAL line to compare both copies.
 
 const CHOOSES := {"host": ["charizard", "gengar"], "guest": ["lucario", "pikachu"]}
+const TEAMS := {"host": [["charizard", "lucario", "venusaur"], ["gengar", "scizor", "pikachu"]],
+	"guest": [["garchomp", "blastoise", "gengar"], ["lucario", "snorlax", "greninja"]]}
 
 var main: Node
 var role := "host"
@@ -24,11 +29,13 @@ var _battles: Array = []
 var _end := ""
 var _states_at_start := 0     # net.states_applied when the battle started
 var _last := {}                # HP and state of the last battle frame
+var _three := false             # --format=3v3
 
 
 func _ready() -> void:
 	process_mode = Node.PROCESS_MODE_ALWAYS
 	role = main._args.get("role", "host")
+	_three = main._args.get("format", "") == "3v3"
 
 
 func _step(text: String) -> void:
@@ -61,12 +68,12 @@ func _capture(n: String) -> void:
 		return
 	_captures[n] = true
 	var img := get_viewport().get_texture().get_image()
-	img.save_png(ProjectSettings.globalize_path("res://").path_join("../captures/net_%s_%s.png" % [role, n]))
+	img.save_png(ProjectSettings.globalize_path("res://").path_join("../captures/net_%s%s_%s.png" % ["3v3_" if _three else "", role, n]))
 
 
 func _physics_process(delta: float) -> void:
 	_t += delta
-	if _t > 150.0:
+	if _t > (500.0 if _three else 150.0):
 		_finish("timed out at: " + str(_steps.back() if not _steps.is_empty() else "start"))
 		return
 	_wait_t -= delta
@@ -98,6 +105,9 @@ func _menu(m: Menu) -> void:
 				return
 			_step("online")
 			_go_to(m, m.ONLINE, "create" if role == "host" else "join")
+		"format":
+			_step("format")
+			_go_to(m, m.FORMATS, "3v3" if _three else "1v1")
 		"waiting":
 			_step("waiting for the guest")
 			if m._t > 6.0:
@@ -124,6 +134,14 @@ func _menu(m: Menu) -> void:
 				return
 			if _round >= 2:
 				return
+			# The room's format comes from the host, a moment after connecting.
+			if _three and not m.team_battle():
+				return
+			if _three and not m.choice.team2.is_empty():
+				_finish("the rival's team was shown before both were ready")
+				return
+			if _three and m.choice.team.size() == 2:
+				_capture("picking_%d" % (_round + 1))
 			# Second battle: the host changes the stage (mov2) to the floating one.
 			if role == "host" and _round == 1 and m.choice.stage != "floating":
 				_press("mov2")
@@ -136,6 +154,11 @@ func _menu(m: Menu) -> void:
 					_capture("selection_%d" % (_round + 1))
 				return
 			var want: String = CHOOSES[role][_round]
+			if _three:
+				for sp in TEAMS[role][_round]:
+					if not sp in m.choice.team:
+						want = sp
+						break
 			_step("selection %d: want %s" % [_round + 1, want])
 			if m.me_ready:
 				if m.rival_choice_id != "":
@@ -172,6 +195,9 @@ func _combat(delta: float) -> void:
 		return
 	if not net.in_battle or net.local == null or not is_instance_valid(net.remote):
 		return
+	# Both battles are over: only the host leaving is still to come.
+	if _round >= 2:
+		return
 	var l: Fighter = net.local
 	var r: Fighter = net.remote
 	if _combat_t < 0.0:
@@ -179,6 +205,18 @@ func _combat(delta: float) -> void:
 		_step("battle %d: me %s, rival %s, ping %d ms" % [_round + 1, l.species, r.species, net.ping_ms()])
 		_states_at_start = net.states_applied
 		var expected: Array = [CHOOSES[role][_round], CHOOSES["guest" if role == "host" else "host"][_round]]
+		if _three:
+			var theirs: Array = TEAMS["guest" if role == "host" else "host"][_round]
+			expected = [TEAMS[role][_round][0], theirs[0]]
+			var got: Array = [main.parties[0].members.map(func(f): return f.species), main.parties[1].members.map(func(f): return f.species)]
+			if got != [TEAMS[role][_round], theirs]:
+				_finish("teams: %s, expected %s" % [got, [TEAMS[role][_round], theirs]])
+				return
+			# The host's rules, on both.
+			if main.parties[0].rules.recall != 0.4 or main.parties[1].rules.recall != 0.4 or main.parties[0].rules.bench_heal != 1.0:
+				_finish("rules: %s" % BattleRules.changed(main.parties[0].rules))
+				return
+			_step("teams %s, rules %s" % [got, BattleRules.changed(main.parties[0].rules)])
 		if [l.species, r.species] != expected:
 			_finish("species swapped: %s, expected %s" % [[l.species, r.species], expected])
 			return
@@ -192,6 +230,15 @@ func _combat(delta: float) -> void:
 			return
 	_combat_t += delta
 	_last = {"me_ko": l.state == "ko", "my_hp": int(l.hp), "rival_hp": int(r.hp)}
+	if _three:
+		_last.mine = main.parties[0].history.duplicate()
+		_last.rival = main.parties[1].history.duplicate()
+		_last.alive = [main.parties[0].alive_count(), main.parties[1].alive_count()]
+		_last.switches = [main.parties[0].switches, main.parties[1].switches]
+		_last.cut = [main.parties[0].cut, main.parties[1].cut]
+		# All three have to go: whoever is out drops to 1 HP every few seconds.
+		if _combat_t > 8.0 and int(_combat_t) % 5 == 0 and int(_combat_t - delta) % 5 != 0 and l.state != "ko":
+			l.hp = minf(l.hp, 1.0)
 	if _combat_t > 3.0:
 		_capture("combat_%d" % (_round + 1))
 	# To avoid waiting for a whole battle: at 10 s each side drops itself to 1 HP
@@ -212,13 +259,16 @@ func _combat(delta: float) -> void:
 				_finish("")
 		else:
 			_wait_t = 1.0
-	elif _combat_t > 60.0:
+	elif _combat_t > (240.0 if _three else 60.0):
 		_finish("battle %d does not end" % (_round + 1))
 
 
 func _round_end() -> void:
 	var winner := "rival" if _last.get("me_ko", false) else "me"
 	_battles.append({"round": _round + 1, "winner": winner, "my_hp": _last.get("my_hp", -1), "rival_hp": _last.get("rival_hp", -1)})
+	if _three:
+		_battles.back().merge({"mine": _last.get("mine", []), "rival": _last.get("rival", []), "alive": _last.get("alive", []),
+			"switches": _last.get("switches", []), "cut": _last.get("cut", [])})
 	_step("KO in battle %d: %s wins (my HP %d, rival HP %d)" % [_round + 1, winner, _last.get("my_hp", -1), _last.get("rival_hp", -1)])
 	_capture("ko_%d" % (_round + 1))
 	_combat_t = -1.0

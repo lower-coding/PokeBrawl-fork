@@ -11,6 +11,9 @@ extends CharacterBody3D
 ##   knocked_down  launched or knocked over; then lying, then get_up with a moment of
 ##                 invulnerability
 ##   dive          a ground move used in the air: drops down and fires it on landing
+##   recall        going back to its Poké Ball for a teammate (Party); any hit that beats
+##                 its poise cuts it
+##   enter         just out of the ball: a moment before it can act
 ##   ko            defeated
 ##
 ## Rules against lockdowns: stun gets shorter with each hit of the same combo and the
@@ -31,6 +34,7 @@ var species := "pikachu"
 var data: Dictionary
 var types: Array = []
 var team := 0
+var party: Party = null              # its team (--team); null in a 1 vs 1
 var rival: Fighter
 var ctrl := Intent.new()
 var is_player := false
@@ -351,7 +355,7 @@ func inflict(kind: String) -> bool:
 	if state == "ko" or status != "" or status_lock > 0.0 or not Status.can_get(kind, types, data.passive.id):
 		return false
 	if is_remote:
-		main.net.send_event({"t": "effect", "type": "status", "v": 0.0, "move": kind})
+		main.net.send_event({"t": "effect", "type": "status", "v": 0.0, "move": kind, "to": species})
 		return true
 	status = kind
 	status_t = Status.DURATION.get(kind, 0.0)
@@ -444,7 +448,7 @@ func _status_process(delta: float) -> void:
 ## Pokémon.
 func effect(type: String, value: float, move := "") -> void:
 	if is_remote:
-		main.net.send_event({"t": "effect", "type": type, "v": value, "move": move})
+		main.net.send_event({"t": "effect", "type": type, "v": value, "move": move, "to": species})
 		return
 	match type:
 		"damage":
@@ -620,6 +624,15 @@ func _physics_process(delta: float) -> void:
 				if ready(_dive_move):
 					start(_dive_move, _dive_button)
 					main.hud.log_entry(tr("%s used %s!") % [tr(data.display_name), tr(Moves.DATA[_dive_move].display_name)])
+		"recall":
+			_brake(delta, 12.0)
+			if party.step_recall(_state_t):
+				ctrl.clear()
+				return
+		"enter":
+			_brake(delta, 14.0)
+			if _state_t >= float(party.rules.landing):
+				_to_free()
 	if flying and state in ["free", "action", "dodge"]:
 		_flight_control(delta)
 	elif state != "action" or not action or not action.no_gravity:
@@ -964,6 +977,13 @@ func _try_actions(on_ground: bool) -> void:
 		_consume("dodge")
 		_start_dodge()
 		return
+	for slot in 2:
+		var sw := "switch%d" % (slot + 1)
+		if _wants(sw):
+			_consume(sw)
+			if party and party.can_switch(slot):
+				party.begin_recall(slot)
+				return
 	if on_ground:
 		air_jumps = int(data.get("jumps", 1)) - 1
 	if _wants("jump") and not on_ground and _take_off():
@@ -1157,6 +1177,10 @@ func _step_dodge(delta: float) -> void:
 
 
 func _switch_state(e: String) -> void:
+	if state == "recall" and e != "recall":
+		appear_glow = 0.0
+		if party and party.pending:
+			party.on_recall_cut()
 	state = e
 	_state_t = 0.0
 
@@ -1225,7 +1249,7 @@ func boost(stat: String, n: int, source := "") -> void:
 		text = tr(source) + ": " + text
 	main.vfx.text(center() + Vector3.UP * 1.0, text, Color(1.0, 0.85, 0.4) if n > 0 else Color(0.6, 0.75, 1.0))
 	if not is_remote and main.net and main.net.linked:
-		main.net.send_event({"t": "boost", "stat": stat, "stages": stages[stat]})
+		main.net.send_event({"t": "boost", "stat": stat, "stages": stages[stat], "sp": species})
 
 
 func receive(info: Dictionary) -> String:
@@ -1319,11 +1343,22 @@ func receive(info: Dictionary) -> String:
 		main.trainer_react(self, "flinch")
 	main.session.hit(team, damage)
 	if at and is_instance_valid(at) and not at.is_remote:
-		at.energy = minf(ENERGY_MAX, at.energy + 3.0)
+		# Its team's energy, even if it hit with a shot it left flying when it switched out.
+		var credit: Fighter = at.party.active if at.party else at
+		credit.energy = minf(ENERGY_MAX, credit.energy + 3.0)
+		if at.party and not flow:
+			at.party.on_landed_hit()
 	energy = minf(ENERGY_MAX, energy + 2.0)
 	if hp <= 0.0:
 		_die(info)
 		return "hit"
+	# Recalling, poise works as for a move; a stream's ticks only cut it, without locking.
+	if state == "recall":
+		if g.strength < int(data.get("poise", 0)) + (1 if data.passive.id == "innerfocus" else 0):
+			main.vfx.armor(self)
+			return "armor"
+		if flow:
+			_to_free()
 	if flow:
 		var far: Vector3 = global_position - (at.global_position if at and is_instance_valid(at) else info.point)
 		far.y = 0.0
@@ -1451,6 +1486,84 @@ func _ring_out() -> void:
 	main.session.event("ring_out", {"species": species, "team": team, "state": state, "left_as": _left_as,
 		"since_hit": snappedf((Time.get_ticks_msec() - _hit_ms) / 1000.0, 0.1)})
 	_die({})
+
+
+# ---------------------------------------------------------------- switching (Party)
+
+## Starts going back to its Poké Ball.
+func start_recall() -> void:
+	flying = false
+	_switch_state("recall")
+	_animate_base(0.1)
+
+
+## Off the field: it does not run, show or collide, so everything it has stays as it is.
+func bench() -> void:
+	process_mode = Node.PROCESS_MODE_DISABLED
+	visible = false
+
+
+## Leaving the field. As in the games its stat stages and confusion go; so do what it had
+## out (decoys, lingering hits), being invisible, and a type changed by Protean. HP, cooldowns
+## and status do not: they wait for it on the bench.
+func leave_field() -> void:
+	if action:
+		action.finish(true)
+		action = null
+	main.combat.remove_from(self)
+	for o in main.combat.targets.duplicate():
+		if o is Decoy and o.user == self:
+			o.undo()
+	if state != "ko":
+		_switch_state("free")
+	clear_stages()
+	confused = 0.0
+	drowsy = 0.0
+	slow = 1.0
+	_slow_t = 0.0
+	flying = false
+	boosted_hits = 0
+	fooled_by = null
+	types = data.types
+	translucent = 0.0
+	model.visible = true
+	model.mesh_instance.transparency = 0.0
+	model.mesh_instance.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_ON
+	appear_glow = 0.0
+	velocity = Vector3.ZERO
+	net_state = {}
+	bench()
+
+
+## Back on the field in place of "out": it carries on with the team's energy. Online the team
+## also goes on counting its presses and its shots, so the two copies keep agreeing on both.
+func take_field(pos: Vector3, yaw: float, out: Fighter) -> void:
+	process_mode = Node.PROCESS_MODE_INHERIT
+	visible = true
+	global_position = pos
+	face_yaw = yaw
+	velocity = Vector3.ZERO
+	energy = out.energy
+	_energy_pause = out._energy_pause
+	_frozen = 0.0
+	_buffer.clear()
+	ctrl.clear()
+	ctrl.held.clear()
+	ctrl.counter = out.ctrl.counter
+	shots = out.shots
+	net_state = {}
+	_was_grounded = true
+	_animate_base(0.0)
+	reset_physics_interpolation()
+
+
+## Just out of the ball: a moment before it can act.
+func enter_field() -> void:
+	_switch_state("enter")
+
+
+func clear_stages() -> void:
+	stages = {"atk": 0, "def": 0, "spa": 0, "spd": 0, "spe": 0}
 
 
 ## On restarting the battle.

@@ -3,6 +3,29 @@
 All notable changes to this project are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [demo-3v3] - 2026-10-31
+
+### Added
+- 3 vs 3 with switching (prototype, offline): a switch takes about a second, can be hit and cut,
+  costs a scarce charge and refreshes nothing; the energy belongs to the team and the bench waits
+  as it was. After a KO you pick the next one. The AI switches too. Shots left flying by a
+  Pokémon that switched out spare its teammates. See the README. New tests: `--test=team`,
+  `--test=menu_rules` and `--aivsai --test=team_battles`.
+- Battle and Training ask for the format, 1 vs 1 or 3 vs 3, before anyone picks. In a 3 vs 3 each
+  side picks three on the wall, with each one's model, types, ability and moves on its card.
+- Online 3 vs 3: the host picks the format and the rules; each player's team stays hidden until both
+  are ready; each one decides their own switches and the other's copy follows. The state packets
+  changed, so the version is now `demo-3v3`: it cannot play against the released demo.
+- Rules for each 3 vs 3: the selection's new Rules tab (or `--rules`) sets its times, switches and
+  KO rules. Healing on the bench is there too, off by default. They are never saved.
+- The 3 vs 3's HUD: both sides' bench and switches under their frames, chips for your teammates,
+  a bar over a Pokémon going back to its ball and a card for picking the next one after a KO.
+
+### Fixed
+- Online, a packet still on its way from the last battle could knock out the rival's new copy
+  right after a rematch, leaving it fainted on your screen for the whole battle. Each battle is
+  numbered now and what comes from another one is dropped.
+
 ## [Demo] - 2026-10-29
 
 The demo: the first version to play.

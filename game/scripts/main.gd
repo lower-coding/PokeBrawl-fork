@@ -4,6 +4,9 @@ extends Node3D
 ##
 ## Launch: godot --path game -- [--p1=pikachu] [--p2=snorlax] [--diff=normal]
 ##         [--stage=night|floating] [--training] [--aivsai] [--test=name] [--lang=en|es]
+## 3 vs 3:  --team=a,b,c [--team2=d,e,f]     teams (the first one leads; see Party). Online, --team
+##                                            is your own and both need it
+##          --rules=id:value,id:value         this battle's rules (BattleRules; online, the host's)
 ## Online:  --host [--p1=species]            hosts a game (port 7777)
 ##          --join=IP [--p1=species]         joins someone else's
 ##          --bot (the AI plays your own Pokémon), --lag=ms --jitter=ms --loss=%
@@ -26,7 +29,9 @@ var menu: Menu
 var ai: AI
 var player_ai: AI               # only with --aivsai (tests)
 var net: Net                     # online only
-var fighters: Array = []
+var fighters: Array = []          # the two out on the field
+var parties: Array = []           # each side's Party, same order; empty in a 1 vs 1
+var field_pace := 1.0             # how much slower the League's field closes (BattleRules)
 var trainers: Array = []          # Trainer of each fighter, same order (only for show)
 ## The opening: each trainer throws their Poké Ball and their Pokémon comes out; nobody
 ## moves until it ends. Tests skip it (unless --intro).
@@ -110,13 +115,22 @@ func _ready() -> void:
 	if _args.has("training"):
 		mode = "training"
 		menu.choice.mode = "training"
-	# With --p1, --test or --aivsai it goes straight into battle; otherwise, to the menu.
+	if _args.has("team"):
+		menu.choice.format = "3v3"
+		menu.choice.team = Array(str(_args.team).split(",", false))
+	if _args.has("team2"):
+		menu.choice.team2 = Array(str(_args.team2).split(",", false))
+	if _args.has("rules"):
+		menu.choice.rules = BattleRules.parsed(str(_args.rules))
+	# With --p1, --team, --test or --aivsai it goes straight into battle; otherwise, to the menu.
 	if _args.has("host") or _args.has("join"):
-		var err := start_net(_args.has("host"), _args.get("join", ""), _args.get("p1", "pikachu"))
+		var err := start_net(_args.has("host"), _args.get("join", ""), _args.get("p1", str(_args.get("team", "pikachu")).get_slice(",", 0)))
 		if err != "":
 			push_error(err)
-	elif _args.has("p1") or _args.has("aivsai") or (_args.has("test") and not _args.test.begins_with("menu")):
-		start_battle(_args.get("p1", "pikachu"), _args.get("p2", "snorlax"), _args.get("diff", "normal"))
+	elif _args.has("p1") or _args.has("team") or _args.has("aivsai") or (_args.has("test") and not _args.test.begins_with("menu")):
+		var lead_a: String = _args.get("p1", str(_args.get("team", "pikachu")).get_slice(",", 0))
+		var lead_b: String = _args.get("p2", str(_args.get("team2", "snorlax")).get_slice(",", 0))
+		start_battle(lead_a, lead_b, _args.get("diff", "normal"))
 	else:
 		menu.open_menu()
 	if _args.has("test"):
@@ -179,6 +193,7 @@ func start_battle(p1: String, p2: String, diff: String, rival_loadout := {}, riv
 	music.play(arena.stage, true)
 	vfx.clear()
 	weather.clear()
+	_clear_parties()
 	for l in fighters:
 		l.queue_free()
 	fighters.clear()
@@ -200,6 +215,11 @@ func start_battle(p1: String, p2: String, diff: String, rival_loadout := {}, riv
 		_setup_net(a, b)
 	else:
 		_setup_ai(a, b, diff)
+	if menu.choice.format == "3v3":
+		_build_party(a)
+		_build_party(b)
+		field_pace = menu.choice.rules.field_pace
+		session.event("rules", BattleRules.changed(menu.choice.rules))
 	combat.targets = fighters.duplicate()
 	camera.target = a
 	camera.yaw = -PI * 0.5 * -side
@@ -207,6 +227,9 @@ func start_battle(p1: String, p2: String, diff: String, rival_loadout := {}, riv
 	_no_input = 0.25
 	Engine.time_scale = 1.0
 	portraits(p1, p2)
+	for p in parties:
+		for f in p.members.slice(1):
+			hud.prepare_spare_portrait(p.side, f.species)
 	var mine: String = options.trainer
 	_place_trainers([mine, rival_trainer if net and rival_trainer != "" else TrainerData.rival_for(mine, p2)])
 	_introduce()
@@ -232,6 +255,69 @@ func _setup_ai(a: Fighter, b: Fighter, diff: String) -> void:
 		player_ai.process_physics_priority = -10
 		add_child(player_ai)
 		a.is_player = false
+
+
+# ---------------------------------------------------------------- teams (3 vs 3)
+
+## "lead"'s team: its teammates are built here and wait on the bench.
+func _build_party(lead: Fighter) -> void:
+	var list: Array = [lead]
+	for sp in menu.team_ids(lead.team, lead.species).slice(1):
+		var loadout: Dictionary = my_loadout(sp)
+		if lead.team != 0:
+			loadout = Loadout.valid(sp, menu.rival_loadouts.get(sp, {})) if net else Loadout.default_for(sp)
+		var l := _create(sp, lead.team, lead.start_pos, lead.start_yaw, loadout)
+		fighters.pop_back()              # only those on the field are there
+		l.rival = lead.rival
+		l.is_remote = lead.is_remote
+		list.append(l)
+	var p := Party.new()
+	p.process_physics_priority = -5      # after the input and the AI, before they clear it
+	add_child(p)
+	p.setup(self, lead.team, list, menu.choice.rules.duplicate(), lead.is_remote)
+	parties.append(p)
+
+
+func _clear_parties() -> void:
+	for p in parties:
+		for f in p.members:
+			if is_instance_valid(f) and not f in fighters:
+				f.queue_free()
+		p.queue_free()
+	parties.clear()
+	field_pace = 1.0
+
+
+## "side" has "incoming" out instead of "out": whoever points at the one on the field points
+## at it now. Shots in flight turn to it too.
+func on_party_swap(side: int, out: Fighter, incoming: Fighter) -> void:
+	fighters[side] = incoming
+	var foe: Fighter = fighters[1 - side]
+	incoming.rival = foe
+	foe.rival = incoming
+	foe.fooled_by = null
+	combat.targets[combat.targets.find(out)] = incoming
+	for p in combat.projectiles:
+		if p.target == out:
+			p.target = incoming
+	if player == out:
+		player = incoming
+		camera.target = incoming
+		incoming.is_player = out.is_player
+		out.is_player = false
+		incoming.locked = out.locked
+	for x in [ai, player_ai]:
+		if x:
+			x.on_swap(out, incoming)
+	if net:
+		if net.local == out:
+			net.local = incoming
+		if net.remote == out:
+			net.remote = incoming
+	trainers[side].fighter = incoming
+	hud.swap_portrait(side, incoming.species)
+	arena.screens(hud._portraits[0].vp.get_texture(), hud._portraits[1].vp.get_texture(),
+		Roster.TYPE_COLOR[Roster.POKEMON[fighters[0].species].types[0]], Roster.TYPE_COLOR[Roster.POKEMON[fighters[1].species].types[0]])
 
 
 func _introduce() -> void:
@@ -324,30 +410,43 @@ func _opening() -> void:
 ## The ball flies in an arc from the trainer's hand to where the Pokémon stands, spinning,
 ## and opens there in a burst of light; the Pokémon grows out of it, white, and cries.
 func _throw_ball(t: Trainer, f: Fighter) -> void:
-	var from := t.hand()
-	var to := f.global_position + Vector3.UP * 0.7
 	var flight := 0.75
+	_ball_arc(t, f.global_position + Vector3.UP * 0.7, flight)
+	get_tree().create_timer(flight, false).timeout.connect(func():
+		if is_instance_valid(f):
+			reveal_from_ball(f))
+
+
+func _ball_arc(t: Trainer, to: Vector3, flight: float) -> void:
+	var from := t.hand()
 	var top := 0.8 + from.distance_to(to) * 0.06
 	var ball := vfx.pixel_ball("pokeball", 4, 0.5, Color.WHITE, 14.0, false)
 	ball.global_position = from
 	audio.play_sound("ball_throw", from, -2.0)
 	vfx.live(ball, flight, func(k: float):
 		ball.global_position = from.lerp(to, k) + Vector3.UP * sin(k * PI) * top)
-	get_tree().create_timer(flight, false).timeout.connect(func():
-		if not is_instance_valid(f):
-			return
-		audio.play_sound("ball_open", to, 0.0)
-		audio.play_sound("ball_send", to, -4.0)
-		vfx.light(to, Color.WHITE, 6.0, 6.0, 0.4)
-		vfx.burst("stars", to, Vector3.UP, Color(0, 0, 0, 0), 1.2)
-		vfx.wave(Vector3(to.x, ground_y, to.z), 2.2, 0.35, Color(1.0, 0.95, 0.9), 0.08)
-		vfx.live(Node3D.new(), 0.4, func(k: float):
-			if is_instance_valid(f):
-				f.appear = k
-				f.appear_glow = 1.0 - k)
-		get_tree().create_timer(0.3, false).timeout.connect(func():
-			if is_instance_valid(f):
-				audio.cry(f.species, f.global_position)))
+
+
+## A switch's ball, from "side"'s trainer to "to" in "flight" seconds.
+func switch_ball(side: int, to: Vector3, flight: float) -> void:
+	_ball_arc(trainers[side], to, flight)
+
+
+func reveal_from_ball(f: Fighter) -> void:
+	var to := f.global_position + Vector3.UP * 0.7
+	audio.play_sound("ball_open", to, 0.0)
+	audio.play_sound("ball_send", to, -4.0)
+	vfx.light(to, Color.WHITE, 6.0, 6.0, 0.4)
+	vfx.burst("stars", to, Vector3.UP, Color(0, 0, 0, 0), 1.2)
+	vfx.wave(Vector3(to.x, ground_y, to.z), 2.2, 0.35, Color(1.0, 0.95, 0.9), 0.08)
+	f.appear = 0.0
+	vfx.live(Node3D.new(), 0.4, func(k: float):
+		if is_instance_valid(f):
+			f.appear = k
+			f.appear_glow = 1.0 - k)
+	get_tree().create_timer(0.3, false).timeout.connect(func():
+		if is_instance_valid(f):
+			audio.cry(f.species, f.global_position))
 
 
 func _create(sp: String, eq: int, pos: Vector3, yaw: float, loadout := {}) -> Fighter:
@@ -367,6 +466,10 @@ func _create(sp: String, eq: int, pos: Vector3, yaw: float, loadout := {}) -> Fi
 func rematch() -> void:
 	session.event("rematch")
 	rematch_votes.clear()
+	if net:
+		net.battle += 1
+	for p in parties:
+		p.restart()
 	var a: Fighter = fighters[0]
 	var b: Fighter = fighters[1]
 	weather.clear()
@@ -382,6 +485,12 @@ func rematch() -> void:
 
 func _on_defeat(who: Fighter) -> void:
 	if _end_t >= 0.0:
+		return
+	# 3 vs 3: while its team has someone left, the battle goes on.
+	if not parties.is_empty() and parties[who.team].has_more(who):
+		hud.log_entry(tr("%s fainted!") % tr(who.data.display_name))
+		audio.play_sound("ko", who.global_position, -2.0)
+		parties[who.team].on_fainted(who)
 		return
 	_end_t = 0.0
 	# Brief slow motion: the last hit is visible, without taking control away. Not
@@ -419,13 +528,15 @@ func start_net(as_host: bool, ip: String, species := "") -> String:
 			menu.online = true
 			menu.choice.p1 = species
 			menu.me_ready = true
-			net.send_event({"t": "choice", "species": species, "ready": true, "loadout": my_loadout(species), "trainer": options.trainer, "name": options.shown_name(), "ver": Menu.version()})
+			menu.send_choice()
 			check_start()
 		else:
 			menu.online_connected())
 	net.event.connect(_net_event)
 	net.disconnected.connect(_disconnection)
-	var err := net.create() if as_host else net.join(ip)
+	# --port: two pairs of test copies on the same computer.
+	var port := int(_args.get("port", Net.PORT))
+	var err := net.create(port) if as_host else net.join(ip, port)
 	session.event("net_start", {"role": "host" if as_host else "guest", "error": err})
 	net.connected.connect(func(): session.event("connected"))
 	return err
@@ -444,11 +555,20 @@ func check_start() -> void:
 		return
 	if menu.version_mismatch():
 		return
+	if menu.team_battle() and menu.rival_team.size() != Party.SIZE:
+		return
 	var mine: String = menu.choice.p1
 	var theirs: String = menu.rival_choice_id
 	menu.me_ready = false
 	menu.rival_ready = false
-	net.send_event({"t": "start", "host": mine, "guest": theirs, "stage": menu.choice.stage})
+	var start := {"t": "start", "host": mine, "guest": theirs, "stage": menu.choice.stage,
+		"format": menu.choice.format, "rules": menu.choice.rules}
+	if menu.team_battle():
+		menu.choice.team = menu.team_ids(0, mine)
+		menu.choice.team2 = menu.rival_team
+		start.host_team = menu.choice.team
+		start.guest_team = menu.rival_team
+	net.send_event(start)
 	set_stage(menu.choice.stage)
 	_start_online(mine, theirs)
 
@@ -461,6 +581,7 @@ func _setup_net(a: Fighter, b: Fighter) -> void:
 	# net.frame counts the whole connection: reset, the rival would drop a second
 	# battle's packets as old.
 	net.in_battle = true
+	net.battle += 1
 	if _args.has("bot"):
 		ai = AI.new()
 		ai.main = self
@@ -477,14 +598,24 @@ func _net_event(d: Dictionary) -> void:
 		"choice":
 			if d.has("stage") and menu.STAGES.has(d.stage):
 				menu.choice.stage = d.stage
+			menu.room_settings(d)
 			menu.rival_choice(d.species, d.ready, d.get("loadout", {}), str(d.get("trainer", "")), str(d.get("name", "")), str(d.get("ver", "")))
+			menu.rival_team_choice(d)
 			check_start()
 		"start":
 			menu.me_ready = false
 			menu.rival_ready = false
 			menu.choice.stage = d.get("stage", menu.choice.stage)
+			menu.room_settings(d)
+			if d.has("host_team"):
+				menu.choice.team = d.guest_team
+				menu.choice.team2 = d.host_team
 			set_stage(menu.choice.stage)
 			_start_online(d.guest, d.host)
+		"recall", "recall_cut", "swap", "replace_ball", "replace", "bench_ko":
+			# What the rival's team did, in this battle.
+			if parties.size() == 2 and int(d.get("b", -1)) == net.battle:
+				parties[1].net_event(d)
 		"stage":
 			# The host changed the stage in the selection (it is built when the battle starts).
 			if menu.STAGES.has(d.id):
@@ -500,7 +631,8 @@ func _net_event(d: Dictionary) -> void:
 				elif d.affinity < 0.95:
 					hud.log_entry(tr("It's not very effective..."))
 		"effect":
-			if net.local:
+			# Meant for whoever was out when the rival's copy saw it: if that one left, it missed.
+			if net.local and d.get("to", net.local.species) == net.local.species:
 				net.local.effect(d.type, d.v, d.get("move", ""))
 		"clash":
 			# The host saw two shots meet: the same here ("h" is the host's shot, "g" mine).
@@ -508,9 +640,9 @@ func _net_event(d: Dictionary) -> void:
 				var mine = null
 				var theirs = null
 				for p in combat.projectiles:
-					if p.get("shooter") == net.local and p.get("seq", -2) == int(d.g):
+					if combat.shot_by(p, net.local) and p.get("seq", -2) == int(d.g):
 						mine = p
-					elif p.get("shooter") == net.remote and p.get("seq", -2) == int(d.h):
+					elif combat.shot_by(p, net.remote) and p.get("seq", -2) == int(d.h):
 						theirs = p
 				if mine != null and theirs != null:
 					combat.clash(theirs, mine)
@@ -518,12 +650,12 @@ func _net_event(d: Dictionary) -> void:
 			# The rival deflected one of my projectiles: the same here.
 			if net.local and net.remote:
 				for p in combat.projectiles:
-					if p.get("shooter") == net.local and p.get("seq", -2) == int(d.seq):
+					if combat.shot_by(p, net.local) and p.get("seq", -2) == int(d.seq):
 						combat.deflect(p, net.remote, int(d.level))
 						break
 		"boost":
 			# The rival's Pokémon changed a stat stage: its copy here needs it for damage.
-			if net.remote and net.remote.stages.has(d.stat):
+			if net.remote and net.remote.stages.has(d.stat) and d.get("sp", net.remote.species) == net.remote.species:
 				net.remote.stages[d.stat] = int(d.stages)
 		"rematch":
 			rematch()
@@ -577,6 +709,7 @@ func _to_selection(warn: bool) -> void:
 	net.in_battle = false
 	net.local = null
 	net.remote = null
+	_clear_parties()
 	for l in fighters:
 		l.queue_free()
 	fighters.clear()
@@ -646,7 +779,7 @@ func _physics_process(delta: float) -> void:
 	var c := player.ctrl
 	c.move_input = Input.get_vector("move_left", "move_right", "move_down", "move_up")
 	c.yaw = camera.yaw
-	for a in ["jump", "dodge", "lock_on", "mov1", "mov2", "mov3", "mov4", "descend"]:
+	for a in ["jump", "dodge", "lock_on", "mov1", "mov2", "mov3", "mov4", "descend", "switch1", "switch2"]:
 		if Input.is_action_just_pressed(a):
 			c.press(a)
 		elif Input.is_action_pressed(a):
@@ -710,6 +843,7 @@ func back_to_menu(screen := "") -> void:
 		paused = false
 		get_tree().paused = false
 	vfx.clear()
+	_clear_parties()
 	for l in fighters:
 		l.queue_free()
 	fighters.clear()

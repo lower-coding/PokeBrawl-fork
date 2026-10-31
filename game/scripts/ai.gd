@@ -11,12 +11,17 @@ extends Node
 ##   2. punish long recoveries and whiffs
 ##   3. hold the distance that suits its Pokémon and attack with the right move
 ## It adapts: if the player dodges a lot, it waits out the dodge to punish it.
+## With a team (Party) it also looks every so often at whether a teammate would do clearly
+## better ("switch_margin", in Party.score's units) and sends it out when the rival is not on
+## top of it.
 
 const DIFFICULTY := {
-	"easy": {"reaction": 0.42, "aim_lead": 0.3, "aim_error": 1.6, "error": 0.32, "doubt": 0.5, "punish": 0.4, "defense": 0.45, "deflect": 0.05, "deflect_error": 0.12},
-	"normal": {"reaction": 0.28, "aim_lead": 0.6, "aim_error": 1.0, "error": 0.16, "doubt": 0.25, "punish": 0.7, "defense": 0.7, "deflect": 0.2, "deflect_error": 0.07},
-	"hard": {"reaction": 0.19, "aim_lead": 0.9, "aim_error": 0.6, "error": 0.06, "doubt": 0.1, "punish": 0.92, "defense": 0.9, "deflect": 0.4, "deflect_error": 0.04},
+	"easy": {"reaction": 0.42, "aim_lead": 0.3, "aim_error": 1.6, "error": 0.32, "doubt": 0.5, "punish": 0.4, "defense": 0.45, "deflect": 0.05, "deflect_error": 0.12, "switch_every": 8.0, "switch_margin": 0.9},
+	"normal": {"reaction": 0.28, "aim_lead": 0.6, "aim_error": 1.0, "error": 0.16, "doubt": 0.25, "punish": 0.7, "defense": 0.7, "deflect": 0.2, "deflect_error": 0.07, "switch_every": 5.0, "switch_margin": 0.6},
+	"hard": {"reaction": 0.19, "aim_lead": 0.9, "aim_error": 0.6, "error": 0.06, "doubt": 0.1, "punish": 0.92, "defense": 0.9, "deflect": 0.4, "deflect_error": 0.04, "switch_every": 3.0, "switch_margin": 0.4},
 }
+const SWITCH_MIN_DIST := 4.0     # closer than this, the rival would just hit it out of the recall
+const SWITCH_RETRY := 0.3        # seconds until it looks again when the moment was not safe
 
 ## Each Pokémon's style: preferred distance and eagerness to attack.
 const PROFILE := {
@@ -56,6 +61,20 @@ const BELIEVES_DECOY := {"easy": 0.9, "normal": 0.65, "hard": 0.35}
 const RANGED := ["projectile", "stream", "charge", "engage"]   # what reaches another height (dashes go diagonally)
 var _flight_pending := -1.0              # pending second jump to take off
 var _aim_phase := Vector2(randf() * TAU, randf() * TAU)   # so each AI wobbles its own way
+var _switch_t := 3.0                     # seconds until it thinks about switching again
+
+
+## Its Pokémon or the rival's changed: what it saw of the old one no longer counts.
+func on_swap(out: Fighter, incoming: Fighter) -> void:
+	if me == out:
+		me = incoming
+		_hold.clear()
+	if rival == out:
+		rival = incoming
+		_history.clear()
+		_rival_dodges.clear()
+		_decoy_seen = null
+		_fooled = false
 
 
 func _physics_process(delta: float) -> void:
@@ -99,6 +118,8 @@ func _physics_process(delta: float) -> void:
 	if _defend(seen, dist, diff):
 		_edge_guard()
 		return
+	if _consider_switch(seen, dist, diff, delta):
+		return
 	# 2 and 3. Decide every so often, not every step (with doubt depending on difficulty).
 	_decision_t -= delta
 	_move_ai(seen, dist, delta)
@@ -137,6 +158,41 @@ func _edge_guard() -> void:
 	var ahead := p + Vector3(me.velocity.x, 0.0, me.velocity.z) * 0.45
 	if not main.arena.inside(ahead, 1.5) or not main.arena.inside(p, 2.0):
 		me.ctrl.move_input = _to_local(-Vector3(p.x, 0.0, p.z).normalized())
+
+
+# ---------------------------------------------------------------- switching
+
+## Every so often: if a teammate would do clearly better than the one out, sends it out. It
+## counts what leaving costs: stat stages won are lost, and lowered ones go away. It does not
+## try with the rival close by or attacking, or with a shot on its way, which would cut the
+## recall: it looks again in a moment.
+func _consider_switch(seen: Dictionary, dist: float, diff: Dictionary, delta: float) -> bool:
+	if me.party == null:
+		return false
+	_switch_t -= delta
+	if _switch_t > 0.0:
+		return false
+	if dist < SWITCH_MIN_DIST or seen.state == "action" or main.combat.projectiles.any(func(p): return p.user != me):
+		_switch_t = SWITCH_RETRY
+		return false
+	_switch_t = float(diff.switch_every) * randf_range(0.8, 1.2)
+	var stages := 0
+	for k in me.stages:
+		stages += int(me.stages[k])
+	var here: float = Party.score(me, rival) + 0.15 * stages
+	var best := -1
+	var best_score: float = here + float(diff.switch_margin)
+	for slot in 2:
+		if me.party.can_switch(slot):
+			var s: float = Party.score(me.party.slot_member(slot), rival)
+			if s > best_score:
+				best_score = s
+				best = slot
+	if best < 0:
+		return false
+	_press("switch%d" % (best + 1))
+	state_text = "switches out"
+	return true
 
 
 # ---------------------------------------------------------------- perception

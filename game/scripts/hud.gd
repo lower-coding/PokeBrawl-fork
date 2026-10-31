@@ -4,7 +4,8 @@ extends CanvasLayer
 ## the same measurements (BattleOverlay.kt and BattleMoveSelection.kt):
 ##   top            each Pokémon's frame with its live portrait, HP and status
 ##   bottom left    the four moves on tiles tinted by type
-##   above them     the player's dodges and energy
+##   above them     the player's dodges and energy; in a 3 vs 3 its switches and bench
+##   under the top  in a 3 vs 3, each side's bench and switches; after a KO, the next one to pick
 ##   bottom right   the battle log
 ##   over the rival the lock-on arrow
 ## Everything is measured in GUI pixels (G) and multiplied by the integer scale _s.
@@ -17,6 +18,9 @@ const STATES := {
 	"frz": ["frz", "FRZ"], "ko": ["fnt", "FNT"], "imm": ["fnt", "IMM"],
 }
 const INK := Color("f5f3ea")
+const GOLD := Color("ffc94a")
+const PANEL_DARK := Color(0.05, 0.06, 0.09, 0.85)
+const RED_MARK := Color("e0553e")
 const LOG_LINES := 5
 
 var main: Node
@@ -29,7 +33,8 @@ var _lag := [1.0, 1.0]
 var _not_ready := [0.0, 0.0, 0.0, 0.0]
 var _log: Array = []                 # [{text, t}]
 var _log_t := 0.0
-var _portraits: Array = []            # [{vp, model, cam, height, placed, t0}]
+var _portraits: Array = []            # [{vp, model, cam, height, placed, t0, side, sp}]
+var _spare_portraits: Array = []      # the same, for those on the bench
 var _t := 0.0
 var _dbg: MeshInstance3D
 var _dbg_im := ImmediateMesh.new()
@@ -114,43 +119,70 @@ func warn_not_ready(i: int) -> void:
 ## Each frame holds the Cobblemon model itself in a separate world, like in Cobblemon:
 ## a camera fixed on the face and the Pokémon in its idle animation.
 func prepare_portraits(species_list: Array) -> void:
-	for r in _portraits:
+	for r in _portraits + _spare_portraits:
 		r.vp.queue_free()
 	_portraits.clear()
+	_spare_portraits.clear()
 	for i in species_list.size():
-		var sp: String = species_list[i]
-		var data: Dictionary = Roster.POKEMON[sp]
-		var vp := SubViewport.new()
-		vp.own_world_3d = true
-		vp.transparent_bg = true
-		vp.msaa_3d = Viewport.MSAA_4X
-		vp.size = Vector2i(28, 28) * _s
-		vp.render_target_update_mode = SubViewport.UPDATE_ALWAYS
-		add_child(vp)
-		var m := PokeModel.new()
-		m.setup(sp)
-		var box: AABB = m._res.mesh.get_aabb()
-		var esc: float = data.height / maxf(box.size.y, 0.05)
-		m.scale = Vector3.ONE * esc
-		# Three-quarter view facing the center of the screen.
-		m.rotation.y = PI + (0.55 if i == 0 else -0.55)
-		vp.add_child(m)
-		m.play("battle_idle" if m.has_anim("battle_idle") else "ground_idle", 0.0)
-		var cam := Camera3D.new()
-		cam.fov = 30.0
-		vp.add_child(cam)
-		var sun := DirectionalLight3D.new()
-		sun.rotation = Vector3(-0.7, 0.5, 0.0)
-		sun.light_energy = 1.25
-		vp.add_child(sun)
-		var amb := WorldEnvironment.new()
-		amb.environment = Environment.new()
-		amb.environment.ambient_light_source = Environment.AMBIENT_SOURCE_COLOR
-		amb.environment.ambient_light_color = Color(0.85, 0.87, 0.95)
-		amb.environment.ambient_light_energy = 0.75
-		amb.environment.tonemap_mode = Environment.TONE_MAPPER_FILMIC
-		vp.add_child(amb)
-		_portraits.append({"vp": vp, "model": m, "cam": cam, "height": data.height, "placed": false, "t0": _t})
+		_portraits.append(_portrait(species_list[i], i))
+
+
+## Side "i"'s bench: its portrait is made now and kept ready, not rendered, so a switch shows
+## it at once and with no hitch.
+func prepare_spare_portrait(i: int, sp: String) -> void:
+	_spare_portraits.append(_portrait(sp, i))
+
+
+## A switch: side "i"'s frame shows another Pokémon; the one it had goes back to the spares.
+func swap_portrait(i: int, sp: String) -> void:
+	var old: Dictionary = _portraits[i]
+	old.vp.render_target_update_mode = SubViewport.UPDATE_DISABLED
+	_spare_portraits.append(old)
+	_lag[i] = 1.0
+	for k in _spare_portraits.size():
+		var r: Dictionary = _spare_portraits[k]
+		if r.side == i and r.sp == sp:
+			_spare_portraits.remove_at(k)
+			r.erase("rest_at")
+			r.vp.render_target_update_mode = SubViewport.UPDATE_ALWAYS
+			_portraits[i] = r
+			return
+	_portraits[i] = _portrait(sp, i)
+
+
+func _portrait(sp: String, i: int) -> Dictionary:
+	var data: Dictionary = Roster.POKEMON[sp]
+	var vp := SubViewport.new()
+	vp.own_world_3d = true
+	vp.transparent_bg = true
+	vp.msaa_3d = Viewport.MSAA_4X
+	vp.size = Vector2i(28, 28) * _s
+	vp.render_target_update_mode = SubViewport.UPDATE_ALWAYS
+	add_child(vp)
+	var m := PokeModel.new()
+	m.setup(sp)
+	var box: AABB = m._res.mesh.get_aabb()
+	var esc: float = data.height / maxf(box.size.y, 0.05)
+	m.scale = Vector3.ONE * esc
+	# Three-quarter view facing the center of the screen.
+	m.rotation.y = PI + (0.55 if i == 0 else -0.55)
+	vp.add_child(m)
+	m.play("battle_idle" if m.has_anim("battle_idle") else "ground_idle", 0.0)
+	var cam := Camera3D.new()
+	cam.fov = 30.0
+	vp.add_child(cam)
+	var sun := DirectionalLight3D.new()
+	sun.rotation = Vector3(-0.7, 0.5, 0.0)
+	sun.light_energy = 1.25
+	vp.add_child(sun)
+	var amb := WorldEnvironment.new()
+	amb.environment = Environment.new()
+	amb.environment.ambient_light_source = Environment.AMBIENT_SOURCE_COLOR
+	amb.environment.ambient_light_color = Color(0.85, 0.87, 0.95)
+	amb.environment.ambient_light_energy = 0.75
+	amb.environment.tonemap_mode = Environment.TONE_MAPPER_FILMIC
+	vp.add_child(amb)
+	return {"vp": vp, "model": m, "cam": cam, "height": data.height, "placed": false, "t0": _t, "side": i, "sp": sp}
 
 
 func _frame(r: Dictionary) -> void:
@@ -192,6 +224,16 @@ func _process(delta: float) -> void:
 		# Framed once the animation has put the skeleton in its pose.
 		if not r.placed and _t - r.t0 > 0.25:
 			_frame(r)
+	for r in _spare_portraits:
+		if r.vp.size != Vector2i(28, 28) * _s:
+			r.vp.size = Vector2i(28, 28) * _s
+		if not r.placed and _t - r.t0 > 0.25:
+			_frame(r)
+			r.rest_at = _t + 0.1
+		# Once it has drawn itself framed, its picture stays and it stops rendering.
+		elif r.has("rest_at") and _t > r.rest_at:
+			r.erase("rest_at")
+			r.vp.render_target_update_mode = SubViewport.UPDATE_DISABLED
 	_c.queue_redraw()
 	_debug()
 
@@ -260,6 +302,16 @@ func _draw_ui() -> void:
 		_resources(j, Vector2(11, gh - 76))
 	if j:
 		_locked(j)
+	if not main.parties.is_empty():
+		_team_strip(main.parties[0], Vector2(50, 48), 1.0)
+		_team_strip(main.parties[1], Vector2(gw - 50, 48), -1.0)
+		for p in main.parties:
+			if p.pending:
+				_recall_bar(p)
+		if j and j.party:
+			_bench(j.party, Vector2(11, gh - 92))
+			if j.party.replacing:
+				_next_prompt(j.party, gw, gh)
 	for f in main.fighters:
 		if is_instance_valid(f) and f._boost_t > 0.0 and f.boosted_hits > 0:
 			_boost_bar(f)
@@ -403,6 +455,139 @@ func _resources(l: Fighter, g: Vector2) -> void:
 			Color(1.0, 0.62, 0.3) if l.flight > float(l.data.flight.stamina) * 0.25 else Color(0.95, 0.35, 0.25))
 
 
+## The live portrait of side "i"'s "sp" (on the field or on the bench), if there is one.
+func _portrait_of(i: int, sp: String) -> Texture2D:
+	for r in _portraits + _spare_portraits:
+		if r.side == i and r.sp == sp:
+			return r.vp.get_texture()
+	return null
+
+
+## A team member's face in a dark square, dimmer if it cannot come out, crossed out if fainted.
+func _member_icon(p: Party, f: Fighter, g: Vector2, size: float) -> void:
+	_rect(g, Vector2(size, size), PANEL_DARK)
+	var tex := _portrait_of(p.side, f.species)
+	var fainted: bool = f.state == "ko"
+	if tex:
+		var a := 0.3 if fainted else (0.55 if p.locked_for(f) > 0.0 else 1.0)
+		_c.draw_texture_rect(tex, Rect2(g * _s, Vector2(size, size) * _s), false, Color(1, 1, 1, a))
+	if fainted:
+		_c.draw_line(g * _s, (g + Vector2(size, size)) * _s, RED_MARK, _s)
+		_c.draw_line((g + Vector2(size, 0)) * _s, (g + Vector2(0, size)) * _s, RED_MARK, _s)
+
+
+## Under each frame: that side's bench and how many switches it has, so you can tell what the
+## rival can still do. From "g" along "dir".
+func _team_strip(p: Party, g: Vector2, dir: float) -> void:
+	var x := g.x
+	for slot in 2:
+		var f := p.slot_member(slot)
+		if f == null:
+			continue
+		var left := x if dir > 0.0 else x - 16.0
+		_member_icon(p, f, Vector2(left, g.y), 16.0)
+		var share := clampf(f.hp / f.hp_max, 0.0, 1.0)
+		_rect(Vector2(left, g.y + 16.0), Vector2(16, 2), PANEL_DARK)
+		_rect(Vector2(left, g.y + 16.0), Vector2(16.0 * share, 2), _hp_color(share))
+		if f.status != "" and f.state != "ko":
+			_rect(Vector2(left + 12.0, g.y), Vector2(4, 4), Status.COLOR[f.status])
+		x += 18.0 * dir
+	x += 3.0 * dir
+	for k in p.max_charges():
+		_charge_pip(p, k, Vector2(x + 3.0 * dir, g.y + 9.0), 3.0)
+		x += 8.0 * dir
+
+
+## One of a side's switches: full, the next one filling up, or empty.
+func _charge_pip(p: Party, k: int, c: Vector2, r: float) -> void:
+	_c.draw_circle(c * _s, r * _s, PANEL_DARK)
+	_c.draw_arc(c * _s, r * _s, 0.0, TAU, 20, Color(GOLD, 0.45), 1.0)
+	if k < p.charges:
+		_c.draw_circle(c * _s, (r - 1.0) * _s, GOLD)
+	elif k == p.charges:
+		_c.draw_arc(c * _s, (r - 1.0) * _s, -PI * 0.5, -PI * 0.5 + TAU * p.recharge_share(), 16, GOLD, _s)
+
+
+## Above the energy: your switches, and a chip per teammate with its button, face, name and
+## HP. On the right of the chip, what matters most about it now: the seconds until it can come
+## back, its status, or that it is healing.
+func _bench(p: Party, g: Vector2) -> void:
+	for k in p.max_charges():
+		_charge_pip(p, k, Vector2(g.x + 3.5 + k * 9.0, g.y - 6.0), 3.5)
+	for slot in 2:
+		_bench_chip(p, slot, Vector2(g.x + slot * 96.0, g.y))
+
+
+func _bench_chip(p: Party, slot: int, g: Vector2) -> void:
+	var f := p.slot_member(slot)
+	if f == null:
+		return
+	var usable := p.can_switch(slot) or (p.replacing and f.state != "ko")
+	var a := 1.0 if usable else 0.55
+	_rect(g, Vector2(93, 14), Color(PANEL_DARK, 0.85 * a + 0.1))
+	_member_icon(p, f, g, 14.0)
+	var pl := _p_log()
+	var key := Controls.glyph("switch%d" % (slot + 1))
+	_text(Vector2(g.x + 16, g.y) * _s, key, pl, Color(GOLD, a))
+	_text(Vector2(g.x + 19 + _text_width(key, pl) / _s, g.y) * _s, tr(f.data.display_name), pl, Color(INK, a))
+	var right := Vector2(g.x + 91, g.y) * _s
+	if f.state != "ko":
+		if p.locked_for(f) > 0.0 and not p.replacing:
+			_text(right, "%d" % ceilf(p.locked_for(f)), pl, INK, 1)
+		elif f.status != "":
+			_text(right, tr(STATES[f.status][1]), pl, Status.COLOR[f.status], 1)
+		elif float(p.rules.bench_heal) > 0.0 and f.hp < f.hp_max:
+			_text(right, "+", pl, Color("7fd65b"), 1)
+	var share := clampf(f.hp / f.hp_max, 0.0, 1.0)
+	_rect(Vector2(g.x + 15, g.y + 11), Vector2(77, 2), Color(0, 0, 0, 0.6))
+	_rect(Vector2(g.x + 15, g.y + 11), Vector2(77.0 * share, 2), _hp_color(share))
+
+
+## Over a Pokémon going back to its ball: how far along it is, for both sides to read. Your
+## own also says who is coming; the rival's only that someone is.
+func _recall_bar(p: Party) -> void:
+	var cam: Camera3D = main.get_viewport().get_camera_3d()
+	var f := p.active
+	var up: Vector3 = f.global_position + Vector3.UP * (f.data.height + 0.75)
+	if cam == null or cam.is_position_behind(up):
+		return
+	var c := cam.unproject_position(up) / _s
+	_rect(Vector2(c.x - 21, c.y - 2), Vector2(42, 5), PANEL_DARK)
+	_rect(Vector2(c.x - 20, c.y - 1), Vector2(40.0 * p.recall_share(), 3), GOLD)
+	var mine: bool = main.player != null and main.player.party == p
+	var line: String = tr("%s, go!") % tr(p.pending.data.display_name) if mine else tr("Switching!")
+	_text(Vector2(c.x, c.y - 11) * _s, line, _p_log(), GOLD, 0)
+
+
+## After a KO, while the next one is yours to pick: a card per Pokémon left, with its button,
+## face and HP, and the time you have as a bar that runs out.
+func _next_prompt(p: Party, gw: float, gh: float) -> void:
+	if p.alive_count() < 2:
+		return
+	var w := 214.0
+	var x := gw * 0.5 - w * 0.5
+	var y := gh * 0.2
+	_rect(Vector2(x, y), Vector2(w, 54), Color(PANEL_DARK, 0.92))
+	_rect(Vector2(x, y), Vector2(w, 2), GOLD)
+	_text(Vector2(gw * 0.5, y + 5) * _s, tr("Pick your next Pokémon"), _s, INK, 0)
+	for slot in 2:
+		var f := p.slot_member(slot)
+		var card := Vector2(x + 4 + slot * 104.0, y + 18)
+		_rect(card, Vector2(102, 26), Color(1, 1, 1, 0.07))
+		if f == null:
+			continue
+		_member_icon(p, f, card + Vector2(1, 1), 24.0)
+		var a := 1.0 if f.state != "ko" else 0.4
+		var pl := _p_log()
+		var key := Controls.glyph("switch%d" % (slot + 1))
+		_text((card + Vector2(28, 2)) * _s, key, pl, Color(GOLD, a))
+		_text((card + Vector2(31 + _text_width(key, pl) / _s, 2)) * _s, tr(f.data.display_name), pl, Color(INK, a))
+		var share := clampf(f.hp / f.hp_max, 0.0, 1.0)
+		_rect(card + Vector2(28, 16), Vector2(70, 4), Color(0, 0, 0, 0.6))
+		_rect(card + Vector2(28, 16), Vector2(70.0 * share, 4), _hp_color(share))
+	_rect(Vector2(x + 4, y + 48), Vector2((w - 8.0) * clampf(p.replace_t / float(p.rules.ko_choice), 0.0, 1.0), 2), GOLD)
+
+
 ## Swords Dance: over the boosted Pokémon, two crossed blades and a gold bar with the time
 ## left, with a notch per boosted hit still to come.
 func _boost_bar(f: Fighter) -> void:
@@ -501,6 +686,8 @@ func _pause_menu(_gw: float, _gh: float) -> void:
 		[Controls.glyph("lock_on"), tr("Lock on")],
 		["%s %s %s %s" % [Controls.glyph("mov1"), Controls.glyph("mov2"), Controls.glyph("mov3"), Controls.glyph("mov4")], tr("Moves")],
 	]
+	if not main.parties.is_empty():
+		rows.append(["%s %s" % [Controls.glyph("switch1"), Controls.glyph("switch2")], tr("Switch Pokémon")])
 	var y := 360.0
 	for r in rows:
 		var gw := maxf(u.width(r[0], 28.0, u.heavy) + 24.0, 48.0)
@@ -556,6 +743,12 @@ func _opening_cards() -> void:
 		u.text_fit(px, y + 104.0, tr("sends out %s!") % tr(f.data.display_name), w - 420.0, 30.0, Color(UiKit.INK, 0.9), u.bold)
 		for i in f.data.types.size():
 			u.type_icon(f.data.types[i], px + i * 46.0, y + 146.0, 40.0)
+		# A 3 vs 3: both teams are in the open from the start.
+		if f.party:
+			for i in [1, 2]:
+				var mate := _portrait_of(side, f.party.members[i].species)
+				if mate:
+					u.tex(mate, px + 110.0 + (i - 1) * 62.0, y + 140.0, 56.0, 56.0)
 
 
 ## "START" when you can move: a thin band across the upper part, gone within a second.
@@ -593,6 +786,8 @@ func _result_screen(_gw: float, _gh: float) -> void:
 	u.title(960.0, 262.0, title.to_upper(), 150.0, UiKit.INK, 0, 1600.0)
 	if winner and main.player:
 		u.text(960.0, 500.0, tr("%s wins!") % tr(winner.data.display_name), 36.0, Color(UiKit.INK, 0.85 * k), u.bold, 0)
+	if winner and winner.party:
+		u.text(960.0, 546.0, tr("%d of %d still standing") % [winner.party.alive_count(), winner.party.members.size()], 28.0, Color(UiKit.INK, 0.7 * k), u.bold, 0)
 	if main._end_t < main.CHOICES_AT:
 		return
 	var k2 := UiKit.ease((main._end_t - main.CHOICES_AT) / 0.3)

@@ -8,7 +8,8 @@ extends RefCounted
 ## block so nothing spills out.
 
 const ITEM_COLOR := {"combat": UiKit.RED, "online": UiKit.GREEN, "training": UiKit.ORANGE, "moves": UiKit.BLUE,
-	"options": UiKit.GREY, "quit": Color("3a3a42"), "profile": Color("6a4bb8"), "create": UiKit.GREEN, "join": UiKit.BLUE, "back": UiKit.GREY}
+	"options": UiKit.GREY, "quit": Color("3a3a42"), "profile": Color("6a4bb8"), "create": UiKit.GREEN, "join": UiKit.BLUE, "back": UiKit.GREY,
+	"1v1": UiKit.RED, "3v3": UiKit.BLUE}
 ## Tiles of the main menu and the online menu: [x, y, w, h] in the 1920 × 1080 space.
 ## Tiles of the main menu and the online menu: [x, y, w, h] in the 1920 × 1080 space, x
 ## measured on the wall's base line (TILE_BASE). All their sides lean on that same line, so
@@ -76,6 +77,10 @@ func draw(h: Hud) -> void:
 			_header(tr("Online"), UiKit.GREEN)
 			_tiles(Menu.ONLINE, ONLINE_TILES)
 			u.hints([[Controls.glyph("jump"), tr("Select")], [Controls.glyph("menu_back"), tr("Back")]])
+		"format":
+			_header(tr("Format"), ITEM_COLOR.get(Menu.FORMATS[m.cursor][0], UiKit.RED))
+			_tiles(Menu.FORMATS, ONLINE_TILES)
+			u.hints([[Controls.glyph("jump"), tr("Select")], [Controls.glyph("menu_back"), tr("Back")]])
 		"waiting":
 			_waiting()
 		"connecting":
@@ -90,6 +95,8 @@ func draw(h: Hud) -> void:
 			_moves()
 		"options":
 			_options()
+		"rules":
+			_rules()
 		"profile":
 			_profile()
 		"vs":
@@ -177,13 +184,19 @@ func _tile_art(id: String, x: float, y: float, w: float, _hgt: float, o: float) 
 			u.tex(m.render("menu_b", m.choice.p2, Vector2i(300, 340), -0.5), _tile_x(x, y + 230.0) + 10.0, y + 60.0, 300.0, 340.0, Color(1, 1, 1, 0.35 + 0.65 * o))
 			u.tex(m.render("menu_a", m.choice.p1, Vector2i(420, 470), 0.5), _tile_x(x, y + 300.0) + w - 430.0, y + 10.0, 420.0, 470.0)
 		"online":
-			u.title(_tile_x(x, y + 120.0) + w - 50.0, y + 20.0, "1 VS 1", 110.0, Color(1, 1, 1, 0.14), 1)
+			u.title(_tile_x(x, y + 120.0) + w - 50.0, y + 20.0, "VS", 110.0, Color(1, 1, 1, 0.14), 1)
 		"moves":
 			var lo := Loadout.saved(m.choice.p1)
 			var ix := _tile_x(x, y + 90.0) + w - 70.0
 			for mv in lo.moves:
 				u.type_icon(Moves.DATA[mv].type, ix - 10.0, y + 30.0, 56.0, 0.5 + 0.5 * o)
 				ix -= 66.0
+		"1v1":
+			u.tex(m.render("format_a", m.choice.p1, Vector2i(420, 470), 0.5), _tile_x(x, y + 300.0) + w - 430.0, y + 10.0, 420.0, 470.0)
+		"3v3":
+			var trio := m.team_ids(0, m.choice.p1)
+			for n in trio.size():
+				u.tex(m.render("format_b%d" % n, trio[n], Vector2i(280, 320), 0.5), _tile_x(x, y + 260.0) + 20.0 + n * 270.0, y + 16.0, 280.0, 320.0, Color(1, 1, 1, 0.5 + 0.5 * o))
 		"create":
 			u.title(_tile_x(x, y + 150.0) + w - 50.0, y + 30.0, "7777", 120.0, Color(1, 1, 1, 0.12), 1)
 		"join":
@@ -216,7 +229,7 @@ func _card(x: float, y: float, w: float, lines: Array, col: Color) -> void:
 
 func _waiting() -> void:
 	_header(tr("Waiting for rival"), UiKit.GREEN)
-	var lines: Array = [tr("Give your friend one of these IPs:")]
+	var lines: Array = [tr("Format: %s") % tr("3 vs 3" if m.team_battle() else "1 vs 1"), tr("Give your friend one of these IPs:")]
 	var net: Net = m.main.net
 	if net and net.public_ip != "":
 		lines.append(tr("Over the internet: %s") % net.public_ip)
@@ -277,6 +290,9 @@ func _selection() -> void:
 		title = tr("Pick the rival")
 	elif m.sel_phase == "setup":
 		title = tr("Get ready")
+	if m.team_battle() and m.sel_phase != "setup":
+		var count: int = m.choice["team" if m.sel_phase == "p1" else "team2"].size()
+		title = (tr("Your team: %d of %d") if m.sel_phase == "p1" else tr("Rival's team: %d of %d")) % [count, Party.SIZE]
 	_header(title, _side_color(1 if m.sel_phase == "p2" else 0))
 	# The stage, always at hand: its picture and name, top right.
 	var st: String = m.choice.stage
@@ -296,7 +312,7 @@ func _selection() -> void:
 		items = [[Controls.glyph("menu_back"), tr("Change")]] if m.online and m.me_ready \
 			else [[Controls.glyph("jump"), tr("Choose")], [Controls.glyph("menu_back"), tr("Back")]]
 	else:
-		items = [[Controls.glyph("jump"), tr("Pick")], [Controls.glyph("menu_back"), tr("Leave") if m.online else tr("Back")]]
+		items = [[Controls.glyph("jump"), tr("Pick or take out") if m.team_battle() else tr("Pick")], [Controls.glyph("menu_back"), tr("Leave") if m.online else tr("Back")]]
 		if m.online and m.main.net and m.main.net.host:
 			items.push_front([Controls.glyph("mov2"), tr("Stage")])
 	if m.online and m.main.net:
@@ -335,6 +351,12 @@ func _wall(list: Array, setup: float) -> void:
 		if o > 0.01:
 			u.rect(x - 4.0, y - 6.0 * o, tw + 5.0, 6.0 * o, picker)
 		var tx := x + 6.0
+		if m.team_battle():
+			if sp in m.choice.team:
+				tx = _token(tx, y + 8.0, "1P", UiKit.RED)
+			if sp in m.choice.team2:
+				_token(tx, y + 8.0, "2P" if m.online else "CPU", UiKit.BLUE if m.online else UiKit.GREY)
+			continue
 		if sp == m.choice.p1 and (m.sel_phase != "p1" or m.me_ready):
 			tx = _token(tx, y + 8.0, "1P", UiKit.RED)
 		if not m.online and sp == m.choice.p2 and m.sel_phase == "setup":
@@ -351,7 +373,7 @@ func _token(x: float, y: float, label: String, col: Color) -> float:
 
 
 ## The battle's options, in place of the wall once both are picked: the stage's picture
-## with a line about it, and the options as tabs (stage, difficulty, edit moves, fight).
+## with a line about it, and the options as tabs (stage, difficulty, rules, edit moves, fight).
 func _setup_bar(setup: float) -> void:
 	var y := lerpf(-260.0, 150.0, UiKit.ease(setup))
 	var st: String = m.choice.stage
@@ -382,6 +404,9 @@ func _setup_bar(setup: float) -> void:
 			"diff":
 				sub = tr("Difficulty")
 				label = tr(Menu.DIFFICULTY_NAME[m.choice.diff])
+			"rules":
+				sub = tr("3 vs 3")
+				label = tr("Rules")
 			"build":
 				sub = tr("Moves and ability")
 				label = tr("Edit Pokémon")
@@ -401,6 +426,10 @@ func _setup_bar(setup: float) -> void:
 			u.title(u.edge(bx, y, 200.0, ly + 50.0) + 20.0, ly, label.to_upper(), 46.0, ink, -1, tw - 80.0)
 		if it == "stage":
 			u.para(u.edge(bx, y, 200.0, y + 180.0) + 22.0, y + 128.0, tr(Menu.STAGE_TEXT[st]), tw - 90.0, 19.0, Color(ink, 0.75), u.body, 1.2, 3)
+		if it == "rules":
+			var custom := BattleRules.changed(m.choice.rules).size()
+			var line := tr("Default rules") if custom == 0 else tr("%d changed") % custom
+			u.text_fit(u.edge(bx, y, 200.0, y + 150.0) + 22.0, y + 128.0, line, tw - 90.0, 19.0, Color(ink, 0.75), u.bold)
 		if it in ["stage", "diff"] and (host or it == "diff") and o > 0.01:
 			u.text(u.edge(bx, y, 200.0, y + 30.0) + tw - 30.0, y + 18.0, "^", 24.0, Color(ink, o), u.heavy, 1)
 			u.text(u.edge(bx, y, 200.0, y + 190.0) + tw - 30.0, y + 160.0, "v", 24.0, Color(ink, o), u.heavy, 1)
@@ -410,6 +439,9 @@ func _setup_bar(setup: float) -> void:
 ## little over the top, the name huge at the bottom, its ability and its four moves with
 ## their type symbol on the right. Online the rival's card says whether it is ready.
 func _player_card(side: int) -> void:
+	if m.team_battle():
+		_team_card(side)
+		return
 	var left := side == 0
 	var col := _side_color(side)
 	var k := UiKit.ease((m.enter_t - 0.08 * side) / 0.4)
@@ -454,6 +486,78 @@ func _player_card(side: int) -> void:
 	if not left and m.online and m.rival_ready:
 		u.slant(x + w - 240.0, y + 30.0, 190.0, 54.0, UiKit.YELLOW)
 		u.title(x + w - 214.0, y + 36.0, tr("Ready").to_upper(), 38.0, UiKit.DARK, -1, 150.0)
+
+
+## A 3 vs 3's side: the same card split in three, one Pokémon in each with all a pick shows in a
+## 1 vs 1: its model, name, types, ability and moves. While its side is picking, whoever the
+## cursor is on shows in the next free slot, marked as not picked yet.
+func _team_card(side: int) -> void:
+	var left := side == 0
+	var col := _side_color(side)
+	var k := UiKit.ease((m.enter_t - 0.08 * side) / 0.4)
+	var x := (70.0 if left else 990.0) + (1.0 - k) * (-900.0 if left else 900.0)
+	var y := 400.0
+	var w := 860.0
+	var hgt := 600.0
+	u.slant(x, y, w, hgt, col)
+	u.slant(x + 16.0, y + 16.0, w - 32.0, hgt - 32.0, col.darkened(0.3))
+	u.stripes(x + 30.0, y + 16.0, w - 60.0, hgt - 32.0, Color(1, 1, 1, 0.035), 44.0)
+	var picks: Array = m.choice["team" if left else "team2"]
+	var picking: bool = m.sel_phase == ("p1" if left else "p2")
+	var cw := (w - 44.0) / Party.SIZE
+	for i in Party.SIZE:
+		var sp: String = picks[i] if i < picks.size() else ""
+		var preview := false
+		if sp == "" and picking and i == picks.size() and not m.team_preview in picks:
+			sp = m.team_preview
+			preview = sp != ""
+		var cx := x + 22.0 + i * cw
+		_team_slot(side, i, sp, preview, picking, cx, y, cw - 6.0, hgt, col)
+	# Online the rival's team stays hidden until both are ready: only how far along it is.
+	if not left and m.online:
+		var ready: bool = m.rival_ready
+		var line: String = tr("Ready") if ready else tr("Picking: %d of %d") % [m.rival_count, Party.SIZE]
+		u.slant(x + w - 360.0, y + 34.0, 300.0, 54.0, UiKit.YELLOW if ready else UiKit.DARK)
+		u.title(x + w - 336.0, y + 40.0, line.to_upper(), 38.0, UiKit.DARK if ready else UiKit.INK, -1, 250.0)
+
+
+func _team_slot(side: int, i: int, sp: String, preview: bool, picking: bool, cx: float, y: float, cw: float, hgt: float, col: Color) -> void:
+	var edge := func(py: float) -> float: return u.edge(cx, y, hgt, py)
+	u.slant(edge.call(y + hgt - 22.0), y + 22.0, cw, hgt - 44.0, Color(0, 0, 0, 0.3 if preview else 0.2))
+	if preview:
+		u.slant(edge.call(y + 30.0), y + 22.0, cw, 8.0, Color(col, 0.9))
+	if sp == "":
+		u.title(edge.call(y + 300.0) + cw * 0.5, y + 230.0, "?", 110.0, Color(UiKit.INK, 0.25), 0)
+		return
+	if not preview and picking:
+		zone("tslot", side * Party.SIZE + i, edge.call(y + hgt - 22.0), y + 22.0, cw + (hgt - 44.0) * UiKit.SLANT, hgt - 44.0)
+	var data: Dictionary = Roster.POKEMON[sp]
+	var fade := 0.7 if preview else 1.0
+	u.tex(m.render("team%d_%d" % [side, i], sp, Vector2i(260, 260), 0.5 if side == 0 else -0.5), edge.call(y + 200.0) - 6.0, y + 40.0, 260.0, 260.0, Color(1, 1, 1, fade))
+	if i == 0:
+		_token(edge.call(y + 60.0) + 8.0, y + 30.0, tr("Lead"), UiKit.DARK)
+	# Name, types, ability.
+	u.title(edge.call(y + 340.0) + 14.0, y + 296.0, tr(data.display_name).to_upper(), 36.0, Color(UiKit.INK, fade), -1, cw - 50.0)
+	var tx: float = edge.call(y + 360.0) + 12.0
+	for t in data.types:
+		u.type_icon(t, tx, y + 338.0, 26.0)
+		tx += 30.0
+	var lo := _loadout_of(side, sp)
+	u.text_fit(tx + 6.0, y + 340.0, tr(Loadout.ability(sp, lo.ability).display_name), cw - (tx - edge.call(y + 360.0)) - 40.0, 20.0, Color(UiKit.INK, fade), u.heavy)
+	# Its four moves.
+	for n in lo.moves.size():
+		var d: Dictionary = Moves.DATA[lo.moves[n]]
+		var my: float = y + 374.0 + n * 48.0
+		var rx: float = edge.call(my + 42.0) + 8.0
+		u.slant(rx, my, cw - 18.0, 42.0, Color(0, 0, 0, 0.28))
+		u.type_icon(d.type, rx + 10.0, my + 6.0, 30.0)
+		u.text_fit(rx + 46.0, my + 9.0, tr(d.display_name), cw - 76.0, 22.0, Color(UiKit.INK, fade), u.bold)
+
+
+func _loadout_of(side: int, sp: String) -> Dictionary:
+	if side == 0:
+		return m.main.my_loadout(sp)
+	return Loadout.valid(sp, m.rival_loadouts.get(sp, {})) if m.online else Loadout.default_for(sp)
 
 
 func _loadout(side: int) -> Dictionary:
@@ -683,6 +787,40 @@ func _options() -> void:
 	u.slant(1260.0, 150.0, 14.0, 330.0, UiKit.RED, UiKit.TALL)
 	u.para(1320.0, 186.0, cur.get("help", ""), 500.0, 26.0, UiKit.INK, u.bold, 1.3, 8)
 	u.hints([[Controls.glyph("jump"), tr("Change")], [tr("< >"), tr("Adjust")], [Controls.glyph("menu_back"), tr("Back")]])
+
+
+# ---------------------------------------------------------------- this battle's rules
+
+func _rules() -> void:
+	_header(tr("Rules"), UiKit.RED)
+	var items: Array = m.rules_items()
+	var y := 150.0
+	var shown := 0
+	for i in range(m.rules_top, items.size()):
+		if shown >= Menu.RULES_ROWS:
+			break
+		shown += 1
+		var it: Dictionary = items[i]
+		if it.kind == "header":
+			u.title(84.0, y + 18.0, it.label.to_upper(), 34.0, UiKit.YELLOW)
+			y += 66.0
+			continue
+		var o := on("rule" + it.id, i == m.rules_cursor)
+		u.slant(70.0 + 16.0 * o, y, 1100.0, 60.0, UiKit.PANEL.lerp(UiKit.RED, o))
+		zone("rule", i, 70.0, y, 1100.0 + 60.0 * UiKit.SLANT, 60.0)
+		u.text_fit(110.0 + 16.0 * o, y + 14.0, it.label, 680.0, 28.0, UiKit.INK, u.bold)
+		# A rule off its default stands out, for everyone to see what this battle changes.
+		u.text_fit(1150.0 + 16.0 * o, y + 14.0, it.value, 320.0, 28.0, UiKit.YELLOW if it.get("changed", false) else UiKit.INK, u.heavy, 1)
+		y += 68.0
+	var cur: Dictionary = items[mini(m.rules_cursor, items.size() - 1)]
+	u.slant(1260.0, 150.0, 600.0, 330.0, UiKit.PANEL, UiKit.TALL)
+	u.slant(1260.0, 150.0, 14.0, 330.0, UiKit.RED, UiKit.TALL)
+	u.para(1320.0, 186.0, cur.get("help", ""), 500.0, 26.0, UiKit.INK, u.bold, 1.3, 8)
+	if m.rules_editable():
+		u.hints([[tr("< >"), tr("Adjust")], [Controls.glyph("menu_back"), tr("Back")]])
+	else:
+		u.text(1320.0, 500.0, tr("The host sets the rules."), 26.0, UiKit.YELLOW, u.bold)
+		u.hints([[Controls.glyph("menu_back"), tr("Back")]])
 
 
 # ---------------------------------------------------------------- VS

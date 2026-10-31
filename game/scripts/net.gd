@@ -1,11 +1,17 @@
 class_name Net
 extends Node
-## 1 vs 1 online play over IP (ENet over UDP).
+## Online play over IP (ENet over UDP): two players, 1 vs 1 or 3 vs 3.
 ##
 ## Authority: each player is in charge of their own Pokémon. Their presses run instantly
 ## on their screen; they reach the other player with the ping and move a copy there (the
 ## "remote"), which is also corrected with the real state. Whoever takes a hit decides
 ## whether it landed (if they dodged on their screen, it did not) and tells the attacker.
+## In a 3 vs 3 "local" and "remote" are whoever is out: a switch is the owner's to decide and
+## comes as reliable events (Party). Each state packet says which team member it is about, since
+## it can overtake the event: one about somebody else is dropped.
+## Each battle has its number ("battle": every start and rematch, on both copies). What comes from
+## another battle is dropped: a packet still on its way from the last one would knock out the
+## new copy of a Pokémon that fainted there.
 ##
 ## Custom packets, no RPC, to keep them small:
 ##   channel 0, unreliable, every frame: input + state of your own Pokémon
@@ -21,7 +27,7 @@ signal event(data: Dictionary)
 
 const PORT := 7777
 const ACTIONS := ["jump", "dodge", "lock_on", "mov1", "mov2", "mov3", "mov4", "descend"]
-const STATES := ["free", "action", "dodge", "stunned", "knocked_down", "lying", "get_up", "ko", "dive"]
+const STATES := ["free", "action", "dodge", "stunned", "knocked_down", "lying", "get_up", "ko", "dive", "recall", "enter"]
 const STATUSES := ["", "brn", "par", "psn", "tox", "slp", "frz"]
 const TYPES := ["normal", "fire", "water", "grass", "electric", "ice", "fighting", "poison", "ground",
 	"flying", "psychic", "bug", "rock", "ghost", "dragon", "dark", "steel", "fairy"]
@@ -36,6 +42,7 @@ var linked := false              # connected to the other player
 ## whole connection.
 var me := ""
 var in_battle := false
+var battle := 0                 # this battle's number, the same on both copies
 var local: Fighter              # your own Pokémon
 var remote: Fighter             # the rival's copy
 var frame := 0
@@ -51,6 +58,7 @@ var _seen_list := {}                # last counters received from the other play
 var _last_frame_other := -1
 var states_applied := 0       # rival states actually applied (tests and the session log)
 var _exit_t: Array = []          # [time, channel, bytes] (simulated network)
+var _reliable_leaves := 0.0      # when the last reliable packet leaves (simulated network)
 var _ping_t := 0.0
 var _pings := {}                 # id -> send time
 var _ping_id := 0
@@ -177,7 +185,12 @@ func _send(channel: int, data: PackedByteArray) -> void:
 		if channel == 0 and randf() * 100.0 < loss_sim:
 			return
 		var outbound := lag_sim * 0.5 + randf_range(-jitter_sim, jitter_sim) * 0.5
-		_exit_t.append([_t + maxf(outbound, 0.0), channel, data])
+		var leaves := _t + maxf(outbound, 0.0)
+		# The reliable channel arrives in order, as ENet's does, whatever the jitter.
+		if channel == 1:
+			leaves = maxf(leaves, _reliable_leaves)
+			_reliable_leaves = leaves
+		_exit_t.append([leaves, channel, data])
 		return
 	_put_on(channel, data)
 
@@ -275,6 +288,12 @@ func _pack() -> PackedByteArray:
 	var b := StreamPeerBuffer.new()
 	b.put_u8(P_STATE)
 	b.put_u32(frame)
+	b.put_u8(battle & 255)
+	# Its team: which member this is about, its switches and how far along the next one is.
+	var p: Party = l.party
+	b.put_u8(p.members.find(l) if p else 0)
+	b.put_u8(p.charges if p else 0)
+	b.put_u8(roundi(p.recharge_share() * 255.0) if p else 0)
 	# Input: what the copy needs to do the same.
 	b.put_float(c.move_input.x)
 	b.put_float(c.move_input.y)
@@ -318,8 +337,17 @@ func _read_state(b: StreamPeerBuffer) -> void:
 	_last_frame_other = f
 	if remote == null or not is_instance_valid(remote):
 		return
-	states_applied += 1
+	if b.get_u8() != battle & 255:
+		return   # from the battle before, or from the next one if the rival got there first
 	var r := remote
+	var member := b.get_u8()
+	var team_charges := b.get_u8()
+	var team_share := b.get_u8() / 255.0
+	if r.party:
+		if r.party.members.find(r) != member:
+			return   # about another member: the event of its switch is on its way, or went by
+		r.party.net_charges(team_charges, team_share)
+	states_applied += 1
 	var c := r.ctrl
 	c.move_input = Vector2(b.get_float(), b.get_float())
 	c.yaw = b.get_float()
