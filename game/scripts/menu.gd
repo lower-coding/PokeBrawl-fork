@@ -29,6 +29,7 @@ const STAGE_TEXT := {"night": "A Galar stadium at night, packed and walled all r
 	"floating": "A platform over the void. Whoever is pushed off the edge is out.",
 	"league": "The League's coliseum. The field closes in bit by bit: outside it you lose HP."}
 const COLUMNS := 5
+const FORM_ZONE := 10            # a wall tab's zone number: cell * this + which form
 const MAIN_MENU := [["combat", "Battle", "Against the AI. Pick your Pokémon, the rival and the difficulty."],
 	["online", "Online", "1 vs 1 or 3 vs 3 with a friend over the internet."],
 	["training", "Training", "Still or active rival, no rush. R resets, T stops or frees the rival."],
@@ -67,6 +68,7 @@ var cursor := 0
 var choice := {"p1": "pikachu", "p2": "snorlax", "diff": "normal", "mode": "combat", "stage": "night",
 	"format": "1v1", "team": [], "team2": [], "rules": BattleRules.defaults()}
 var team_preview := ""           # a 3 vs 3's pick: who the cursor is on, shown in the next slot
+var form_pick := {}              # wall Pokémon -> the form showing (in memory only)
 var rules_cursor := 1            # the Rules screen: highlighted row (0 is a heading)
 var rules_top := 0               # first row shown (it scrolls)
 var online := false
@@ -119,8 +121,73 @@ func _ready() -> void:
 	draw.m = self
 
 
-## Only those with all their moves done (the rest are half finished).
+## One entry per wall cell, as the form showing. Echoes share their base's cell.
 func pokemon_list() -> Array:
+	var list: Array = []
+	for sp in all_forms():
+		if not Roster.POKEMON[sp].has("echo_of"):
+			list.append(form_pick.get(sp, sp))
+	return list
+
+
+## The wall's cell for "sp", showing that form.
+func cell_of(sp: String) -> int:
+	if Roster.POKEMON.has(sp):
+		form_pick[Roster.base_of(sp)] = sp
+	return maxi(pokemon_list().find(sp), 0)
+
+
+## Whether a form of "sp" is on this team.
+func on_team(sp: String, team: Array) -> bool:
+	return team.any(func(o): return Roster.base_of(o) == Roster.base_of(sp))
+
+
+## The forms of "sp" that can be picked: more than one puts tabs on its cell.
+func forms_of(sp: String) -> Array:
+	var all := all_forms()
+	return Roster.forms(sp).filter(func(f): return f in all)
+
+
+## The highlighted cell shows its next form. False if it has no other.
+func _next_form() -> bool:
+	var sp: String = pokemon_list()[cursor]
+	var forms := forms_of(sp)
+	if forms.size() < 2:
+		return false
+	form_pick[Roster.base_of(sp)] = forms[(forms.find(sp) + 1) % forms.size()]
+	return true
+
+
+## The form the highlighted cell now shows takes the place of the one on the team, if any, and is
+## what this side has picked so far.
+func _form_changed() -> void:
+	var sp: String = pokemon_list()[cursor]
+	if team_battle():
+		var picks: Array = choice[_picks_key()]
+		for i in picks.size():
+			if Roster.base_of(picks[i]) == Roster.base_of(sp):
+				picks[i] = sp
+	_pick_on_wall(cursor)
+
+
+## LB / L1 / Q on the wall.
+func _flip_form() -> void:
+	if _next_form():
+		_form_changed()
+
+
+## A click on a cell's tab: that form, without picking it.
+func _click_form(cell: int, which: int) -> void:
+	var forms := forms_of(pokemon_list()[cell])
+	if which >= forms.size():
+		return
+	cursor = cell
+	form_pick[Roster.base_of(forms[which])] = forms[which]
+	_form_changed()
+
+
+## Every Pokémon and form with all its moves done (the rest are half finished).
+func all_forms() -> Array:
 	var list: Array = []
 	for sp in Roster.POKEMON:
 		var data: Dictionary = Roster.POKEMON[sp]
@@ -171,7 +238,7 @@ func _go(p: String) -> void:
 	if p == "selection":
 		me_ready = false
 		sel_phase = "p1"
-		cursor = maxi(pokemon_list().find(choice.p1), 0)
+		cursor = cell_of(choice.p1)
 		if online:
 			if rival_choice_id != "":
 				choice.p2 = rival_choice_id
@@ -195,9 +262,8 @@ func _go(p: String) -> void:
 		profile_cursor = TrainerData.ids().find(main.options.trainer)
 	elif p == "moves":
 		edit_phase = "pokemon"
-		var list := pokemon_list()
-		cursor = maxi(list.find(choice.p1), 0)
-		edit_sp = list[cursor]
+		cursor = cell_of(choice.p1)
+		edit_sp = pokemon_list()[cursor]
 	elif p != "vs":
 		_free_renders()
 
@@ -526,6 +592,8 @@ func setup_items() -> Array:
 
 
 func _selection() -> void:
+	if sel_phase != "setup" and _pressed("mov1"):
+		_flip_form()
 	var list := pokemon_list()
 	var n := list.size()
 	var host: bool = online and main.net != null and main.net.host
@@ -554,7 +622,7 @@ func _selection() -> void:
 		choice[sel_phase] = list[cursor]
 		if sel_phase == "p1" and not online:
 			sel_phase = "p2"
-			cursor = maxi(list.find(choice.p2), 0)
+			cursor = cell_of(choice.p2)
 		else:
 			_to_setup()
 	elif _pressed("menu_back"):
@@ -568,7 +636,7 @@ func _selection() -> void:
 				_go("online"))
 		elif sel_phase == "p2":
 			sel_phase = "p1"
-			cursor = maxi(list.find(choice.p1), 0)
+			cursor = cell_of(choice.p1)
 		else:
 			_go("main")
 
@@ -629,7 +697,7 @@ func _setup_input(list: Array) -> void:
 				var keep := sel_phase
 				_go("moves")
 				edit_sp = choice.p1
-				cursor = maxi(list.find(edit_sp), 0)
+				cursor = cell_of(edit_sp)
 				edit_slot = 0
 				# A 3 vs 3 has three to edit: from the list of Pokémon.
 				edit_phase = "pokemon" if team_battle() else "slots"
@@ -649,7 +717,7 @@ func _setup_input(list: Array) -> void:
 			_last_pick_back(list)
 			send_choice()
 		else:
-			cursor = maxi(list.find(choice[sel_phase]), 0)
+			cursor = cell_of(choice[sel_phase])
 
 
 # ---------------------------------------------------------------- picking a team
@@ -660,11 +728,11 @@ func team_battle() -> bool:
 
 
 ## A whole team for "side": its lead, the picks, then whoever comes next in the roster until it
-## is full. No species twice on a team.
+## is full. No species twice on a team, and no two forms of one.
 func team_ids(side: int, lead: String) -> Array:
 	var ids: Array = [lead]
 	for sp in choice["team" if side == 0 else "team2"] + pokemon_list():
-		if ids.size() < Party.SIZE and Roster.POKEMON.has(sp) and not sp in ids:
+		if ids.size() < Party.SIZE and Roster.POKEMON.has(sp) and not on_team(sp, ids):
 			ids.append(sp)
 	return ids
 
@@ -673,12 +741,19 @@ func _picks_key() -> String:
 	return "team" if sel_phase == "p1" else "team2"
 
 
-## Pressed on the wall: adds the Pokémon to the team, or takes it out if it was already in. The
-## third pick moves on: to the rival's team, then to the battle's options.
+## Pressed on the wall: adds the Pokémon to the team, or takes it out if it was already in. Its
+## other form on the team is swapped for this one. The third pick moves on: to the rival's team,
+## then to the battle's options.
 func _team_pick(sp: String) -> void:
 	var picks: Array = choice[_picks_key()]
 	if sp in picks:
 		picks.erase(sp)
+		send_choice()
+		return
+	if on_team(sp, picks):
+		for i in picks.size():
+			if Roster.base_of(picks[i]) == Roster.base_of(sp):
+				picks[i] = sp
 		send_choice()
 		return
 	picks.append(sp)
@@ -690,9 +765,8 @@ func _team_pick(sp: String) -> void:
 		_to_setup()
 	elif sel_phase == "p1":
 		sel_phase = "p2"
-		var list := pokemon_list()
-		cursor = maxi(list.find(choice.p2), 0)
-		team_preview = list[cursor]
+		cursor = cell_of(choice.p2)
+		team_preview = pokemon_list()[cursor]
 	else:
 		_to_setup()
 
@@ -712,7 +786,7 @@ func _team_back() -> void:
 ## The last pick of whoever is picking comes off the team, with the cursor on it.
 func _last_pick_back(list: Array) -> void:
 	var sp: String = choice[_picks_key()].pop_back()
-	cursor = maxi(list.find(sp), 0)
+	cursor = cell_of(sp)
 	team_preview = sp
 	send_choice()
 
@@ -940,6 +1014,11 @@ func _edit_moves() -> void:
 		return
 	match edit_phase:
 		"pokemon":
+			if _pressed("mov1") and _next_form():
+				_sound("move")
+				edit_sp = pokemon_list()[cursor]
+				main.audio.cry(edit_sp, main.camera.global_position, 1.0, -22.0)
+				return
 			var before := cursor
 			cursor = _cycle(cursor, n)
 			if cursor != before:
@@ -995,7 +1074,7 @@ func _edit_moves() -> void:
 ## Pokémon, the one being edited from its slots or a slot's options.
 func ask_restore() -> void:
 	if restore_all():
-		if pokemon_list().all(Loadout.is_default):
+		if all_forms().all(Loadout.is_default):
 			_sound("back")
 			return
 		ask(tr("Restore every Pokémon's default moves and abilities?"), func(): Loadout.restore())
@@ -1022,7 +1101,7 @@ func _leave_moves() -> void:
 		choice = keep
 		sel_phase = "setup"
 		setup_cursor = setup_items().find("build")
-		cursor = maxi(pokemon_list().find(choice.p1), 0)
+		cursor = cell_of(choice.p1)
 		if online:
 			send_choice()
 	else:
@@ -1098,7 +1177,7 @@ func room_settings(d: Dictionary) -> void:
 	sel_phase = "p1"
 	team_preview = choice.p1
 	if is_open and screen == "selection":
-		cursor = maxi(pokemon_list().find(choice.p1), 0)
+		cursor = cell_of(choice.p1)
 		send_choice()
 
 
@@ -1111,9 +1190,9 @@ func rival_team_choice(d: Dictionary) -> void:
 		return
 	var seen := {}
 	for sp in team:
-		if not sp is String or not Roster.POKEMON.has(sp) or seen.has(sp):
+		if not sp is String or not Roster.POKEMON.has(sp) or seen.has(Roster.base_of(sp)):
 			return
-		seen[sp] = true
+		seen[Roster.base_of(sp)] = true
 	rival_team = team
 	var loadouts = d.get("loadouts", {})
 	rival_loadouts = loadouts if loadouts is Dictionary else {}
@@ -1207,7 +1286,7 @@ func _free_renders() -> void:
 ## Grid icons: each Pokémon rendered once to a texture.
 func _generate_portraits() -> void:
 	_generating = true
-	for sp in pokemon_list():
+	for sp in all_forms():
 		var vp := SubViewport.new()
 		vp.own_world_3d = true
 		vp.transparent_bg = true
@@ -1334,6 +1413,8 @@ func _mouse(ev: InputEvent) -> void:
 				ask_restore()
 			"tslot":
 				_remove_pick(z.i / Party.SIZE, z.i % Party.SIZE)
+			"form":
+				_click_form(z.i / FORM_ZONE, z.i % FORM_ZONE)
 			"mvp":
 				_click_moves_pokemon(z.i)
 			"slot":
@@ -1404,6 +1485,10 @@ func _hover(z: Dictionary) -> void:
 		"wall":
 			if screen == "selection" and sel_phase != "setup" and z.i != cursor:
 				_pick_on_wall(z.i)
+				return
+		"form":
+			if screen == "selection" and sel_phase != "setup" and z.i / FORM_ZONE != cursor:
+				_pick_on_wall(z.i / FORM_ZONE)
 				return
 		"tab":
 			if screen == "selection" and sel_phase == "setup" and not (online and me_ready):

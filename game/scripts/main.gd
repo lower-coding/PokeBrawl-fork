@@ -623,9 +623,16 @@ func _net_event(d: Dictionary) -> void:
 		"to_selection":
 			_to_selection(false)
 		"hit":
+			# A guard stopped it after all: what was predicted as landed did not (Lash Out, Sucker
+			# Punch: their short recovery is only for a hit).
+			var move: Dictionary = Moves.DATA.get(d.get("move", ""), {})
+			if net.local and net.local.action and net.local.action.id == d.get("move", "") and move.has("recovery_on_hit") and not d.get("res", "") in ["hit", "armor"]:
+				net.local.action.landed = false
 			# Confirmation from the rival: my hit landed. Number and type, like offline.
 			if fighters.size() > 1 and d.damage > 0.5:
 				vfx.number(d.point, d.damage, d.affinity)
+				if move.get("crit", false):
+					vfx.text(d.point + Vector3.UP * 1.2, tr("Critical hit!"), Color("ffb13a"))
 				if d.affinity > 1.05:
 					hud.log_entry(tr("It's super effective!"))
 				elif d.affinity < 0.95:
@@ -656,6 +663,9 @@ func _net_event(d: Dictionary) -> void:
 		"boost":
 			# The rival's Pokémon changed a stat stage: its copy here needs it for damage.
 			if net.remote and net.remote.stages.has(d.stat) and d.get("sp", net.remote.species) == net.remote.species:
+				# Its Lash Out is worked out here, so the fresh drop has to be known too.
+				if int(d.stages) < int(net.remote.stages[d.stat]):
+					net.remote.lowered_t = Fighter.LOWERED_T
 				net.remote.stages[d.stat] = int(d.stages)
 		"rematch":
 			rematch()

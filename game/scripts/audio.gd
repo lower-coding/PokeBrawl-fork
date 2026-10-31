@@ -57,6 +57,9 @@ const COBBLEMON := {
 	"waterpulse": ["waterpulse", "waterpulse_actor"], "waterpulse_hit": ["waterpulse", "waterpulse_target"],
 	"mudshot": ["mudbomb", "mudbomb_actor"], "mudshot_hit": ["mudbomb", "mudbomb_target"],
 	"acidspray": ["acidspray", "acidspray_actor"], "acidspray_hit": ["acidspray", "acidspray_target"],
+	"wickedblow_hit": ["crunch", "crunch_target"], "protect": ["protect", "protect_actor"], "bulkup": ["nastyplot", "nastyplot_actor"],
+	"surgingstrikes": ["waterpulse", "waterpulse_actor"], "surgingstrikes_hit": ["watergun", "watergun_target"],
+	"chillingwater": ["watergun", "watergun_actor"], "chillingwater_hit": ["watergun", "watergun_target"],
 }
 
 var main: Node

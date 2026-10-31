@@ -12,9 +12,12 @@ extends RefCounted
 ## A hit that is only part of a use (a stream tick, one of two swipes) deals its share
 ## (Moves.DATA "split", "power_at"). The weather changes it too (Weather: sun, rain, sand,
 ## snow; Solar Power).
+## A move with "crit" is always a critical hit, as in the games: ×1.5, ignoring the user's
+## lowered attack and the target's raised defense.
 
 const BATTLE_LENGTH := 4.2
 const STAB := 1.5
+const CRIT := 1.5
 const ROLL := 0.925
 
 
@@ -29,8 +32,14 @@ static func dealt(g: Hit, attacker: Fighter, target: Fighter, affinity: float) -
 	if power <= 0.0 or attacker == null or not attacker.data.has("stats") or not target.data.has("stats"):
 		return g.damage * affinity * g.bonus
 	var physical := g.cat == "physical"
-	var atk: float = (attacker.data.stats.atk if physical else attacker.data.stats.spa) * attacker.stage_mult("atk" if physical else "spa")
-	var def: float = (target.data.stats.def if physical else target.data.stats.spd) * target.stage_mult("def" if physical else "spd")
+	var crit: bool = d.get("crit", false)
+	var atk_stage: float = attacker.stage_mult("atk" if physical else "spa")
+	var def_stage: float = target.stage_mult("def" if physical else "spd")
+	if crit:
+		atk_stage = maxf(atk_stage, 1.0)
+		def_stage = minf(def_stage, 1.0)
+	var atk: float = (attacker.data.stats.atk if physical else attacker.data.stats.spa) * atk_stage
+	var def: float = (target.data.stats.def if physical else target.data.stats.spd) * def_stage
 	# A burn halves physical moves (not Facade), as in the games.
 	if physical and attacker.status == "brn" and d.get("power_by", "") != "status":
 		atk *= 0.5
@@ -42,6 +51,8 @@ static func dealt(g: Hit, attacker: Fighter, target: Fighter, affinity: float) -
 	var base := (22.0 * power * atk / def) / 50.0 + 2.0
 	if d.type in attacker.types:
 		base *= STAB
+	if crit:
+		base *= CRIT
 	var share: float = g.damage / maxf(float(d.get("power_at", d.get("damage", g.damage))), 0.01)
 	if w:
 		base *= w.type_mult(d.type)
@@ -63,5 +74,8 @@ static func power_of(d: Dictionary, attacker: Fighter, target: Fighter) -> float
 		return 40.0
 	# Facade: twice the power while the user is burned, poisoned or paralyzed.
 	if d.get("power_by", "") == "status" and attacker and attacker.has_status():
+		return float(d.get("power", 0)) * 2.0
+	# Lash Out: twice the power while a stat drop is fresh (Fighter.lowered_t).
+	if d.get("power_by", "") == "lowered" and attacker and attacker.lowered_t > 0.0:
 		return float(d.get("power", 0)) * 2.0
 	return float(d.get("power", 0))

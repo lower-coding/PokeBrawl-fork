@@ -44,7 +44,7 @@ def collect():
                     add(m.group(1) or m.group(2))
 
     data = read("data", "moves.gd") + read("data", "roster.gd") + read("data", "abilities.gd")
-    for field in ("display_name", "desc", "counterplay", "style", "text"):
+    for field in ("display_name", "desc", "counterplay", "style", "text", "form_name", "form_tab"):
         for m in re.finditer(r'"%s": ' % field + LIT, data):
             add(m.group(1))
     for m in re.finditer(r'"name": ' + LIT, read("data", "trainers.gd")):

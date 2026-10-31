@@ -135,6 +135,18 @@ func _ready() -> void:
 			# The mouse wheel: into the options, then two notches down move two rows.
 			_plan = [[1.5, "", ""], [1.7, "menu_accept", ""], [2.0, "move_right", ""], [2.2, "move_right", ""], [2.4, "move_down", ""],
 				[2.9, "menu_accept", ""]]
+		"menu_forms":
+			# Battle, 1 vs 1: down to Urshifu's cell (the last), the form by key and by its tab, picked;
+			# the rival, then the Moves screen and back; a 3 vs 3's team with it on.
+			_plan = [[1.5, "menu_accept", ""], [2.0, "menu_accept", ""], [2.6, "menu_accept", ""], [3.2, "move_down", ""], [3.4, "move_down", ""],
+				[3.6, "move_down", ""], [4.2, "", "forms_single"], [4.4, "mov1", ""], [5.0, "", "forms_rapid"], [5.2, "click:form:110", ""],
+				[5.8, "", "forms_tab"], [6.0, "mov1", ""], [6.4, "menu_accept", ""], [7.0, "", "forms_rival"], [7.2, "menu_accept", ""],
+				[7.8, "", "forms_setup"]]
+		"menu_forms_team":
+			# Battle, 3 vs 3: a pick, then Urshifu's cell picked and flipped on the team, in place.
+			_plan = [[1.5, "menu_accept", ""], [2.0, "menu_accept", ""], [2.4, "move_right", ""], [2.8, "menu_accept", ""], [3.4, "menu_accept", ""],
+				[3.8, "move_down", ""], [4.0, "move_down", ""], [4.2, "move_down", ""], [4.6, "menu_accept", ""], [5.2, "", "forms_team_single"],
+				[5.4, "mov1", ""], [6.0, "", "forms_team_rapid"]]
 		"menu_options":
 			# Options: from the main menu, then down a few rows.
 			_plan = [[1.5, "", ""], [1.7, "menu_accept", ""], [2.0, "move_right", ""], [2.2, "move_right", ""], [2.4, "move_down", ""],
@@ -146,6 +158,8 @@ func _ready() -> void:
 			_shots = [2.0, 4.0, 6.0, 8.0, 10.0, 12.5, 15.0, 18.0, 22.0]
 		"mechanics":
 			_mechanics()
+		"urshifu":
+			_urshifu_test()
 		"loadouts":
 			_loadouts()
 		"abilities":
@@ -254,7 +268,7 @@ func _capture(n: String) -> void:
 func _physics_process(delta: float) -> void:
 	t += delta
 	match test_name:
-		"menu", "menu_moves", "menu_options", "menu_profile", "menu_wheel", "menu_rules":
+		"menu", "menu_moves", "menu_options", "menu_profile", "menu_wheel", "menu_rules", "menu_forms", "menu_forms_team":
 			# Due steps go into a queue that _process plays one per few frames: after a slow
 			# frame several come due at once, and two presses in one frame lose one.
 			for p in _plan:
@@ -270,6 +284,14 @@ func _physics_process(delta: float) -> void:
 				_rules_outcome()
 				get_tree().quit()
 			if test_name == "menu_options" and t > 6.8:
+				get_tree().quit()
+			if test_name == "menu_forms_team" and t >= 6.4 and t - delta < 6.4:
+				var team: Array = main.menu.choice.team
+				print("%s  The flip swaps it on the team, in place  %s" % ["OK   " if team == ["pikachu", "urshifurapidstrike"] else "FAIL ", team])
+				get_tree().quit()
+			if test_name == "menu_forms" and t >= 8.2 and t - delta < 8.2:
+				var ok_forms: bool = main.menu.choice.p1 == "urshifurapidstrike"
+				print("%s  The form picked on the wall is the one chosen  %s" % ["OK   " if ok_forms else "FAIL ", main.menu.choice.p1])
 				get_tree().quit()
 			if test_name == "menu_wheel":
 				if t >= 3.6 and t - delta < 3.6:
@@ -535,7 +557,8 @@ func _loadouts() -> void:
 			var self_move: bool = kind in ["heal", "guard", "decoy", "buff"] or d.get("cat", "") == "status"
 			var hit := b.hp < hp0
 			used = used or hit or a.hp != own_hp
-			var passes := used and (hit or self_move)
+			# Sucker Punch only connects against an attack, and this rival stands still.
+			var passes: bool = used and (hit or self_move or d.get("needs_attacking", false))
 			if not passes:
 				fails += 1
 			_ok("%s with %s" % [sp, m], passes, "damage %d, %s" % [int(hp0 - b.hp), "self move" if self_move else "attack"])
@@ -1667,6 +1690,16 @@ func _mechanics() -> void:
 		main.ai.mode = "still"
 	main.set_stage(stage_before)
 	await _goodra_cases()
+	await _urshifu_cases()
+	var fails := _results.filter(func(r): return not r[1]).size()
+	print("RESULT: %d of %d" % [_results.size() - fails, _results.size()])
+	get_tree().quit()
+
+
+## Only Urshifu's cases (--test=urshifu), without the rest of the mechanics.
+func _urshifu_test() -> void:
+	await get_tree().physics_frame
+	await _urshifu_cases()
 	var fails := _results.filter(func(r): return not r[1]).size()
 	print("RESULT: %d of %d" % [_results.size() - fails, _results.size()])
 	get_tree().quit()
@@ -1791,6 +1824,324 @@ func _goodra_cases() -> void:
 	_ok("Points: cannons map to Goodra's mouth", ab[0].point("locator_cannon_left").distance_to(mouth_at) < 0.01, "%s" % mouth_at.snapped(Vector3.ONE * 0.01))
 	var low: float = absf(mouth_at.y - float(ab[0].data.height) * 0.7)
 	_ok("Mouth height: moves that use Action.mouth() leave from around its real mouth", low < 0.3, "bone %.2f m up, off by %.2f m" % [mouth_at.y, low])
+
+
+# ---------------------------------------------------------------- Urshifu
+
+## A hit of "move" from "by" on "to" right now, as Combat resolves it (the result: "hit",
+## "protected", "failed"...), without waiting for it to connect.
+func _strike(by: Fighter, to: Fighter, move: String) -> String:
+	var d: Dictionary = Moves.DATA[move]
+	var g := Hit.new()
+	g.user = by
+	g.move_id = move
+	g.type = d.type
+	g.cat = d.cat
+	g.damage = d.get("damage", 50.0)
+	g.stun = d.get("stun", 0.3)
+	g.strength = d.get("strength", 1)
+	g.contact = d.get("contact", true)
+	g.local = false
+	return main.combat.apply(g, to, to.center())
+
+
+## Damage of one whole use of "move", from the formula alone.
+func _formula(move: String, a: Fighter, b: Fighter) -> float:
+	var g := Hit.new()
+	g.user = a
+	g.move_id = move
+	g.type = Moves.DATA[move].type
+	g.cat = Moves.DATA[move].cat
+	g.damage = Moves.DATA[move].damage
+	return Damage.dealt(g, a, b, 1.0)
+
+
+## Presses "slot" and returns how long until it is free again.
+func _time_to_free(a: Fighter, slot := "mov1") -> float:
+	await _wait(0.2)                 # a hit's hitstop would swallow the press
+	a.ctrl.press(slot)
+	await get_tree().physics_frame
+	a.ctrl.release(slot)
+	var t0 := t
+	while a.state == "free" and t - t0 < 0.5:
+		await get_tree().physics_frame
+	while a.state != "free" and t - t0 < 4.0:
+		await get_tree().physics_frame
+	return t - t0
+
+
+## Sets up "sp_a" with these moves against "sp_b", "dist" meters apart.
+func _with_moves(sp_a: String, moves: String, sp_b: String, dist: float) -> Array:
+	main._args["moves"] = moves
+	var ab: Array = await _setup(sp_a, sp_b, Vector3(-dist, 0, 0), Vector3(0, 0, 0))
+	main._args.erase("moves")
+	return ab
+
+
+## Urshifu: crits, Unseen Fist, the new guards and reads, its forms and the wall's single cell.
+func _urshifu_cases() -> void:
+	var single := "wickedblow,suckerpunch,closecombat,bulkup"
+	var rapid := "surgingstrikes,liquidation,chillingwater,closecombat"
+	# Crits: a raised Defense and its own lowered Attack do nothing; x1.5; a burn still halves it.
+	var ab: Array = await _setup("urshifu", "snorlax", Vector3(-3, 0, 0), Vector3(0, 0, 0))
+	var a: Fighter = ab[0]
+	var b: Fighter = ab[1]
+	var crit := _formula("wickedblow", a, b)
+	var plain := _formula("lashout", a, b)
+	_ok("Crit: x1.5 a non-crit of equal power", absf(crit / plain - 1.5) < 0.02, "%.1f vs %.1f" % [crit, plain])
+	a.stages.atk = -1
+	_ok("Crit: ignores its own lowered Attack", absf(_formula("wickedblow", a, b) - crit) < 0.01, "%.1f" % _formula("wickedblow", a, b))
+	a.stages.atk = 0
+	b.stages.def = 2
+	_ok("Crit: ignores the target's raised Defense", absf(_formula("wickedblow", a, b) - crit) < 0.01, "%.1f" % _formula("wickedblow", a, b))
+	b.stages.def = 0
+	a.stages.atk = 2
+	_ok("Crit: keeps its own raised Attack", _formula("wickedblow", a, b) > crit * 1.5, "%.1f" % _formula("wickedblow", a, b))
+	a.stages.atk = 0
+	a.status = "brn"
+	var burned := _formula("wickedblow", a, b)
+	a.status = ""
+	_ok("Crit: a burn still halves it", burned < crit * 0.6, "%.1f vs %.1f" % [burned, crit])
+	var dealt := await _one_hit("urshifu", "snorlax", "mov1", 3.0)
+	_ok("Wicked Blow: it lands for the whole formula", absf(dealt - crit) < crit * 0.15, "%.1f vs %.1f" % [dealt, crit])
+	# Surging Strikes: three blows on a still rival add up to one use.
+	ab = await _setup("urshifurapidstrike", "snorlax", Vector3(-2, 0, 0), Vector3(0, 0, 0))
+	var whole := _formula("surgingstrikes", ab[0], ab[1])
+	dealt = await _one_hit("urshifurapidstrike", "snorlax", "mov1", 2.0)
+	_ok("Surging Strikes: three blows add up to one use", absf(dealt - whole) < whole * 0.1, "%.1f vs %.1f" % [dealt, whole])
+	# Unseen Fist: contact goes through Protect and Detect; a shot does not; nor without the ability.
+	ab = await _setup("urshifu", "lucario", Vector3(-3, 0, 0), Vector3(0, 0, 0))
+	a = ab[0]
+	b = ab[1]
+	for guard in ["protect", "detect"]:
+		b.reset(Vector3(0, 0, 0), -PI * 0.5)
+		a.reset(Vector3(-3, 0, 0), PI * 0.5)
+		a.data.passive = Loadout.ability("urshifu", "unseenfist")
+		b.start(guard, "mov1")
+		await _wait(0.1)
+		var res := _strike(a, b, "wickedblow")
+		_ok("Unseen Fist: contact goes through %s" % guard, res == "hit" and b.hp < b.hp_max, "%s, HP %d/%d" % [res, b.hp, b.hp_max])
+		b.reset(Vector3(0, 0, 0), -PI * 0.5)
+		a.reset(Vector3(-3, 0, 0), PI * 0.5)
+		b.start(guard, "mov1")
+		await _wait(0.1)
+		res = _strike(a, b, "darkpulse")
+		_ok("Unseen Fist: a shot does not go through %s" % guard, res in ["protected", "detected"] and b.hp == b.hp_max, "%s, HP %d/%d" % [res, b.hp, b.hp_max])
+		b.reset(Vector3(0, 0, 0), -PI * 0.5)
+		a.reset(Vector3(-3, 0, 0), PI * 0.5)
+		a.data.passive = Loadout.ability("urshifu", "innerfocus")
+		b.start(guard, "mov1")
+		await _wait(0.1)
+		res = _strike(a, b, "wickedblow")
+		_ok("Without Unseen Fist, %s stops contact" % guard, res in ["protected", "detected"] and b.hp == b.hp_max, "%s, HP %d/%d" % [res, b.hp, b.hp_max])
+	# Protect: every blow of a flurry, and the attacker is not stunned.
+	ab = await _with_moves("urshifurapidstrike", rapid, "lucario", 2.0)
+	a = ab[0]
+	b = ab[1]
+	a.data.passive = Loadout.ability("urshifurapidstrike", "innerfocus")
+	a.ctrl.press("mov1")
+	await _wait(0.1)
+	a.ctrl.release("mov1")
+	b.start("protect", "mov1")
+	var stunned := false
+	var t0 := t
+	while t - t0 < 0.5:
+		await get_tree().physics_frame
+		stunned = stunned or a.state == "stunned"
+	_ok("Protect: stops every blow of a flurry", b.hp == b.hp_max, "HP %d/%d" % [b.hp, b.hp_max])
+	_ok("Protect: does not stun the attacker", not stunned)
+	# Counter: a physical hit costs the user its damage and the attacker double.
+	ab = await _setup("urshifu", "snorlax", Vector3(-3, 0, 0), Vector3(0, 0, 0))
+	a = ab[0]
+	b = ab[1]
+	a.start("counter", "mov1")
+	await _wait(0.15)
+	var res := _strike(b, a, "bodyslam")
+	var taken: float = a.hp_max - a.hp
+	var back: float = b.hp_max - b.hp
+	_ok("Counter: pays a physical hit back double", res == "armor" and absf(back - taken * 2.0) < 1.0, "%s, took %d, back %d" % [res, taken, back])
+	_ok("Counter: the user does not flinch, the attacker is stunned", a.state == "action" and b.state == "stunned", "%s, %s" % [a.state, b.state])
+	a.reset(Vector3(-3, 0, 0), PI * 0.5)
+	b.reset(Vector3(0, 0, 0), -PI * 0.5)
+	a.start("counter", "mov1")
+	await _wait(0.15)
+	res = _strike(b, a, "darkpulse")
+	_ok("Counter: a special hit cuts the stance, nothing comes back", res == "hit" and a.state == "stunned" and b.hp == b.hp_max, "%s, %s, HP %d/%d" % [res, a.state, b.hp, b.hp_max])
+	a.reset(Vector3(-7, 0, 0), PI * 0.5)
+	b.reset(Vector3(0, 0, 0), -PI * 0.5)
+	a.start("counter", "mov1")
+	await _wait(0.15)
+	res = _strike(b, a, "bodyslam")
+	_ok("Counter: a physical hit from beyond 5 m does not trigger it", res == "hit" and b.hp == b.hp_max, "%s, HP %d/%d" % [res, b.hp, b.hp_max])
+	a.reset(Vector3(-3, 0, 0), PI * 0.5)
+	b.reset(Vector3(0, 0, 0), -PI * 0.5)
+	a.start("counter", "mov1")
+	await _wait(0.15)
+	a.hp = 1.0
+	_strike(b, a, "bodyslam")
+	_ok("Counter: no payback on a KO", a.state == "ko" and b.hp == b.hp_max, "%s, HP %d/%d" % [a.state, b.hp, b.hp_max])
+	ab = await _setup("urshifu", "gengar", Vector3(-3, 0, 0), Vector3(0, 0, 0))
+	a = ab[0]
+	b = ab[1]
+	a.start("counter", "mov1")
+	await _wait(0.15)
+	_strike(b, a, "bodyslam")
+	_ok("Counter: Ghost types take a quarter of it", absf((b.hp_max - b.hp) - (a.hp_max - a.hp) * 0.5) < 1.0, "took %d, back %d" % [a.hp_max - a.hp, b.hp_max - b.hp])
+	# Sucker Punch: only against a rival about to deal damage.
+	ab = await _with_moves("urshifu", single.replace("wickedblow,suckerpunch", "suckerpunch,wickedblow"), "snorlax", 4.0)
+	a = ab[0]
+	b = ab[1]
+	res = _strike(a, b, "suckerpunch")
+	_ok("Sucker Punch: fails against an idle rival", res == "failed" and b.hp == b.hp_max, "%s" % res)
+	b.start("earthquake", "mov1")
+	await _wait(0.02)
+	res = _strike(a, b, "suckerpunch")
+	_ok("Sucker Punch: connects against a rival in startup", res in ["hit", "armor"] and b.hp < b.hp_max, "%s, phase %s" % [res, b.action.phase if b.action else ""])
+	b.reset(Vector3(0, 0, 0), -PI * 0.5)
+	b.start("earthquake", "mov1")
+	b.action._go_to("recovery")
+	res = _strike(a, b, "suckerpunch")
+	_ok("Sucker Punch: fails against a rival in recovery", res == "failed", "%s" % res)
+	b.reset(Vector3(0, 0, 0), -PI * 0.5)
+	b.start("bulkup", "mov1")
+	await _wait(0.02)
+	res = _strike(a, b, "suckerpunch")
+	_ok("Sucker Punch: fails against a status move", res == "failed", "%s" % res)
+	b.reset(Vector3(0, 0, 0), -PI * 0.5)
+	a.reset(Vector3(-4, 0, 0), PI * 0.5)
+	var missed := await _time_to_free(a)
+	_ok("Sucker Punch: the failure has the long recovery", missed > 1.0, "%.2f s" % missed)
+	a.reset(Vector3(-4, 0, 0), PI * 0.5)
+	b.reset(Vector3(0, 0, 0), -PI * 0.5)
+	a.cds.clear()
+	await _wait(0.2)
+	b.start("earthquake", "mov1")
+	var connected := await _time_to_free(a)
+	_ok("Sucker Punch: connecting recovers soon", connected < missed - 0.3, "%.2f s, %.2f s failing" % [connected, missed])
+	# Lash Out: doubled for 3 s after any drop.
+	ab = await _setup("urshifu", "snorlax", Vector3(-2, 0, 0), Vector3(0, 0, 0))
+	a = ab[0]
+	b = ab[1]
+	var lash: Dictionary = Moves.DATA.lashout
+	_ok("Lash Out: normal with no drop", Damage.power_of(lash, a, b) == 75.0)
+	b = await _use("goodra", "mudshot,dragonpulse,surf,icebeam", "urshifu", 8.0)
+	_ok("Lash Out: doubled after a rival's drop", b.stages.spe == -1 and Damage.power_of(lash, b, null) == 150.0, "Speed %+d, power %d" % [b.stages.spe, Damage.power_of(lash, b, null)])
+	await _wait(3.1)
+	_ok("Lash Out: normal again after 3 s", Damage.power_of(lash, b, null) == 75.0, "power %d" % Damage.power_of(lash, b, null))
+	await _use("urshifu", "closecombat,wickedblow,suckerpunch,bulkup", "snorlax", 2.0, 1.6)
+	a = main.fighters[0]
+	_ok("Lash Out: doubled after its own Close Combat", a.stages.def == -1 and Damage.power_of(lash, a, null) == 150.0, "Def %+d, power %d" % [a.stages.def, Damage.power_of(lash, a, null)])
+	await _use("urshifu", "closecombat,wickedblow,suckerpunch,bulkup", "snorlax", 14.0, 1.0)
+	a = main.fighters[0]
+	_ok("Lash Out: normal after a Close Combat that missed", a.stages.def == 0 and Damage.power_of(lash, a, null) == 75.0, "Def %+d, power %d" % [a.stages.def, Damage.power_of(lash, a, null)])
+	ab = await _with_moves("urshifu", "lashout,wickedblow,closecombat,bulkup", "snorlax", 14.0)
+	var whiff := await _time_to_free(ab[0])
+	_ok("Lash Out: a miss has the long recovery", whiff > 1.7, "%.2f s" % whiff)
+	ab = await _with_moves("urshifu", "lashout,wickedblow,closecombat,bulkup", "snorlax", 2.0)
+	var landed := await _time_to_free(ab[0])
+	_ok("Lash Out: a hit has the short recovery", landed < whiff - 0.5, "%.2f s" % landed)
+	ab = await _with_moves("urshifu", "lashout,wickedblow,closecombat,bulkup", "lucario", 2.0)
+	a = ab[0]
+	b = ab[1]
+	a.data.passive = Loadout.ability("urshifu", "innerfocus")
+	a.ctrl.press("mov1")
+	await _wait(0.45)
+	a.ctrl.release("mov1")
+	b.start("protect", "mov1")
+	var t1 := t
+	while a.state != "free" and t - t1 < 3.0:
+		await get_tree().physics_frame
+	_ok("Lash Out: a blocked hit counts as a miss", b.hp == b.hp_max and t - t1 > 1.0, "HP %d/%d, %.2f s more" % [b.hp, b.hp_max, t - t1])
+	# Bulk Up: +1 and +1; a hit during the flex gives nothing; three uses a battle.
+	ab = await _with_moves("urshifu", "bulkup,wickedblow,closecombat,suckerpunch", "snorlax", 8.0)
+	a = ab[0]
+	b = ab[1]
+	await _time_to_free(a)
+	_ok("Bulk Up: +1 Attack and +1 Defense", a.stages.atk == 1 and a.stages.def == 1, "Atk %+d, Def %+d" % [a.stages.atk, a.stages.def])
+	a.reset(Vector3(-2, 0, 0), PI * 0.5)
+	a.start("bulkup", "mov1")
+	await _wait(0.4)
+	_strike(b, a, "bodyslam")
+	await _wait(1.0)
+	_ok("Bulk Up: a hit during the flex gives nothing", a.stages.atk == 0 and a.stages.def == 0, "Atk %+d, Def %+d" % [a.stages.atk, a.stages.def])
+	a.reset(Vector3(-8, 0, 0), PI * 0.5)
+	for i in 3:
+		a.cds.clear()
+		a.energy = Fighter.ENERGY_MAX
+		await _time_to_free(a)
+	a.cds.clear()
+	a.energy = Fighter.ENERGY_MAX
+	_ok("Bulk Up: a 4th use is refused", not a.ready("bulkup") and a.stages.atk == 3, "uses left %d, Atk %+d" % [a.uses.get("bulkup", -1), a.stages.atk])
+	# Chilling Water: always -1 Attack. Liquidation: its drop, with the roll forced.
+	b = await _use("urshifurapidstrike", rapid.replace("surgingstrikes,liquidation,chillingwater", "chillingwater,surgingstrikes,liquidation"), "snorlax", 8.0)
+	_ok("Chilling Water: -1 Attack on a hit", b.stages.atk == -1 and b.hp < b.hp_max, "Atk %+d, HP %d/%d" % [b.stages.atk, b.hp, b.hp_max])
+	var liquidation: Dictionary = Moves.DATA.liquidation.duplicate(true)
+	liquidation.secondary.chance = 1.0
+	var water := Hit.new()
+	water.type = "water"
+	b.stages.def = 0
+	b._secondary(liquidation, {"hit": water}, null)
+	_ok("Liquidation: -1 Defense when the roll comes up", b.stages.def == -1, "Def %+d" % b.stages.def)
+	dealt = await _one_hit("urshifurapidstrike", "snorlax", "mov2", 4.0)
+	_ok("Liquidation: it hits", dealt > 0.0, "%.1f" % dealt)
+	# The AI: reads only when they work, guards only against what they stop.
+	ab = await _setup("urshifu", "lucario", Vector3(-3, 0, 0), Vector3(0, 0, 0))
+	var ai: AI = main.ai
+	var idle := {"state": "free", "phase": "", "action": ""}
+	_ok("AI: no Sucker Punch against an idle rival", not ai._only_if(Moves.DATA.suckerpunch.ai, idle))
+	_ok("AI: Sucker Punch against a seen attack", ai._only_if(Moves.DATA.suckerpunch.ai, {"state": "action", "phase": "startup", "action": "bodyslam"}))
+	_ok("AI: no Sucker Punch against a seen status move", not ai._only_if(Moves.DATA.suckerpunch.ai, {"state": "action", "phase": "startup", "action": "bulkup"}))
+	_ok("AI: Lash Out only while it is doubled", not ai._only_if(Moves.DATA.lashout.ai, idle))
+	_ok("AI: no Detect against Unseen Fist's contact moves", not ai._guard_fits("detect", "wickedblow") and ai._guard_fits("detect", "darkpulse"))
+	_ok("AI: Counter only against physical hits from close by", ai._guard_fits("counter", "wickedblow") and not ai._guard_fits("counter", "darkpulse"))
+	# Its forms: their own types and moves, the same ability.
+	_ok("Forms: each with its own types", Species.DATA.urshifu.types == ["fighting", "dark"] and Species.DATA.urshifurapidstrike.types == ["fighting", "water"])
+	_ok("Forms: the same stats", Species.DATA.urshifu.stats == Species.DATA.urshifurapidstrike.stats and Species.DATA.urshifu.stats.atk == 130)
+	_ok("Forms: Single Strike cannot use Surging Strikes", not "surgingstrikes" in Loadout.moves_for("urshifu") and "wickedblow" in Loadout.moves_for("urshifu"))
+	_ok("Forms: Rapid Strike cannot use Wicked Blow", not "wickedblow" in Loadout.moves_for("urshifurapidstrike") and "surgingstrikes" in Loadout.moves_for("urshifurapidstrike"))
+	var with_focus := {"moves": Roster.POKEMON.urshifu.moves, "ability": "innerfocus"}
+	_ok("Forms: Inner Focus is valid for Single Strike", Loadout.valid("urshifu", with_focus).ability == "innerfocus")
+	with_focus = {"moves": Roster.POKEMON.urshifurapidstrike.moves, "ability": "innerfocus"}
+	_ok("Forms: Inner Focus is valid for Rapid Strike", Loadout.valid("urshifurapidstrike", with_focus).ability == "innerfocus")
+	with_focus = {"moves": Roster.POKEMON.pikachu.moves, "ability": "innerfocus"}
+	_ok("Forms: Inner Focus is rejected for Pikachu", Loadout.valid("pikachu", with_focus).ability != "innerfocus")
+	# The wall: one cell, a flip changes the pick, each side keeps its form.
+	var m: Menu = main.menu
+	var keep: Dictionary = m.choice.duplicate(true)
+	var phase := m.sel_phase
+	var cursor := m.cursor
+	m.form_pick = {}
+	m.choice.format = "1v1"
+	m.sel_phase = "p1"
+	var cells := m.pokemon_list().filter(func(sp): return Roster.base_of(sp) == "urshifu")
+	_ok("Wall: one cell for Urshifu", cells == ["urshifu"], "%s" % [cells])
+	m.cursor = m.cell_of("urshifu")
+	m._pick_on_wall(m.cursor)
+	m._flip_form()
+	_ok("Wall: a flip changes the pick and the cell", m.choice.p1 == "urshifurapidstrike" and m.pokemon_list()[m.cursor] == "urshifurapidstrike", "%s" % m.choice.p1)
+	m.sel_phase = "p2"
+	m.cursor = m.cell_of("urshifu")
+	m._pick_on_wall(m.cursor)
+	m.sel_phase = "p1"
+	m.cursor = m.cell_of(m.choice.p1)
+	_ok("Wall: a side's form survives the other side picking", m.choice.p1 == "urshifurapidstrike" and m.choice.p2 == "urshifu" and m.pokemon_list()[m.cursor] == "urshifurapidstrike", "%s, %s" % [m.choice.p1, m.choice.p2])
+	m.choice.format = "3v3"
+	m.choice.team = ["pikachu", "urshifu"]
+	m.cursor = m.cell_of("urshifu")
+	m._flip_form()
+	_ok("Wall: a flip swaps it on the team, in place", m.choice.team == ["pikachu", "urshifurapidstrike"], "%s" % [m.choice.team])
+	m._team_pick("urshifurapidstrike")
+	_ok("Wall: picking the form on the team takes it out", m.choice.team == ["pikachu"], "%s" % [m.choice.team])
+	m.choice.team = ["urshifurapidstrike"]
+	var ids := m.team_ids(0, "urshifu")
+	_ok("Team: never both forms", ids.filter(func(sp): return Roster.base_of(sp) == "urshifu").size() == 1, "%s" % [ids])
+	m.rival_team_choice({"count": 3, "team": ["urshifu", "urshifurapidstrike", "pikachu"]})
+	_ok("Team: an online rival's cannot hold both forms", m.rival_team.is_empty())
+	_ok("Wall: both forms get a portrait", "urshifu" in m.all_forms() and "urshifurapidstrike" in m.all_forms())
+	m.choice = keep
+	m.sel_phase = phase
+	m.cursor = cursor
+	m.form_pick = {}
 
 
 # ---------------------------------------------------------------- trainers

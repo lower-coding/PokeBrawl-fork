@@ -196,6 +196,11 @@ also play that way. Variety and freedom.
 3. Animation test.
 4. Its new moves and abilities join the queue in section 3.
 
+**Forms** with their own moves or types (Urshifu) are one more roster entry with `echo_of`: everything
+treats them as separate Pokémon except the menus, where they share a cell (LB / L1 / Q or its tabs),
+and teams, which hold only one. **Without a Cobblemon model**, an openly licensed one compatible with
+non-commercial use can come in with its credit (`tools/import_pokemans.py`); its data still comes from Cobblemon.
+
 ---
 
 ## 6. Phases

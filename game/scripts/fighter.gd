@@ -28,6 +28,7 @@ const ENERGY_REGEN := 9.0           # per second
 const COMBO_MAX := 5
 const DODGE_DELAY := 1.1        # s from the start of a dodge until charges start refilling again
 const RECOIL := 0.85               # speed when backing away from the locked-on rival
+const LOWERED_T := 3.0              # one turn: how long Lash Out stays doubled
 
 var main: Node
 var species := "pikachu"
@@ -78,6 +79,7 @@ var steadfast_t := 0.0                 # Steadfast (Lucario)
 ## last the whole battle. Attack and Sp. Atk change damage, Defense and Sp. Def what it
 ## takes, Speed how fast it moves.
 var stages := {"atk": 0, "def": 0, "spa": 0, "spd": 0, "spe": 0}
+var lowered_t := 0.0                 # seconds left of a fresh stat drop (Lash Out)
 var _berry_used := false             # Gluttony (Snorlax)
 ## Major status condition (Status): "", "brn", "par", "psn", "tox", "slp", "frz".
 var status := ""
@@ -336,6 +338,11 @@ func attack_ceiling() -> float:
 func target_center() -> Vector3:
 	var b := aim_target()
 	return b.center() if b else center() + forward() * 3.0
+
+
+## Winding up or running a move that deals damage (Sucker Punch).
+func is_attacking() -> bool:
+	return action != null and action.d.get("cat", "status") != "status" and action.phase in ["startup", "active"]
 
 
 ## A major status condition (for Hex and Facade).
@@ -752,6 +759,7 @@ func _timers(delta: float) -> void:
 			var head: Vector3 = global_position + Vector3.UP * (data.height + 0.35)
 			main.vfx.burst("stars", head + Vector3(cos(a), 0.0, sin(a)) * (data.radius * 0.8 + 0.2), Vector3.UP, Color(0, 0, 0, 0), 0.3)
 	_flash = maxf(0.0, _flash - delta * 6.0)
+	lowered_t = maxf(0.0, lowered_t - delta)
 
 	_slow_t -= delta
 	if _slow_t <= 0.0:
@@ -1254,6 +1262,8 @@ func boost(stat: String, n: int, source := "") -> void:
 	stages[stat] = clampi(before + n, -6, 6)
 	if stages[stat] == before:
 		return
+	if n < 0:
+		lowered_t = LOWERED_T
 	var names := {"atk": tr("Attack"), "def": tr("Defense"), "spa": tr("Sp. Atk"), "spd": tr("Sp. Def"), "spe": tr("Speed")}
 	var text: String = names[stat] + (" +%d" % (stages[stat] - before) if n > 0 else " %d" % (stages[stat] - before))
 	if source != "":
@@ -1279,10 +1289,17 @@ func receive(info: Dictionary) -> String:
 			main.session.dodge(team)
 		return "dodged"
 	if action and action.has_method("intercept"):
-		var r: String = action.intercept(info)
-		if r != "":
-			return r
+		# Unseen Fist: contact moves go through Protect and Detect.
+		if action.d.get("protects", false) and g.contact and at and is_instance_valid(at) and at.data.passive.id == "unseenfist":
+			main.vfx.text(center() + Vector3.UP * 0.9, tr("Unseen Fist"), Roster.TYPE_COLOR.fighting)
+		else:
+			var r: String = action.intercept(info)
+			if r != "":
+				return r
 	var md: Dictionary = Moves.DATA.get(g.move_id, {})
+	if md.get("needs_attacking", false) and not is_attacking():
+		main.vfx.text(center() + Vector3.UP * 0.9, tr("But it failed!"), Color(0.75, 0.77, 0.85))
+		return "failed"
 	# Flinch ("flinch": chance, as in the games): a longer stun. Inner Focus does not flinch;
 	# Steadfast speeds up when it does.
 	var flinched: bool = not info.get("flow", false) and randf() < float(md.get("flinch", 0.0)) and data.passive.id != "innerfocus"
@@ -1370,6 +1387,10 @@ func receive(info: Dictionary) -> String:
 	if hp <= 0.0:
 		_die(info)
 		return "hit"
+	# Counter: it takes the hit without flinching and pays it back.
+	if action and action.has_method("took_hit") and action.took_hit(info, damage):
+		main.vfx.armor(self)
+		return "armor"
 	# Recalling, poise works as for a move; a stream's ticks only cut it, without locking.
 	if state == "recall":
 		if g.strength < int(data.get("poise", 0)) + (1 if data.passive.id == "innerfocus" else 0):
@@ -1582,6 +1603,7 @@ func enter_field() -> void:
 
 func clear_stages() -> void:
 	stages = {"atk": 0, "def": 0, "spa": 0, "spd": 0, "spe": 0}
+	lowered_t = 0.0
 
 
 ## On restarting the battle.
@@ -1612,7 +1634,7 @@ func reset(pos: Vector3, yaw: float) -> void:
 	steadfast_t = 0.0
 	translucent = 0.0
 	boosted_hits = 0
-	stages = {"atk": 0, "def": 0, "spa": 0, "spd": 0, "spe": 0}
+	clear_stages()
 	_berry_used = false
 	_goo_t = 0.0
 	cure_status(false)
@@ -1772,6 +1794,9 @@ func _process(delta: float) -> void:
 		tint_col += Vector3(0.1, 0.25, 0.35)
 	if static_mark > 0.0 and fmod(_time, 0.5) < 0.25:
 		tint_col += Vector3(0.25, 0.22, 0.0)
+	# Lash Out is doubled: red for as long as it lasts, so the rival knows to respect it.
+	if lowered_t > 0.0 and "lashout" in data.moves:
+		tint_col += Vector3(0.4, 0.05, 0.02)
 	tint_col += Vector3.ONE * appear_glow * 1.4
 	model.set_param("tint", tint_col)
 	model.visible = appear > 0.01

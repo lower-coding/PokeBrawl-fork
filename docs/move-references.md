@@ -253,6 +253,46 @@ follow. Always -2 Sp. Def, a sizzling burst, no puddle.
 
 ---
 
+## Urshifu
+Pokkén, Smash and the anime are **not researched yet** for these nine: their designs come from the
+games' rules and Cobblemon's pieces, and only Protect and Sucker Punch have pieces of their own.
+Do that before tuning their look.
+
+**Wicked Blow** · *Now:* the fist darkens, then a long lunge with the punches' sonic boom. Always crit.
+- [Games] The crit. Cobblemon: `shadowclaw_hand`, and `suckerpunch_` and `crunch_` pieces on the hit.
+
+**Surging Strikes** · *Now:* suds at its feet, three blows with hands in turn, each with a splash.
+Always crit, spread over three hits; in the games it is 25 power × 3.
+- [Games] The crit, and each blow being a contact hit. Cobblemon: `waterpulse_` and `watergun_` pieces.
+
+**Sucker Punch** · *Now:* a blink-fast dash that only connects against a rival in the startup or
+active phase of a damaging move; otherwise "But it failed!" and a long recovery.
+- [Games] Priority +1 and the failure. Cobblemon: `suckerpunch_target1`, `_targethit`, `_targetspark`.
+
+**Lash Out** · *Now:* Facade's angry charge. Double for 3 s after any stat drop, its own or the
+rival's, where in the games it is only that turn. Short recovery on a hit, a very long one on a miss.
+- [Games] The doubling. Cobblemon: `crunch_` pieces on the hit, `superfang_actorrage` from Facade.
+
+**Protect** · *Now:* a barrier that stays up through everything in its window and does not stun:
+Detect is the counter, this is the wall. Contact moves with Unseen Fist go through.
+- [Games] Stops status moves too. Cobblemon: `protect_actor1`, `_actorcolor1`, `_block`.
+
+**Counter** · *Now:* a stance: a physical hit from within 5 m deals its damage, and the attacker takes
+double and is stunned. Ghost types take a quarter (softened immunity).
+- [Games] Double the damage, physical only. Cobblemon: `closecombat_` pieces.
+
+**Bulk Up** · *Now:* a flex open to hits, +1 Attack and +1 Defense at its end, three times a battle
+(no limit in the games: nothing resets stages in 1 vs 1). Close Combat's aura and `stars`.
+
+**Liquidation** · *Now:* a slower, stronger dash than Aqua Jet, with suds first. 20% -1 Defense.
+- [Games] The Defense drop. Cobblemon: `waterpulse_` and `watergun_` pieces.
+
+**Chilling Water** · *Now:* a quick straight burst of cold water (our own `chillingwater_ball`). Always
+-1 Attack. Rapid Strike's only ranged move.
+- [Games] The Attack drop. Cobblemon: `watergun_` pieces and `icepunch_targetfrost`.
+
+---
+
 ## Decided
 
 - **27 Oct 2026:** Pokkén's counters and chains (Rapid Spin destroying projectiles, Swords Dance

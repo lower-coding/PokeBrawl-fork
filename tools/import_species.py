@@ -34,6 +34,8 @@ LANG = "common/src/main/resources/assets/cobblemon/lang/en_us.json"
 # Cobblemon stat names -> ours (Showdown's).
 STATS = {"hp": "hp", "attack": "atk", "defence": "def", "special_attack": "spa",
          "special_defence": "spd", "speed": "spe"}
+# Forms with an entry of their own in the roster: id -> (species file, name of the form in it).
+FORMS = {"urshifurapidstrike": ("urshifu", "Rapid-Strike")}
 
 
 def read(clone, path):
@@ -52,11 +54,21 @@ def read(clone, path):
 def species_paths(clone):
     r = subprocess.run(["git", "-C", clone, "ls-tree", "-r", "--name-only", "HEAD", SPECIES_DIR],
                        capture_output=True, text=True, encoding="utf-8")
-    return {os.path.splitext(os.path.basename(p))[0]: p for p in r.stdout.split() if p.endswith(".json")}
+    paths = {os.path.splitext(os.path.basename(p))[0]: p for p in r.stdout.split() if p.endswith(".json")}
+    for form, (base, _) in FORMS.items():
+        if base in paths:
+            paths[form] = paths[base]
+    return paths
 
 
 def species(clone, paths, lang, sp):
     d = json.loads(read(clone, paths[sp]))
+    # A form: its own entry over the base's, which fills in what it leaves null (its abilities
+    # and stats).
+    if sp in FORMS:
+        name = FORMS[sp][1]
+        entry = next(f for f in d.get("forms", []) if f["name"] == name)
+        d = {**d, **{k: v for k, v in entry.items() if v is not None}}
     types = [d["primaryType"]] + ([d["secondaryType"]] if d.get("secondaryType") else [])
     abilities = []
     for a in d.get("abilities", []):
