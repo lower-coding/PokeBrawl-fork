@@ -47,7 +47,7 @@ godot --path game -- --p1=charizard --p2=pikachu --diff=hard --stage=league
 
 | Argument | Values |
 |---|---|
-| `--p1`, `--p2` | `pikachu`, `snorlax`, `charizard`, `blastoise`, `venusaur`, `lucario`, `gengar`, `garchomp`, `greninja`, `scizor`, `goodra` |
+| `--p1`, `--p2` | `pikachu`, `snorlax`, `charizard`, `blastoise`, `venusaur`, `lucario`, `gengar`, `garchomp`, `greninja`, `scizor`, `goodra`, `urshifu`, `urshifurapidstrike` |
 | `--team`, `--team2` | a 3 vs 3 against the AI (prototype): `--team=charizard,lucario,venusaur`; the first one leads, a missing `--team2` is filled from the roster. See [3 vs 3](#3-vs-3-prototype) |
 | `--rules` | that battle's 3 vs 3 rules: `--rules=recall:0.4,lockout:5,bench_heal:0.5` (the ids and limits are in [battle_rules.gd](game/scripts/data/battle_rules.gd)) |
 | `--diff` | `easy`, `normal`, `hard` |
@@ -59,7 +59,7 @@ godot --path game -- --p1=charizard --p2=pikachu --diff=hard --stage=league
 
 - **Battle** against the AI (easy, normal, hard), **Online** and **Training**, 1 vs 1 or 3 vs 3.
 - **Moves:** each Pokémon's four moves and its ability, picked from the ones it learns in the
-  games (82 moves and 26 abilities so far). Every move has its details: power, cooldown, reach,
+  games (91 moves and 27 abilities so far). Every move has its details: power, cooldown, reach,
   timings and how to counter it. **Restore defaults** puts them back.
 - **Profile:** your trainer (nine, with the games' sprites) and your name. Your trainer stands
   by the field, throws the Poké Ball at the start and reacts to the battle; online, your rival
@@ -160,17 +160,22 @@ Default moves and ability, and the abilities each one can pick. The Moves screen
 
 | Pokémon | Types | Default moves | Abilities | Moves to pick from |
 |---|---|---|---|---|
-| **Ash's Pikachu** | Electric | Thunder Shock · Quick Attack · Iron Tail · Electro Ball | Static, Lightning Rod | 26 |
-| **Snorlax** | Normal | Body Slam · Ice Punch · Earthquake · Rest | Thick Fat, Immunity, Gluttony | 37 |
-| **Charizard** | Fire / Flying | Flamethrower · Air Slash · Dragon Claw · Flare Blitz | Blaze, Solar Power | 38 |
-| **Blastoise** | Water | Aqua Jet · Hydro Pump · Rapid Spin · Ice Beam | Torrent, Rain Dish | 36 |
-| **Venusaur** | Grass / Poison | Vine Whip · Razor Leaf · Sludge Bomb · Solar Beam | Overgrow, Chlorophyll | 23 |
-| **Lucario** | Fighting / Steel | Aura Sphere · Meteor Mash · Extreme Speed · Detect | Steadfast, Inner Focus, Justified | 41 |
-| **Gengar** | Ghost / Poison | Shadow Ball · Sludge Bomb · Hex · Substitute | Levitate, Cursed Body | 33 |
-| **Garchomp** | Dragon / Ground | Dig · Dragon Claw · Earthquake · Stone Edge | Rough Skin, Sand Veil | 31 |
-| **Greninja** | Water / Dark | Water Shuriken · Night Slash · Double Team · Hydro Pump | Protean, Torrent | 25 |
-| **Scizor** | Bug / Steel | Bullet Punch · X-Scissor · Swords Dance · Wing Attack | Technician, Swarm, Light Metal | 24 |
-| **Goodra** | Dragon | Dragon Pulse · Surf · Ice Beam · Body Slam | Gooey, Sap Sipper, Hydration, Overcoat | 35 |
+| **Ash's Pikachu** | Electric | Thunder Shock · Quick Attack · Iron Tail · Electro Ball | Static, Lightning Rod | 27 |
+| **Snorlax** | Normal | Body Slam · Ice Punch · Earthquake · Rest | Thick Fat, Immunity, Gluttony | 40 |
+| **Charizard** | Fire / Flying | Flamethrower · Air Slash · Dragon Claw · Flare Blitz | Blaze, Solar Power | 40 |
+| **Blastoise** | Water | Aqua Jet · Hydro Pump · Rapid Spin · Ice Beam | Torrent, Rain Dish | 39 |
+| **Venusaur** | Grass / Poison | Vine Whip · Razor Leaf · Sludge Bomb · Solar Beam | Overgrow, Chlorophyll | 24 |
+| **Lucario** | Fighting / Steel | Aura Sphere · Meteor Mash · Extreme Speed · Detect | Steadfast, Inner Focus, Justified | 44 |
+| **Gengar** | Ghost / Poison | Shadow Ball · Sludge Bomb · Hex · Substitute | Levitate, Cursed Body | 35 |
+| **Garchomp** | Dragon / Ground | Dig · Dragon Claw · Earthquake · Stone Edge | Rough Skin, Sand Veil | 33 |
+| **Greninja** | Water / Dark | Water Shuriken · Night Slash · Double Team · Hydro Pump | Protean, Torrent | 29 |
+| **Scizor** | Bug / Steel | Bullet Punch · X-Scissor · Swords Dance · Wing Attack | Technician, Swarm, Light Metal | 26 |
+| **Goodra** | Dragon | Dragon Pulse · Surf · Ice Beam · Body Slam | Gooey, Sap Sipper, Hydration, Overcoat | 38 |
+| **Urshifu**, Single Strike | Fighting / Dark | Wicked Blow · Sucker Punch · Close Combat · Bulk Up | Unseen Fist, Inner Focus | 32 |
+| **Urshifu**, Rapid Strike | Fighting / Water | Surging Strikes · Liquidation · Chilling Water · Close Combat | Unseen Fist, Inner Focus | 32 |
+
+Urshifu's two forms share one cell on the selection screen: **LB / L1 / Q** or the cell's tabs change
+the form, each side has its own, and a team holds only one of them.
 
 Stats, weights and learnsets are the games' (stats at level 50). How each one moves (speed,
 jumps, dodges, flight) is its own. References from Pokkén, Smash and the anime for the moves
@@ -206,13 +211,14 @@ The tests are built into the game and run with `--test=NAME`:
 
 ```bash
 godot --headless --path game -- --test=mechanics          # acceptance cases of the combat
+godot --headless --path game -- --test=urshifu            # only its cases of the above: forms, crits, guards, reads
 godot --headless --path game -- --test=loadouts           # every Pokémon with every move it can pick
 godot --headless --path game -- --test=status             # also: status_moves, abilities, new_moves
 godot --headless --path game -- --test=deflect            # also: clash, lockon, league, trainers
 godot --headless --path game -- --test=team               # the rules of 3 vs 3 and switching
 godot --headless --path game -- --aivsai --test=team_battles --battles=20 --speed=4   # random teams: length, switches, wins
 godot --path game -- --test=menu                          # the menus with simulated input
-godot --path game -- --test=menu_moves                    # also: menu_options, menu_profile, menu_wheel
+godot --path game -- --test=menu_moves                    # also: menu_options, menu_profile, menu_wheel, menu_forms, menu_forms_team
 godot --path game -- --test=moves --p1=charizard          # every move, with captures
 godot --path game -- --aivsai --test=combat               # an on-screen battle, captures and FPS
 ```
@@ -230,13 +236,13 @@ game/                 the Godot project
     moves/            one script per move, named by its Showdown id
     ui/               menu drawing and move details
   fx/                 Cobblemon particle pieces and move sequences, converted
-  pokemon/            converted Cobblemon models, textures and cries
+  pokemon/            converted models (Cobblemon's; Urshifu's, the Pokemans Pack's), textures and cries
   sounds/             Cobblemon move, menu and Poké Ball sounds
   trainers/           trainer sprites
   music/              empty in the repository (see its README)
   i18n/               translations.csv (one column per language)
 tools/                Python tools: converters, importers, sprite and font generators
-sources/              original Cobblemon files the converted models come from
+sources/              original files the converted models come from (Cobblemon, Pokemans Pack)
 docs/                 design documents
 ```
 
@@ -249,13 +255,16 @@ the system inside the Pokémon games themselves, or new fan games built on it.
 
 ## Credits and licenses
 
-Made by [xjoje6](https://github.com/xjoje6). The Pokémon are Cobblemon's; the stadiums and
-effects are drawn by code.
+Made by [xjoje6](https://github.com/xjoje6). The Pokémon are Cobblemon's, except Urshifu; the
+stadiums and effects are drawn by code.
 
 - **Code:** MIT, see [LICENSE](LICENSE).
 - **Pokémon models, animations and textures:** the [Cobblemon](https://gitlab.com/cable-mc/cobblemon)
   team, **CC BY-NC 3.0** ([game/pokemon/LICENSE-models.txt](game/pokemon/LICENSE-models.txt)),
   converted and adapted, used with their approval. Non-commercial use with attribution.
+- **Urshifu's model, animations and textures:** the [Pokemans Pack](https://modrinth.com/datapack/cobblemon-pokemans)
+  team, **CC BY-NC 4.0** ([sources/pokemans/LICENSE-model.txt](sources/pokemans/LICENSE-model.txt)),
+  converted, its animations cut and one texture recolored. See [CREDITS.md](CREDITS.md).
 - **Particle effects, move and menu sounds, cries, Poké Ball sounds, battle GUI pieces and
   species data:** Cobblemon, under its general license (MPL 2.0).
 - **Music:** Pokémon arrangements by [The Noble Demon](https://www.youtube.com/@TheNobleDemon),

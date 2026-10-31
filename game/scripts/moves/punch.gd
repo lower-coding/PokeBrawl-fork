@@ -16,7 +16,7 @@ func on_start() -> void:
 
 
 func _particles() -> String:
-	return {"ice": "steam", "fire": "fire_fx", "electric": "sparks", "steel": "sparks_metal", "fighting": "stars"}.get(d.type, "dust")
+	return {"ice": "steam", "fire": "fire_fx", "electric": "sparks", "steel": "sparks_metal", "fighting": "stars", "dark": "shadow"}.get(d.type, "dust")
 
 
 func in_startup(delta: float) -> void:

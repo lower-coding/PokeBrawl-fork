@@ -7,8 +7,8 @@ PokeBrawl is made by [xjoje6](https://github.com/xjoje6). It stands on other peo
 [Cobblemon](https://gitlab.com/cable-mc/cobblemon) is a Pokémon mod for Minecraft, by the
 Cobblemon team. PokeBrawl uses, adapted, its:
 
-- **Pokémon models, animations and textures** (the eleven Pokémon, and Pikachu's cap variant for
-  Ash's Pikachu; Goodra's folder in Cobblemon has no license file of its own, so it is treated the
+- **Pokémon models, animations and textures** (eleven of the Pokémon, all but Urshifu, and Pikachu's
+  cap variant for Ash's Pikachu; Goodra's folder in Cobblemon has no license file of its own, so it is treated the
   same as the rest), licensed **CC BY-NC 3.0**
   ([game/pokemon/LICENSE-models.txt](game/pokemon/LICENSE-models.txt),
   https://creativecommons.org/licenses/by-nc/3.0/). They are converted from Bedrock format by
@@ -26,6 +26,24 @@ Cobblemon team. PokeBrawl uses, adapted, its:
 
 Particle textures that Cobblemon copies from Minecraft (Mojang's) are not used: our own pixel
 art versions with the same sizes are drawn by `tools/convert_particles.py`.
+
+## Pokemans Pack
+
+[Pokemans Pack](https://modrinth.com/datapack/cobblemon-pokemans) (version V15) is a Cobblemon
+datapack that adds Pokémon Cobblemon has no official model for, by its team: Modrinth lists Tontra,
+pandalistics, Lazaro21522, ASHISK and easy_____, and the page also credits Frank and GhostUser. It
+does not say who made which model, so the credit goes to the team as a whole.
+
+- **Urshifu's model, animations and textures** (`game/pokemon/urshifu/`,
+  `game/pokemon/urshifurapidstrike/`), licensed **CC BY-NC 4.0**
+  ([sources/pokemans/LICENSE-model.txt](sources/pokemans/LICENSE-model.txt),
+  https://creativecommons.org/licenses/by-nc/4.0/), as stated on that page; the pack's zip has no
+  license file of its own. **Changed for this game** by `tools/import_pokemans.py`: converted to
+  the game's format, the root bone and the animations renamed, the attack cut, a run built from
+  the walk, the back cloth laid down in the sleep pose, and Rapid Strike's texture recolored (gold
+  to blue). The untouched originals are in `sources/pokemans/`.
+
+Its stats, learnsets and cries are not the pack's: they come from Cobblemon, as for every Pokémon.
 
 ## Pokémon Showdown
 

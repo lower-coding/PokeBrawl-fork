@@ -36,6 +36,8 @@ const PROFILE := {
 	"greninja": {"dist": [4.0, 8.0], "aggression": 0.65, "circle_around": 1.0},
 	"scizor": {"dist": [1.8, 4.5], "aggression": 0.8, "circle_around": 0.6},
 	"goodra": {"dist": [4.0, 8.0], "aggression": 0.45, "circle_around": 0.35},
+	"urshifu": {"dist": [1.5, 4.5], "aggression": 0.75, "circle_around": 0.5},
+	"urshifurapidstrike": {"dist": [2.0, 6.0], "aggression": 0.65, "circle_around": 0.6},
 }
 
 var main: Node
@@ -285,7 +287,7 @@ func _defend(seen: Dictionary, dist: float, diff: Dictionary) -> bool:
 				var side := v.cross(Vector3.UP).normalized()
 				if not main.arena.inside(me.global_position + side * 4.0, 1.5):
 					side = -side
-				_dodge_toward(side)
+				_dodge_toward(side, p.hit.move_id)
 				state_text = "dodges projectile"
 			_cooldown_def = 0.35
 			return true
@@ -327,7 +329,7 @@ func _defend(seen: Dictionary, dist: float, diff: Dictionary) -> bool:
 				outside.y = 0.0
 				var side := outside.normalized().cross(Vector3.UP) * (1.0 if randf() < 0.5 else -1.0)
 				var dir := (outside.normalized() * 0.4 + side).normalized() if ai.kind in ["engage", "stream"] else outside.normalized()
-				_dodge_toward(dir)
+				_dodge_toward(dir, seen.action)
 				state_text = "dodges %s" % d.display_name
 			_cooldown_def = 0.5
 			return true
@@ -355,14 +357,15 @@ func _phase_start() -> float:
 	return _t
 
 
-func _dodge_toward(world_dir: Vector3) -> void:
+## "threat": the move it is getting away from.
+func _dodge_toward(world_dir: Vector3, threat: String) -> void:
 	# Never into the void (stages with an edge): the other way, or toward the center.
 	if not _lands_inside(world_dir, DODGE_REACH):
 		world_dir = -world_dir
 		if not _lands_inside(world_dir, DODGE_REACH):
 			world_dir = -Vector3(me.global_position.x, 0.0, me.global_position.z).normalized()
 	for move in me.data.moves:
-		if Moves.DATA[move].get("ai", {}).get("kind", "") == "guard" and me.ready(move) and randf() < 0.45:
+		if Moves.DATA[move].get("ai", {}).get("kind", "") == "guard" and me.ready(move) and _guard_fits(move, threat) and randf() < 0.45:
 			_use(move)
 			state_text = "reads the hit"
 			return
@@ -372,6 +375,18 @@ func _dodge_toward(world_dir: Vector3) -> void:
 		return
 	me.ctrl.move_input = _to_local(world_dir)
 	_press("dodge")
+
+
+## Whether this guard does anything against "threat": Counter only pays back physical hits from
+## close by, and Unseen Fist's contact moves go through Protect and Detect.
+func _guard_fits(move: String, threat: String) -> bool:
+	var g: Dictionary = Moves.DATA[move]
+	var t: Dictionary = Moves.DATA.get(threat, {})
+	if g.has("rival_stun") and g.has("range"):
+		return t.get("cat", "") == "physical" and me.global_position.distance_to(rival.global_position) <= float(g.range)
+	if g.get("protects", false) and rival.data.passive.id == "unseenfist" and t.get("contact", true):
+		return false
+	return true
 
 
 func _to_local(world_dir: Vector3) -> Vector2:
@@ -400,7 +415,7 @@ func _punish(seen: Dictionary, dist: float, diff: Dictionary) -> bool:
 		if not me.ready(move):
 			continue
 		var ai: Dictionary = Moves.DATA[move].get("ai", {})
-		if ai.is_empty() or ai.kind in ["heal", "guard", "decoy"]:
+		if ai.is_empty() or ai.kind in ["heal", "guard", "decoy"] or not _only_if(ai, seen):
 			continue
 		# A weather that is already on is not called again.
 		if Moves.DATA[move].has("weather") and main.weather.is_on(Moves.DATA[move].weather):
@@ -483,7 +498,7 @@ func _attack(seen: Dictionary, dist: float, diff: Dictionary) -> void:
 		if not me.ready(move):
 			continue
 		var ai: Dictionary = Moves.DATA[move].get("ai", {})
-		if ai.is_empty() or ai.kind in ["heal", "guard", "decoy"]:
+		if ai.is_empty() or ai.kind in ["heal", "guard", "decoy"] or not _only_if(ai, seen):
 			continue
 		# A weather that is already on is not called again.
 		if Moves.DATA[move].has("weather") and main.weather.is_on(Moves.DATA[move].weather):
@@ -506,6 +521,17 @@ func _attack(seen: Dictionary, dist: float, diff: Dictionary) -> void:
 	if not options.is_empty() and randf() < 0.75:
 		_use(options[0][0])
 		state_text = "uses %s" % Moves.DATA[options[0][0]].display_name
+
+
+## A move for one moment only ("only_if"): Sucker Punch while the rival is seen attacking, Lash
+## Out while its power is doubled.
+func _only_if(ai: Dictionary, seen: Dictionary) -> bool:
+	match ai.get("only_if", ""):
+		"rival_attacking":
+			return seen.state == "action" and seen.phase in ["startup", "active"] and Moves.DATA.get(seen.action, {}).get("cat", "status") != "status"
+		"lowered":
+			return me.lowered_t > 0.0
+	return true
 
 
 ## The rival (or me) at another height: flying or on top of something. Melee hits and

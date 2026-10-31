@@ -752,6 +752,10 @@ def acid_spray(px, side, f, n, rnd):
     _glob(px, side, f, n, [(0.25, hexc("d7e86a")), (0.55, hexc("a5c23c")), (0.9, hexc("9152b8")), (2.0, hexc("4c1f6b"))])
 
 
+def chilling_water(px, side, f, n, rnd):
+    _glob(px, side, f, n, [(0.25, hexc("e6fbff")), (0.55, hexc("9fdcf5")), (0.9, hexc("4f9fe0")), (2.0, hexc("23549c"))])
+
+
 if __name__ == "__main__":
     os.makedirs(OUTPUT, exist_ok=True)
     strip(6, 30, electro_ball, "electroball.png", 7)
@@ -773,3 +777,4 @@ if __name__ == "__main__":
     strip(4, 14, poke_ball, "pokeball.png", 79)
     strip(6, 20, mud_shot, "mudshot_ball.png", 83)
     strip(6, 20, acid_spray, "acidspray_ball.png", 89)
+    strip(6, 20, chilling_water, "chillingwater_ball.png", 97)

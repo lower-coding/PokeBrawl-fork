@@ -7,9 +7,11 @@ extends Action
 ##   kick      winds up turning, then spins into a kick (Mega Kick): the foot leaves a trail.
 ##   chop      raises the arm high and brings it straight down (Brick Break): a crack opens
 ##             on the ground where it lands.
-##   rage      shakes with anger, then charges in (Facade); red while it hits twice as hard.
+##   rage      shakes with anger, then charges in (Facade, Lash Out); red while it hits twice
+##             as hard.
 ## Where it hits: a sphere "reach" in front at "hit_height" (share of its height), radius
-## "radius"; "advance" meters forward while active.
+## "radius"; "advance" meters forward while active. "recovery_on_hit": a landed hit recovers
+## this soon (Lash Out: only a miss pays the long recovery).
 
 var _dust := 0.0
 
@@ -41,8 +43,8 @@ func in_startup(delta: float) -> void:
 
 
 func _color() -> Color:
-	if d.motion == "rage" and l.has_status():
-		return Color(1.0, 0.35, 0.25)          # Facade at full power
+	if d.motion == "rage" and Damage.power_of(d, l, null) > float(d.get("power", 0)):
+		return Color(1.0, 0.35, 0.25)          # at full power
 	return d.get("color", Roster.TYPE_COLOR[d.type])
 
 
@@ -73,6 +75,11 @@ func on_active() -> void:
 
 func on_recovery() -> void:
 	tint_k = 0.0
+
+
+func in_recovery(_delta: float) -> void:
+	if landed and t >= float(d.get("recovery_on_hit", INF)):
+		finish(false)
 
 
 func pose() -> Dictionary:

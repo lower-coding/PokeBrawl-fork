@@ -10,7 +10,13 @@ extends RefCounted
 ##                                 share. Streams count about half their ticks (Flamethrower 8
 ##                                 of 15, Hydro Pump 6 of 10): nobody lands them all, so a well
 ##                                 aimed stream reaches one use and holding it on longer, more
-##   power_by                      power not fixed in the games: "speed" (Electro Ball)
+##   power_by                      power not fixed in the games: "speed" (Electro Ball), "status"
+##                                 (Facade), "lowered" (Lash Out: double while Fighter.lowered_t runs)
+##   crit                          always a critical hit (Damage.CRIT): ignores the user's lowered
+##                                 attack and the target's raised defense
+##   needs_attacking               only connects while the target winds up or runs a move that
+##                                 deals damage; otherwise "But it failed!" (Sucker Punch)
+##   protects                      a guard that contact moves with Unseen Fist go through
 ##   power_at                      the "damage" value that equals one use in the games (Aura
 ##                                 Sphere: uncharged below it, fully charged above)
 ##   startup / active / recovery   seconds of wind-up, active phase and recovery
@@ -369,7 +375,7 @@ const DATA := {
 		"ai": {"min": 3.0, "max": 10.0, "kind": "engage", "value": 1.2},
 		"counterplay": "Almost no warning, but it goes straight: move sideways. When it ends, turn around."},
 	"detect": {"fx_startup": [["protect_actor1", "center"]],
-		"display_name": "Detect", "script": "res://scripts/moves/detect.gd", "type": "fighting", "cat": "status", "power": 0, "pp": 5, "accuracy": 0, "priority": 4,
+		"display_name": "Detect", "script": "res://scripts/moves/detect.gd", "type": "fighting", "cat": "status", "power": 0, "pp": 5, "accuracy": 0, "priority": 4, "protects": true,
 		"cost": 10.0, "cd": 4.0, "startup": 0.04, "active": 0.32, "recovery": 0.7, "recovery_on_hit": 0.12, "rival_stun": 0.7,
 		"desc": "A short guard. Hit during it, it takes nothing and stuns the attacker. If nothing comes, it is open.",
 		"ai": {"min": 0.0, "max": 4.0, "kind": "guard", "value": 1.0},
@@ -663,4 +669,65 @@ const DATA := {
 		"desc": "Rubs its charged cheeks on the rival. Little damage, always paralyzes.",
 		"ai": {"min": 0.0, "max": 4.5, "kind": "engage", "value": 0.9},
 		"counterplay": "Very short reach. Ground and Electric types are immune."},
+
+	# ---------------------------------------------------------------- Urshifu
+	"wickedblow": {"fx_startup": [["shadowclaw_hand", "locator_hand_primary"]], "fx_hit": ["suckerpunch_targethit", "crunch_targetspark"],
+		"deflects": 2, "display_name": "Wicked Blow", "script": "res://scripts/moves/punch.gd", "type": "dark", "cat": "physical", "power": 75, "pp": 5, "accuracy": 100, "priority": 0, "crit": true,
+		"cost": 22.0, "startup": 0.34, "active": 0.2, "recovery": 0.5, "damage": 75.0, "stun": 0.55,
+		"strength": 2, "hitstop": 0.13, "reach": 1.7, "radius": 1.0, "advance": 6.5, "boom": true, "sound_hit": "wickedblow_hit",
+		"desc": "A single masterful punch. It is always a critical hit: it ignores the target's raised defenses and the user's lowered Attack.",
+		"ai": {"min": 1.5, "max": 6.5, "kind": "engage", "value": 1.5},
+		"counterplay": "The fist darkens first and the lunge goes straight: dodge through it and punish."},
+	"surgingstrikes": {"fx_startup": [["waterpulse_actorsuds", "foot"]], "fx_hit": ["watergun_target", "waterpulse_targetsplash"],
+		"deflects": 1, "display_name": "Surging Strikes", "script": "res://scripts/moves/surgingstrikes.gd", "type": "water", "cat": "physical", "power": 75, "pp": 5, "accuracy": 100, "priority": 0, "crit": true,
+		"cost": 22.0, "startup": 0.2, "active": 0.36, "recovery": 0.45, "damage": 75.0, "blows": 3,
+		"stun": 0.3, "stun_last": 0.5, "strength": 1, "reach": 1.6, "radius": 0.9, "advance": 3.5,
+		"desc": "Three flowing blows of water. Each one is always a critical hit.",
+		"ai": {"min": 0.0, "max": 3.5, "kind": "punish", "value": 1.5},
+		"counterplay": "It only reaches a few meters: back off or dodge through, and punish when it stops."},
+	"suckerpunch": {"fx_hit": ["suckerpunch_target1", "suckerpunch_targethit", "suckerpunch_targetspark"],
+		"deflects": 1, "display_name": "Sucker Punch", "script": "res://scripts/moves/suckerpunch.gd", "type": "dark", "cat": "physical", "power": 70, "pp": 5, "accuracy": 100, "priority": 1, "needs_attacking": true,
+		"cost": 16.0, "startup": 0.05, "active": 0.22, "recovery": 0.85, "recovery_on_hit": 0.25, "damage": 70.0, "stun": 0.4,
+		"strength": 2, "dist": 6.5, "color": Color(0.45, 0.3, 0.5), "sound": "quickattack",
+		"desc": "A sudden dash that only works if the target is preparing an attack. Otherwise it fails and leaves the user open.",
+		"ai": {"min": 1.5, "max": 6.5, "kind": "engage", "value": 1.4, "only_if": "rival_attacking"},
+		"counterplay": "Do not attack into it: wait for the dash, and punish the long recovery when it fails."},
+	"lashout": {"fx_hit": ["crunch_target", "crunch_targetspark"],
+		"display_name": "Lash Out", "script": "res://scripts/moves/strike.gd", "motion": "rage", "type": "dark", "cat": "physical", "power": 75, "pp": 5, "accuracy": 100, "priority": 0,
+		"power_by": "lowered", "cost": 26.0, "startup": 0.55, "active": 0.2, "recovery": 1.15, "recovery_on_hit": 0.35, "damage": 75.0, "stun": 0.5,
+		"strength": 2, "hitstop": 0.13, "reach": 1.5, "radius": 1.0, "advance": 5.0, "hit_height": 0.55, "sound": "facade",
+		"desc": "Lashes out in anger. Double power for 3 s after one of its stats is lowered. If it misses, the user is left wide open.",
+		"ai": {"min": 0.0, "max": 5.0, "kind": "punish", "value": 1.3, "only_if": "lowered"},
+		"counterplay": "It glows red while it is doubled and the wind-up is long: dodge it, then punish its very long recovery."},
+	"protect": {"fx_startup": [["protect_actor1", "center"]],
+		"display_name": "Protect", "script": "res://scripts/moves/protect.gd", "type": "normal", "cat": "status", "power": 0, "pp": 10, "accuracy": 0, "priority": 4, "protects": true,
+		"cost": 12.0, "cd": 6.0, "startup": 0.04, "active": 0.6, "recovery": 0.7, "recovery_on_hit": 0.25,
+		"desc": "A barrier that stops every move for a moment. It does not hurt the attacker. If nothing comes, it is open.",
+		"ai": {"min": 0.0, "max": 4.0, "kind": "guard", "value": 1.0},
+		"counterplay": "Hold your attack until the barrier fades, then punish. Contact moves with Unseen Fist go through."},
+	"counter": {"fx_startup": [["closecombat_actor", "center"]],
+		"display_name": "Counter", "script": "res://scripts/moves/counter.gd", "type": "fighting", "cat": "physical", "power": 0, "pp": 20, "accuracy": 100, "priority": -5,
+		"cost": 14.0, "cd": 6.0, "startup": 0.08, "active": 0.6, "recovery": 0.8, "recovery_on_hit": 0.2, "mult": 2.0, "range": 5.0, "rival_stun": 0.7,
+		"desc": "Braces for a physical hit: it takes the damage and pays it back double. Special moves break through.",
+		"ai": {"min": 0.0, "max": 3.0, "kind": "guard", "value": 1.0},
+		"counterplay": "Use a special move or attack from afar. If nothing comes, it is left open."},
+	"bulkup": {"display_name": "Bulk Up", "script": "res://scripts/moves/bulkup.gd", "type": "fighting", "cat": "status", "power": 0, "pp": 20, "accuracy": 0, "priority": 0,
+		"cost": 14.0, "cd": 12.0, "uses": 3, "startup": 0.2, "active": 0.7, "recovery": 0.3,
+		"desc": "Tenses its muscles, open to hits: Attack and Defense rise one stage. Three times per battle.",
+		"ai": {"min": 6.0, "max": 99.0, "kind": "buff", "value": 1.0},
+		"counterplay": "It cannot defend itself while flexing: punish it."},
+	"liquidation": {"fx_startup": [["waterpulse_actorsuds", "foot"]], "fx_active": [["waterpulse_actorsplash", "foot"]], "fx_hit": ["watergun_target", "waterpulse_targetsplash"],
+		"deflects": 1, "display_name": "Liquidation", "script": "res://scripts/moves/dash.gd", "type": "water", "cat": "physical", "power": 85, "pp": 10, "accuracy": 100, "secondary": {"chance": 0.2, "boost": {"def": -1}}, "priority": 0,
+		"cost": 18.0, "startup": 0.24, "active": 0.26, "recovery": 0.45, "damage": 85.0, "stun": 0.45,
+		"strength": 2, "dist": 6.5, "color": Color(0.55, 0.8, 1.0), "particles": "water_fx", "sound": "aquajet",
+		"desc": "Crashes into the target wrapped in water. It can lower its Defense.",
+		"ai": {"min": 2.0, "max": 6.5, "kind": "engage", "value": 1.3},
+		"counterplay": "Suds gather first and it goes straight: step aside. If it misses, punish."},
+	"chillingwater": {"fx_startup": [["watergun_actor", "center"]], "fx_hit": ["watergun_target", "watergun_targetfoam", "icepunch_targetfrost"],
+		"display_name": "Chilling Water", "script": "res://scripts/moves/chillingwater.gd", "type": "water", "cat": "special", "power": 50, "pp": 20, "accuracy": 100, "secondary": {"chance": 1.0, "boost": {"atk": -1}}, "priority": 0,
+		"cost": 12.0, "startup": 0.2, "active": 0.1, "recovery": 0.28, "damage": 50.0, "stun": 0.3,
+		"strength": 0, "contact": false, "speed": 24.0, "reach": 16.0, "radius": 0.5,
+		"desc": "A burst of icy water. It always lowers the target's Attack.",
+		"ai": {"min": 3.0, "max": 15.0, "kind": "projectile", "value": 1.1},
+		"counterplay": "It flies straight: sidestep it or dodge through it."},
 }

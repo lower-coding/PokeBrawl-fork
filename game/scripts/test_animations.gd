@@ -25,7 +25,7 @@ func _ready() -> void:
 
 
 func _run() -> void:
-	var species_list: Array = main.menu.pokemon_list()
+	var species_list: Array = main.menu.all_forms()
 	if main._args.has("p1") and main._args.p1 in species_list:
 		species_list = [main._args.p1]
 	var summary: Array = []

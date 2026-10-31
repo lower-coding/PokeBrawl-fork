@@ -703,3 +703,45 @@ SpD,SpD,DfE
 Spe,Spe,Vel
 Crosshair,Crosshair,Punto de mira
 "With nothing locked on, marks where your moves go.","With nothing locked on, marks where your moves go.","Sin nada fijado, marca adónde van tus movimientos."
+Critical hit!,Critical hit!,¡Golpe crítico!
+But it failed!,But it failed!,¡Pero ha fallado!
+Unseen Fist,Unseen Fist,Puño Invisible
+Counter!,Counter!,¡Contraataque!
+Protected!,Protected!,¡Protegido!
+Change form,Change form,Cambiar de forma
+Wicked Blow,Wicked Blow,Golpe Mordaz
+Surging Strikes,Surging Strikes,Azote Torrente
+Sucker Punch,Sucker Punch,Golpe Bajo
+Lash Out,Lash Out,Desahogo
+Protect,Protect,Protección
+Counter,Counter,Contraataque
+Bulk Up,Bulk Up,Corpulencia
+Liquidation,Liquidation,Hidroariete
+Chilling Water,Chilling Water,Agua Fría
+Urshifu,Urshifu,Urshifu
+A single masterful punch. It is always a critical hit: it ignores the target's raised defenses and the user's lowered Attack.,A single masterful punch. It is always a critical hit: it ignores the target's raised defenses and the user's lowered Attack.,Un único puñetazo magistral. Siempre es crítico: ignora las defensas subidas del objetivo y el Ataque bajado del usuario.
+Three flowing blows of water. Each one is always a critical hit.,Three flowing blows of water. Each one is always a critical hit.,Tres golpes fluidos de agua. Cada uno es siempre crítico.
+A sudden dash that only works if the target is preparing an attack. Otherwise it fails and leaves the user open.,A sudden dash that only works if the target is preparing an attack. Otherwise it fails and leaves the user open.,"Una embestida repentina que solo funciona si el objetivo está preparando un ataque. Si no, falla y deja al usuario expuesto."
+"Lashes out in anger. Double power for 3 s after one of its stats is lowered. If it misses, the user is left wide open.","Lashes out in anger. Double power for 3 s after one of its stats is lowered. If it misses, the user is left wide open.","Arremete con rabia. Doble de potencia durante 3 s después de que le bajen una característica. Si falla, el usuario queda muy expuesto."
+"A barrier that stops every move for a moment. It does not hurt the attacker. If nothing comes, it is open.","A barrier that stops every move for a moment. It does not hurt the attacker. If nothing comes, it is open.","Una barrera que detiene todos los movimientos durante un momento. No daña al atacante. Si no llega nada, queda expuesto."
+Braces for a physical hit: it takes the damage and pays it back double. Special moves break through.,Braces for a physical hit: it takes the damage and pays it back double. Special moves break through.,Se prepara para un golpe físico: recibe el daño y lo devuelve doble. Los movimientos especiales lo atraviesan.
+"Tenses its muscles, open to hits: Attack and Defense rise one stage. Three times per battle.","Tenses its muscles, open to hits: Attack and Defense rise one stage. Three times per battle.","Tensa los músculos, expuesto a los golpes: suben un nivel el Ataque y la Defensa. Tres veces por combate."
+Crashes into the target wrapped in water. It can lower its Defense.,Crashes into the target wrapped in water. It can lower its Defense.,Choca contra el objetivo envuelto en agua. Puede bajarle la Defensa.
+A burst of icy water. It always lowers the target's Attack.,A burst of icy water. It always lowers the target's Attack.,Un chorro de agua helada. Siempre baja el Ataque del objetivo.
+The fist darkens first and the lunge goes straight: dodge through it and punish.,The fist darkens first and the lunge goes straight: dodge through it and punish.,Primero se oscurece el puño y la embestida va recta: esquívala atravesándola y castiga.
+"It only reaches a few meters: back off or dodge through, and punish when it stops.","It only reaches a few meters: back off or dodge through, and punish when it stops.","Solo llega a unos metros: retrocede o esquiva atravesándolo, y castiga cuando pare."
+"Do not attack into it: wait for the dash, and punish the long recovery when it fails.","Do not attack into it: wait for the dash, and punish the long recovery when it fails.",No ataques contra él: espera la embestida y castiga su larga recuperación cuando falle.
+"It glows red while it is doubled and the wind-up is long: dodge it, then punish its very long recovery.","It glows red while it is doubled and the wind-up is long: dodge it, then punish its very long recovery.",Brilla en rojo mientras está doblado y la preparación es larga: esquívalo y castiga su larguísima recuperación.
+"Hold your attack until the barrier fades, then punish. Contact moves with Unseen Fist go through.","Hold your attack until the barrier fades, then punish. Contact moves with Unseen Fist go through.",Aguanta el ataque hasta que se desvanezca la barrera y castiga. Los movimientos de contacto con Puño Invisible la atraviesan.
+"Use a special move or attack from afar. If nothing comes, it is left open.","Use a special move or attack from afar. If nothing comes, it is left open.","Usa un movimiento especial o ataca de lejos. Si no llega nada, queda expuesto."
+It cannot defend itself while flexing: punish it.,It cannot defend itself while flexing: punish it.,No puede defenderse mientras se tensa: castígalo.
+"Suds gather first and it goes straight: step aside. If it misses, punish.","Suds gather first and it goes straight: step aside. If it misses, punish.","Primero se forma espuma y va recto: hazte a un lado. Si falla, castiga."
+One perfect blow. It reads the rival's attack and answers with a hit no guard or stat can soften.,One perfect blow. It reads the rival's attack and answers with a hit no guard or stat can soften.,Un golpe perfecto. Lee el ataque del rival y responde con un impacto que ninguna guardia ni característica puede suavizar.
+Flowing water. Wears the rival down with flurries and chills its strength from afar.,Flowing water. Wears the rival down with flurries and chills its strength from afar.,Agua que fluye. Desgasta al rival con ráfagas de golpes y enfría su fuerza desde lejos.
+Its contact moves go through Protect and Detect.,Its contact moves go through Protect and Detect.,Sus movimientos de contacto atraviesan Protección y Detección.
+Single Strike,Single Strike,Estilo Brusco
+Rapid Strike,Rapid Strike,Estilo Fluido
+Single,Single,Brusco
+Rapid,Rapid,Fluido
+"Urshifu's model: the Pokemans Pack team (CC BY-NC 4.0; converted, animations cut, one texture recolored)","Urshifu's model: the Pokemans Pack team (CC BY-NC 4.0; converted, animations cut, one texture recolored)","Modelo de Urshifu: el equipo de Pokemans Pack (CC BY-NC 4.0; convertido, animaciones recortadas, una textura recoloreada)"
+Always a critical hit,Always a critical hit,Siempre crítico

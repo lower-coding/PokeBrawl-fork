@@ -11,6 +11,25 @@ All notable changes to this project are documented here. The format follows
   test: `--test=hud`.
 - Stat changes under each HP bar, for both Pokémon, as in Pokémon Showdown: `1.5× Atk` in green,
   `0.67× Def` in red.
+- Urshifu, in both forms: Single Strike (Fighting / Dark) wins with one decisive blow and by reading
+  the rival's attack; Rapid Strike (Fighting / Water) with flurries, water pressure and a ranged poke.
+  Unseen Fist (default) sends its contact moves through Protect and Detect; Inner Focus is Kubfu's, a
+  deliberate exception. Its model is the Pokemans Pack's (CC BY-NC 4.0), not Cobblemon's.
+- One cell for both forms on the selection wall and the Moves screen: LB / L1 / Q or the cell's tabs
+  change the form, each side has its own, a team holds only one, and each form keeps its own build.
+  Roster fields `echo_of`, `form_name` and `form_tab`.
+- Nine moves, for everyone who learns them: Wicked Blow and Surging Strikes (always critical hits,
+  a new mechanic: they ignore the user's lowered attack and the target's raised defense), Sucker
+  Punch (only connects against an attack), Lash Out (double for 3 s after a stat drop), Protect (a
+  wall, with no stun), Counter (pays a physical hit back double), Bulk Up (three times a battle),
+  Liquidation and Chilling Water.
+- New tests: `--test=urshifu` (also part of `--test=mechanics`), `--test=menu_forms`.
+
+### Changed
+- The AI respects a move's `only_if` and does not pick a guard that would do nothing against what
+  is coming (Counter against special moves, Protect and Detect against Unseen Fist's contact moves).
+- Assets: openly licensed models compatible with non-commercial use are now allowed.
+- The version is now `demo-urshifu`: it cannot play online against `demo-goodra`.
 
 ## [demo-goodra] - 2026-10-31
 

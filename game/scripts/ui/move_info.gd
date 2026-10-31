@@ -52,6 +52,8 @@ static func facts(id: String) -> Array:
 		2: out.append(TranslationServer.translate("Sends projectiles back"))
 	if d.get("knocks_down", false):
 		out.append(TranslationServer.translate("Knocks down"))
+	if d.get("crit", false):
+		out.append(TranslationServer.translate("Always a critical hit"))
 	if d.has("secondary"):
 		var sec: Dictionary = d.secondary
 		var what := ""

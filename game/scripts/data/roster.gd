@@ -26,7 +26,11 @@ extends RefCounted
 ##               them (Goodra has a mouth, no cannons): moves stay as they are
 ##   extra_abilities  abilities it can pick that it does not have in the games
 ##               (Species.DATA is generated, so they cannot go there). Only for deliberate
-##               exceptions: Goodra's Overcoat
+##               exceptions: Goodra's Overcoat, Urshifu's Inner Focus (it is Kubfu's)
+##   echo_of     this entry is a form of that Pokémon: they share one cell on the selection
+##               wall (Menu.form_pick) and a team only holds one of them. To everything else
+##               it is one more Pokémon
+##   form_name   the form's name; form_tab, the short one on the wall's tabs
 ## Player-facing text (style, passive name and text) is in English and is translated
 ## through game/i18n/translations.csv.
 
@@ -150,6 +154,31 @@ const POKEMON := {
 		"passive": {"id": "gooey", "display_name": "Gooey",
 			"text": "Each contact move that hits it lowers the attacker's Speed one stage for the battle."},
 	},
+	"urshifu": {
+		"display_name": "Urshifu", "form_name": "Single Strike", "form_tab": "Single", "types": ["fighting", "dark"], "cat": "physical",
+		"style": "One perfect blow. It reads the rival's attack and answers with a hit no guard or stat can soften.",
+		"height": 1.9, "model_height": 2.4, "radius": 0.6, "poise": 0, "hp": 1140.0, "knockback": 0.8,
+		"speed": 7.7, "accel": 58.0, "turn": 14.0, "jump": 9.5, "gravity": 28.0, "air_control": 0.7,
+		"dodge": {"dist": 5.4, "dur": 0.22, "iframes": [0.03, 0.19], "recovery": 0.16, "charges": 3, "recharge": 1.1},
+		"points": {"locator_hand_primary": "hand_right", "locator_hand_secondary": "hand_left", "locator_head": "head", "locator_mouth": "mouth2"},
+		"extra_abilities": ["innerfocus"],
+		"moves": ["wickedblow", "suckerpunch", "closecombat", "bulkup"],
+		"passive": {"id": "unseenfist", "display_name": "Unseen Fist",
+			"text": "Its contact moves go through Protect and Detect."},
+	},
+	"urshifurapidstrike": {
+		"echo_of": "urshifu",
+		"display_name": "Urshifu", "form_name": "Rapid Strike", "form_tab": "Rapid", "types": ["fighting", "water"], "cat": "physical",
+		"style": "Flowing water. Wears the rival down with flurries and chills its strength from afar.",
+		"height": 1.9, "model_height": 2.4, "radius": 0.6, "poise": 0, "hp": 1140.0, "knockback": 0.8,
+		"speed": 7.7, "accel": 58.0, "turn": 14.0, "jump": 9.5, "gravity": 28.0, "air_control": 0.7,
+		"dodge": {"dist": 5.4, "dur": 0.22, "iframes": [0.03, 0.19], "recovery": 0.16, "charges": 3, "recharge": 1.1},
+		"points": {"locator_hand_primary": "hand_right", "locator_hand_secondary": "hand_left", "locator_head": "head", "locator_mouth": "mouth2"},
+		"extra_abilities": ["innerfocus"],
+		"moves": ["surgingstrikes", "liquidation", "chillingwater", "closecombat"],
+		"passive": {"id": "unseenfist", "display_name": "Unseen Fist",
+			"text": "Its contact moves go through Protect and Detect."},
+	},
 }
 
 ## Soft type matchups: a disadvantage matters, but it does not decide the battle on its own.
@@ -192,6 +221,21 @@ const TYPE_COLOR := {
 	"rock": Color("c9b458"), "ghost": Color("8f6fc4"), "dragon": Color("7f5cff"), "dark": Color("8a7062"),
 	"steel": Color("c8ccdf"), "fairy": Color("f2a3cf"),
 }
+
+
+## The Pokémon a form belongs to on the selection wall (itself if it is not an echo).
+static func base_of(sp: String) -> String:
+	return POKEMON.get(sp, {}).get("echo_of", sp)
+
+
+## Its forms: the base first, then its echoes.
+static func forms(sp: String) -> Array:
+	var base := base_of(sp)
+	var out: Array = [base]
+	for id in POKEMON:
+		if POKEMON[id].get("echo_of", "") == base:
+			out.append(id)
+	return out
 
 
 ## Whether one of these types is immune to the move's type in the games. Damage only

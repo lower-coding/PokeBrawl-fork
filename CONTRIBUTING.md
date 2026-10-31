@@ -28,8 +28,10 @@ not build the same move.
 - **Visual style:** Cobblemon's own particle pieces first; whatever is missing, pixel art at
   Cobblemon's density (16 px per meter) with flat color bands and stepped transparency. No smooth
   gradients or soft glows, and nothing that flashes faster than twice per second.
-- **Assets:** only Cobblemon assets (respecting their licenses) or your own work. Never new
-  assets ripped from the official games; the trainer sprites are the one exception left, and
+- **Assets:** only Cobblemon assets (respecting their licenses), your own work, or openly licensed
+  models compatible with the project's non-commercial use, credited in [CREDITS.md](CREDITS.md)
+  with what was changed (Urshifu's, from the Pokemans Pack, CC BY-NC 4.0). Never new assets ripped
+  from the official games; the trainer sprites are the one exception left, and
   original ones are welcome (see [Art](#art)).
 
 ## Recipe: add a move
@@ -107,12 +109,14 @@ shapes.
 1. **Model and animations:** with a Cobblemon clone,
    `python tools/import_cobblemon.py <clone>/common/src/main/resources --only=<species>`
    copies its files into `sources/cobblemon/<species>/` and converts them into
-   `game/pokemon/<species>/`.
+   `game/pokemon/<species>/`. Without a Cobblemon model, an openly licensed one
+   (`tools/import_pokemans.py` is the example: it fixes what the source's animations need).
 2. **Species data:** `python tools/import_species.py --cobblemon <clone> <species>` adds its real
    stats, abilities and learnset to `game/scripts/data/species.gd` (generated; never edit it by
-   hand).
+   hand). A form with its own roster entry goes in `FORMS` there.
 3. **Battle data:** add its entry to `Roster.POKEMON` in `game/scripts/data/roster.gd` (size,
-   mobility, dodge, passive, moves) and its style to `PROFILE` in `game/scripts/ai.gd`.
+   mobility, dodge, passive, moves) and its style to `PROFILE` in `game/scripts/ai.gd`. A form is
+   one more entry with `echo_of`: it shares its base's cell on the selection wall.
 4. **Test:** `--test=animations --p1=<species>` must report no failures, then
    `--aivsai --test=aivsai --p1=<species>` and play it.
 
@@ -165,7 +169,8 @@ repository; the game picks tracks by file name from `game/music/` (see its
 
 ## Art
 
-The stadiums, the effects and the menus are drawn by code; the Pokémon are Cobblemon's. Art is
+The stadiums, the effects and the menus are drawn by code; the Pokémon are Cobblemon's, except
+Urshifu, from the Pokemans Pack. Art is
 welcome where the game still leans on others or on placeholders:
 
 - **Trainer sprites:** original trainers to replace the games' ones, front and back (today
@@ -228,7 +233,7 @@ ready for, from the most direct to the most ambitious. Any of them is a good pla
 The content is data first, so adding to it does not mean touching the battle system.
 
 - **Moves.** Each move is an entry in `moves.gd` plus a script, and the scripts share bases
-  (dashes, punches, body slams, projectiles, held beams): the 82 moves done today come from 55
+  (dashes, punches, body slams, projectiles, held beams): the 91 moves done today come from 61
   scripts, and many new ones only need data. The ten Pokémon learn 404 moves in the games,
   grouped into families to design them together in
   [docs/learnset-plan.md](docs/learnset-plan.md). As soon as a move's script exists, every
@@ -239,7 +244,7 @@ The content is data first, so adding to it does not mean touching the battle sys
   large part of them, so a new Pokémon is mostly its roster entry (how it moves and dodges), its AI style and a check of its
   animations. The plan is in [docs/roster-plan.md](docs/roster-plan.md).
 - **Abilities** hook into battle events, the way Pokémon Showdown does it, so each new one is
-  a small piece of code next to the 26 already working.
+  a small piece of code next to the 27 already working.
 - **Tests keep it safe:** `loadouts` fights every Pokémon with every move it can pick,
   `mechanics` checks the rules and the AI can play itself (`--aivsai`).
 
@@ -284,4 +289,4 @@ The same approach fits any game with a decompilation.
 
 PokeBrawl can also be the battle engine of a new fan game: an overworld, a story and captures,
 with real-time battles instead of turns. The code is MIT, so take it; remember that
-Cobblemon's models are CC BY-NC 3.0, which rules out any commercial use.
+Cobblemon's models are CC BY-NC 3.0 and Urshifu's CC BY-NC 4.0, which rules out any commercial use.

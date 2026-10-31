@@ -591,6 +591,8 @@ func apply(g: Hit, o: Node, point: Vector3) -> String:
 		if g.quiet:
 			pass
 		else:
+			if Moves.DATA.get(g.move_id, {}).get("crit", false):
+				main.vfx.text(point + Vector3.UP * 1.2, main.tr("Critical hit!"), Color("ffb13a"))
 			match Roster.tier(mult):
 				"super":
 					main.vfx.text(point + Vector3.UP * 0.8, main.tr("Super effective!"), Color("ff8a3a"), 1.15)
@@ -617,6 +619,9 @@ func _predicted_hit(g: Hit, o: Fighter, point: Vector3, mult: float, flow: bool)
 		if g.on_strike.is_valid():
 			g.on_strike.call(o, "status")
 		return "status"
+	if Moves.DATA.get(g.move_id, {}).get("needs_attacking", false) and not o.is_attacking():
+		main.vfx.text(o.center() + Vector3.UP * 0.9, main.tr("But it failed!"), Color(0.75, 0.77, 0.85))
+		return "failed"
 	var attacker: Node = g.user
 	var strength := g.strength
 	if attacker is Fighter and is_instance_valid(attacker):
