@@ -187,7 +187,8 @@ func my_loadout(sp: String) -> Dictionary:
 	return Loadout.saved(sp)
 
 
-## "rival_loadout": what the online rival sent with its choice (against the AI, its defaults).
+## "rival_loadout": what the online rival sent with its choice (against the AI, what the menu has
+## for it).
 ## "rival_trainer": the online rival's trainer (against the AI, one from TrainerData).
 func start_battle(p1: String, p2: String, diff: String, rival_loadout := {}, rival_trainer := "") -> void:
 	music.play(arena.stage, true)
@@ -203,9 +204,9 @@ func start_battle(p1: String, p2: String, diff: String, rival_loadout := {}, riv
 	if player_ai:
 		player_ai.queue_free()
 	var side := 1.0 if net and not net.host else -1.0
-	var a := _create(p1, 0, Vector3(7 * side, 0, 0), -PI * 0.5 * side, my_loadout(p1))
+	var a := _create(p1, 0, Vector3(7 * side, 0, 0), -PI * 0.5 * side, menu.battle_loadout(0, p1))
 	var b := _create(p2, 1, Vector3(-7 * side, 0, 0), PI * 0.5 * side,
-		Loadout.valid(p2, rival_loadout) if net else Loadout.default_for(p2))
+		Loadout.valid(p2, rival_loadout) if net else menu.battle_loadout(1, p2))
 	a.rival = b
 	b.rival = a
 	player = a
@@ -263,9 +264,9 @@ func _setup_ai(a: Fighter, b: Fighter, diff: String) -> void:
 func _build_party(lead: Fighter) -> void:
 	var list: Array = [lead]
 	for sp in menu.team_ids(lead.team, lead.species).slice(1):
-		var loadout: Dictionary = my_loadout(sp)
-		if lead.team != 0:
-			loadout = Loadout.valid(sp, menu.rival_loadouts.get(sp, {})) if net else Loadout.default_for(sp)
+		var loadout: Dictionary = menu.battle_loadout(lead.team, sp)
+		if lead.team != 0 and net:
+			loadout = Loadout.valid(sp, menu.rival_loadouts.get(sp, {}))
 		var l := _create(sp, lead.team, lead.start_pos, lead.start_yaw, loadout)
 		fighters.pop_back()              # only those on the field are there
 		l.rival = lead.rival

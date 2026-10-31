@@ -310,10 +310,14 @@ func _selection() -> void:
 		_player_card(side)
 	var items: Array = []
 	if m.sel_phase == "setup":
-		items = [[Controls.glyph("menu_back"), tr("Change")]] if m.online and m.me_ready \
-			else [[Controls.glyph("jump"), tr("Choose")], [Controls.glyph("menu_back"), tr("Back")]]
+		if m.online and m.me_ready:
+			items = [[Controls.glyph("menu_back"), tr("Change")]]
+		else:
+			items = [[Controls.glyph("jump"), tr("Choose")], [Controls.glyph("mov2"), tr("Random moves")], [Controls.glyph("menu_back"), tr("Back")]]
+			_top_button("rand", 880.0, 560.0, 1.0, UiKit.YELLOW, "mov2", tr("Random moves"), tr("Every pick"))
 	else:
-		items = [[Controls.glyph("jump"), tr("Pick or take out") if m.team_battle() else tr("Pick")], [Controls.glyph("menu_back"), tr("Leave") if m.online else tr("Back")]]
+		items = [[Controls.glyph("jump"), tr("Pick or take out") if m.team_battle() else tr("Pick")], [Controls.glyph("menu_info"), tr("Random")], [Controls.glyph("menu_back"), tr("Leave") if m.online else tr("Back")]]
+		_top_button("rand", 880.0, 560.0, 1.0, UiKit.YELLOW, "menu_info", tr("Random Pokémon"), tr("The rival's pick") if m.sel_phase == "p2" else tr("Your pick"))
 		if m.online and m.main.net and m.main.net.host:
 			items.push_front([Controls.glyph("mov2"), tr("Stage")])
 		if m.forms_of(list[m.cursor]).size() > 1:
@@ -580,18 +584,16 @@ func _team_slot(side: int, i: int, sp: String, preview: bool, picking: bool, cx:
 
 
 func _loadout_of(side: int, sp: String) -> Dictionary:
-	if side == 0:
-		return m.main.my_loadout(sp)
-	return Loadout.valid(sp, m.rival_loadouts.get(sp, {})) if m.online else Loadout.default_for(sp)
+	if side == 1 and m.online:
+		return Loadout.valid(sp, m.rival_loadouts.get(sp, {}))
+	return m.battle_loadout(side, sp)
 
 
 func _loadout(side: int) -> Dictionary:
 	var sp: String = m.choice.p1 if side == 0 else m.choice.p2
-	if side == 0:
-		return m.main.my_loadout(sp)
-	if m.online and not m.rival_loadout.is_empty():
+	if side == 1 and m.online and not m.rival_loadout.is_empty():
 		return m.rival_loadout
-	return Loadout.default_for(sp)
+	return m.battle_loadout(side, sp)
 
 
 # ---------------------------------------------------------------- moves
@@ -601,26 +603,31 @@ const RW := 920.0
 
 
 func _moves() -> void:
-	_header(tr("Moves"), UiKit.BLUE)
-	var list := m.pokemon_list()
+	var prep := m.prepping()
+	_header(tr("This battle's moves") if prep else tr("Moves"), UiKit.BLUE)
+	var list := m.edit_entries()
 	var sp := m.edit_sp
 	var picking := m.edit_phase == "pokemon"
-	# Left: the Pokémon, a column of strips.
+	# Left: the Pokémon (prepping, just the picks, each marked with its side), a column of strips.
 	var row := minf(84.0, 880.0 / list.size())
 	var strip := row - 10.0
+	var name_w := 130.0 if prep else 210.0
 	for i in list.size():
-		var s: String = list[i]
-		var o := on("mv" + Roster.base_of(s), s == sp)
+		var s: String = list[i][1]
+		var side: int = list[i][0]
+		var o := on("mv%s%d" % [Roster.base_of(s), side], i == m.cursor)
 		var y := 150.0 + i * row
 		var lit := o if picking else o * 0.45
-		u.slant(60.0 + 18.0 * o, y, 330.0, strip, UiKit.PANEL.lerp(UiKit.BLUE, lit))
+		u.slant(60.0 + 18.0 * o, y, 330.0, strip, UiKit.PANEL.lerp(_side_color(side) if prep else UiKit.BLUE, lit))
 		zone("mvp", i, 60.0, y, 330.0 + strip * UiKit.SLANT, strip)
 		if m.portraits.has(s):
 			u.tex(m.portraits[s], 70.0 + 18.0 * o, y - 2.0, strip + 2.0, strip + 2.0)
 		var form: String = Roster.POKEMON[s].get("form_name", "")
-		u.title(156.0 + 18.0 * o, y + (6.0 if form != "" else 20.0) * strip / 74.0, tr(Roster.POKEMON[s].display_name).to_upper(), 32.0, UiKit.INK, -1, 210.0)
+		u.title(156.0 + 18.0 * o, y + (6.0 if form != "" else 20.0) * strip / 74.0, tr(Roster.POKEMON[s].display_name).to_upper(), 32.0, UiKit.INK, -1, name_w)
 		if form != "":
-			u.text_fit(156.0 + 18.0 * o, y + strip - 24.0, tr(form), 210.0, 18.0, Color(UiKit.INK, 0.8), u.heavy)
+			u.text_fit(156.0 + 18.0 * o, y + strip - 24.0, tr(form), name_w, 18.0, Color(UiKit.INK, 0.8), u.heavy)
+		if prep:
+			_token(296.0 + 18.0 * o, y + (strip - 34.0) * 0.5, "1P" if side == 0 else ("2P" if m.online else "CPU"), UiKit.DARK)
 	# Middle: the Pokémon and its sheet.
 	var data: Dictionary = Roster.POKEMON[sp]
 	u.slant(430.0, 150.0, 460.0, 840.0, UiKit.PANEL, UiKit.TALL)
@@ -654,7 +661,7 @@ func _moves() -> void:
 		u.text(466.0, ry, tr("In the air"), 22.0, UiKit.SOFT, u.bold)
 		u.text(860.0, ry, tr("Flies") if b.air == "flies" else tr("Levitates"), 24.0, UiKit.INK, u.heavy, 1)
 	# Right: its moves and ability, or the options for a slot, or a move's details.
-	var lo := Loadout.saved(sp)
+	var lo := m.edit_loadout()
 	if m.details and m.shown_move() != "":
 		_details(m.shown_move())
 	elif m.edit_phase == "list":
@@ -666,36 +673,46 @@ func _moves() -> void:
 	match m.edit_phase:
 		"pokemon":
 			items = [[Controls.glyph("jump"), tr("Edit")], [Controls.glyph("menu_back"), tr("Back")]]
-			if m.forms_of(sp).size() > 1:
+			if not prep and m.forms_of(sp).size() > 1:
 				items.push_front([Controls.glyph("mov1"), tr("Change form")])
 		"slots":
 			items = [[Controls.glyph("jump"), tr("Change")], [Controls.glyph("menu_info"), tr("Details")], [Controls.glyph("menu_back"), tr("Back")]]
+			if prep and list.size() > 1:
+				items.push_front(["< >", tr("Other pick")])
 		"list":
 			items = [[Controls.glyph("jump"), tr("Choose")], [Controls.glyph("menu_info"), tr("Details")], [Controls.glyph("menu_back"), tr("Back")]]
+			if m.edit_slot < 4:
+				items.push_front(["< >", tr("Other group")])
+	if prep and m.edit_phase != "list":
+		_top_button("rand", 820.0, 420.0, 1.0, UiKit.YELLOW, "mov2", tr("Random moves"), tr(Roster.POKEMON[sp].display_name))
+		items.push_front([Controls.glyph("mov2"), tr("Random moves")])
 	u.hints(items)
 
 
 ## Top right of the Moves screen: back to the defaults, every Pokémon's from the list of
 ## Pokémon, the one being edited from its slots. Dimmed when there is nothing to restore.
 func _restore_button() -> void:
-	var all: bool = m.restore_all()
-	var changed: bool = not (m.all_forms().all(Loadout.is_default) if all else Loadout.is_default(m.edit_sp))
+	var whose := tr(Roster.POKEMON[m.edit_sp].display_name)
+	if m.restore_all():
+		whose = tr("Every pick") if m.prepping() else tr("Every Pokémon")
 	var w := 560.0
+	_top_button("restore", RX + RW - w - 84.0 * UiKit.SLANT, w, on("restore", m.restorable()), UiKit.ORANGE, "menu_extra", tr("Restore defaults"), whose)
+
+
+## A button at the top of a screen: its key, what it does and who for. Dimmed as "o" drops.
+func _top_button(kind: String, x: float, w: float, o: float, accent: Color, action: String, what: String, who: String) -> void:
 	var hgt := 84.0
-	var x := RX + RW - w - hgt * UiKit.SLANT
 	var y := 34.0
-	var o := on("restore", changed)
 	u.slant(x, y, w, hgt, UiKit.DARK.lerp(UiKit.PANEL_HI, o))
-	u.slant(x, y, 12.0, hgt, Color(UiKit.ORANGE, 0.35 + 0.65 * o))
-	zone("restore", 0, x, y, w + hgt * UiKit.SLANT, hgt)
+	u.slant(x, y, 12.0, hgt, Color(accent, 0.35 + 0.65 * o))
+	zone(kind, 0, x, y, w + hgt * UiKit.SLANT, hgt)
 	var ink := Color(UiKit.INK, 0.4 + 0.6 * o)
-	var g := Controls.glyph("menu_extra")
+	var g := Controls.glyph(action)
 	var gw := maxf(u.width(g, 22.0, u.heavy) + 18.0, 36.0)
 	u.rect(x + 40.0, y + 24.0, gw, 34.0, UiKit.PANEL if o > 0.5 else UiKit.DARK)
 	u.text(x + 40.0 + gw * 0.5, y + 28.0, g, 22.0, ink, u.heavy, 0)
-	u.text_fit(x + 60.0 + gw, y + 12.0, tr("Restore defaults").to_upper(), w - gw - 110.0, 28.0, ink, u.heavy)
-	var whose := tr("Every Pokémon") if all else tr(Roster.POKEMON[m.edit_sp].display_name)
-	u.text_fit(x + 60.0 + gw, y + 48.0, whose, w - gw - 110.0, 20.0, Color(ink, ink.a * 0.7), u.bold)
+	u.text_fit(x + 60.0 + gw, y + 12.0, what.to_upper(), w - gw - 110.0, 28.0, ink, u.heavy)
+	u.text_fit(x + 60.0 + gw, y + 48.0, who, w - gw - 110.0, 20.0, Color(ink, ink.a * 0.7), u.bold)
 
 
 func _slots(lo: Dictionary) -> void:
@@ -728,18 +745,23 @@ func _slots(lo: Dictionary) -> void:
 			u.para(x + 48.0, y + 118.0, tr(ab.text), RW - 110.0, 24.0, Color(UiKit.INK, 0.85), u.body, 1.25, 4)
 
 
-## The options for a slot: a scrolling list, the equipped ones dimmed, and what the
-## highlighted one does under it.
+## The options for a slot: a scrolling list under its headings, the equipped ones dimmed, and
+## what the highlighted one does under it.
 func _choices(lo: Dictionary) -> void:
 	var options := m.edit_options()
 	u.slant(RX, 150.0, RW, 840.0, UiKit.PANEL, UiKit.TALL)
 	var head := (tr("Move %d") % (m.edit_slot + 1)) if m.edit_slot < 4 else tr("Ability")
 	u.text(RX + 50.0, 166.0, head.to_upper(), 22.0, UiKit.SOFT, u.bold)
+	var choosable := options.filter(func(o): return not m.is_heading(o))
 	if options.size() > Menu.EDIT_ROWS:
-		u.text(RX + RW - 40.0, 166.0, "%d / %d" % [m.edit_cursor + 1, options.size()], 22.0, UiKit.SOFT, u.bold, 1)
+		u.text(RX + RW - 40.0, 166.0, "%d / %d" % [choosable.find(options[m.edit_cursor]) + 1, choosable.size()], 22.0, UiKit.SOFT, u.bold, 1)
 	for k in range(m.edit_top, mini(m.edit_top + Menu.EDIT_ROWS, options.size())):
 		var id: String = options[k]
 		var y := 204.0 + (k - m.edit_top) * 72.0
+		if m.is_heading(id):
+			var label := tr("%s's moves") % tr(Roster.POKEMON[m.edit_sp].display_name) if id == Menu.OWN_MOVES else tr("Common moves")
+			u.title(RX + 44.0, y + 18.0, label.to_upper(), 34.0, UiKit.YELLOW, -1, RW - 110.0)
+			continue
 		var sel := k == m.edit_cursor
 		zone("opt", k, RX + 30.0, y, RW - 70.0 + 62.0 * UiKit.SLANT, 62.0)
 		if m.edit_slot < 4:

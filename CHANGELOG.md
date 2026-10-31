@@ -3,6 +3,25 @@
 All notable changes to this project are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [demo-random] - 2026-10-31
+
+### Added
+- Random picks: a button (Y / △ / X) on the selection picks a random Pokémon or form for whoever is
+  picking, one per press in a 3 vs 3.
+- Random moves: a button (RB / R1 / E) rolls four moves for every pick from the battle's options, or
+  for one pick from its moves. There is always at least one attack, and the ability stays.
+- New tests: `--test=prep`, `--test=menu_prep` and `--test=menu_prep_team`.
+
+### Changed
+- Edit Pokémon, before a battle, now lists only that battle's picks, the rival's too against the AI.
+  What changes there lasts for that battle and its rematches and never touches what the Moves menu
+  saved, which is now each Pokémon's default. It is dropped when the Pokémon stops being picked or a
+  new format is chosen.
+- A move slot's options are now two lists: the Pokémon's own moves and the common ones, those more
+  than half the roster can use (a Pokémon's default four always count as its own). Each is ordered
+  by type, then by name. Left and right jump between them.
+- The version is now `demo-random`: it cannot play online against `demo-mewtwo`.
+
 ## [demo-mewtwo] - 2026-10-31
 
 ### Added

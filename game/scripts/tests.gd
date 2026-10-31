@@ -105,16 +105,16 @@ func _ready() -> void:
 				[9.0, "move_right", ""], [9.3, "", "rules_heal"], [9.5, "menu_back", ""], [10.0, "", "rules_back"], [10.2, "move_right", ""],
 				[10.4, "move_right", ""], [10.6, "menu_accept", ""], [14.2, "", "rules_battle"]]
 		"menu_moves":
-			# Moves screen: Charizard's first move to Body Slam, then Air Slash into that slot
+			# Moves screen: Charizard's first move to Solar Beam, then Air Slash into that slot
 			# (it was in the second: they swap). Its own save file, which starts empty.
 			Loadout.path = "user://loadouts_test.json"
 			DirAccess.remove_absolute(ProjectSettings.globalize_path(Loadout.path))
 			_plan = [[1.5, "", ""], [1.7, "menu_accept", ""], [2.0, "move_right", ""], [2.2, "move_down", ""], [2.4, "", ""],
 				[2.6, "", "moves_main"], [2.8, "menu_accept", ""], [3.6, "move_down", ""], [3.8, "move_down", ""], [4.0, "", "moves_grid"],
 				[4.2, "menu_accept", ""], [4.5, "", "moves_slots"], [4.7, "menu_accept", ""],
-				[5.0, "move_down", ""], [5.2, "move_down", ""], [5.4, "move_down", ""], [5.6, "move_down", ""], [5.9, "", "moves_list"],
+				[5.0, "move_down", ""], [5.2, "move_down", ""], [5.4, "move_down", ""], [5.9, "", "moves_list"],
 				[6.1, "menu_accept", ""], [6.4, "", "moves_after"], [6.6, "menu_accept", ""],
-				[6.9, "move_up", ""], [7.1, "move_up", ""], [7.3, "move_up", ""], [7.6, "", "moves_swap_list"], [7.8, "menu_accept", ""],
+				[7.3, "opt:airslash", ""], [7.6, "", "moves_swap_list"], [7.8, "menu_accept", ""],
 				[8.1, "", "moves_swapped"], [8.3, "menu_info", ""], [8.6, "", "moves_details"], [8.8, "menu_info", ""],
 				# Down to the ability (fifth slot), the second one; then restore: No first, then Yes.
 				[9.0, "move_down", ""], [9.2, "move_down", ""], [9.4, "move_down", ""], [9.6, "move_down", ""],
@@ -122,6 +122,21 @@ func _ready() -> void:
 				[10.7, "menu_accept", ""], [11.0, "", "moves_ability"], [11.3, "menu_extra", ""], [11.6, "", "moves_restore_ask"],
 				[11.8, "menu_accept", ""], [12.2, "menu_extra", ""], [12.4, "move_right", ""], [12.6, "menu_accept", ""],
 				[13.0, "", "moves_restored"]]
+		"menu_prep":
+			# Battle, 1 vs 1: a random pick on the wall by key, the rival's by its button; random moves
+			# for both from the options, then the rival's moves and its list of moves, by group.
+			_plan = [[1.5, "menu_accept", ""], [2.0, "menu_accept", ""], [2.6, "menu_accept", ""], [3.2, "", "prep_wall"], [3.4, "menu_info", ""],
+				[3.8, "", "prep_rival"], [4.0, "click:rand:0", ""], [4.6, "", "prep_setup"], [4.8, "mov2", ""], [5.2, "", "prep_rolled"],
+				[5.4, "move_left", ""], [5.6, "menu_accept", ""], [6.2, "", "prep_picks"], [6.4, "move_down", ""], [6.6, "menu_accept", ""],
+				[7.0, "", "prep_slots"], [7.2, "menu_accept", ""], [7.6, "", "prep_list"], [7.8, "move_right", ""], [8.2, "", "prep_common"],
+				[8.4, "menu_accept", ""], [8.8, "", "prep_chosen"], [9.0, "menu_back", ""], [9.3, "menu_back", ""], [9.8, "", "prep_back"]]
+		"menu_prep_team":
+			# Battle, 3 vs 3: both teams at random, random moves for all six, then the list of just
+			# those six and, from a pick's slots, on to the next one.
+			_plan = [[1.5, "menu_accept", ""], [2.0, "menu_accept", ""], [2.4, "move_right", ""], [2.8, "menu_accept", ""], [3.4, "menu_info", ""],
+				[3.6, "menu_info", ""], [3.8, "menu_info", ""], [4.0, "menu_info", ""], [4.2, "menu_info", ""], [4.4, "menu_info", ""], [4.8, "mov2", ""],
+				[5.2, "", "prep_team_setup"], [5.4, "move_left", ""], [5.6, "menu_accept", ""], [6.1, "", "prep_team_picks"], [6.3, "menu_accept", ""],
+				[6.6, "move_right", ""], [7.0, "", "prep_team_slots"]]
 		"menu_profile":
 			# Profile: up from Online to the badge, in; point at another trainer (it must not
 			# change yet), confirm it; up to the name, the on-screen keyboard with the pad:
@@ -163,6 +178,8 @@ func _ready() -> void:
 			_urshifu_test()
 		"mewtwo":
 			_mewtwo_test()
+		"prep":
+			_prep_test()
 		"loadouts":
 			_loadouts()
 		"abilities":
@@ -221,6 +238,8 @@ func _next_step() -> void:
 	if st[0] == "key" and st[1].begins_with("click:"):
 		_click_zone(st[1].get_slice(":", 1), int(st[1].get_slice(":", 2)))
 		_step_wait = 4
+	elif st[0] == "key" and st[1].begins_with("opt:"):
+		main.menu.edit_cursor = main.menu.edit_options().find(st[1].get_slice(":", 1))
 	elif st[0] == "key":
 		var ev := InputEventAction.new()
 		ev.action = st[1]
@@ -271,7 +290,7 @@ func _capture(n: String) -> void:
 func _physics_process(delta: float) -> void:
 	t += delta
 	match test_name:
-		"menu", "menu_moves", "menu_options", "menu_profile", "menu_wheel", "menu_rules", "menu_forms", "menu_forms_team":
+		"menu", "menu_moves", "menu_options", "menu_profile", "menu_wheel", "menu_rules", "menu_forms", "menu_forms_team", "menu_prep", "menu_prep_team":
 			# Due steps go into a queue that _process plays one per few frames: after a slow
 			# frame several come due at once, and two presses in one frame lose one.
 			for p in _plan:
@@ -295,6 +314,12 @@ func _physics_process(delta: float) -> void:
 			if test_name == "menu_forms" and t >= 8.2 and t - delta < 8.2:
 				var ok_forms: bool = main.menu.choice.p1 == "urshifurapidstrike"
 				print("%s  The form picked on the wall is the one chosen  %s" % ["OK   " if ok_forms else "FAIL ", main.menu.choice.p1])
+				get_tree().quit()
+			if test_name == "menu_prep" and t > 10.0:
+				get_tree().quit()
+			if test_name == "menu_prep_team" and t > 7.2:
+				var who: Array = main.menu.edit_entries()
+				print("%s  Six picks listed, on the second  %s" % ["OK   " if who.size() == 6 and main.menu.cursor == 1 and main.menu.edit_sp == who[1][1] else "FAIL ", who])
 				get_tree().quit()
 			if test_name == "menu_wheel":
 				if t >= 3.6 and t - delta < 3.6:
@@ -324,9 +349,11 @@ func _physics_process(delta: float) -> void:
 				if t > 7.9:
 					get_tree().quit()
 			if test_name == "menu_moves" and t >= 8.95 and t - delta < 8.95:
-				# The fifth option went into the first slot, then Air Slash (second) took
-				# its place: they swapped.
-				var fifth: String = Loadout.moves_for("charizard")[4]
+				# The move three rows below Flamethrower went into the first slot, then Air Slash
+				# (second) took its place: they swapped.
+				main.menu.edit_slot = 0
+				var rows: Array = main.menu.edit_options().filter(func(o): return not main.menu.is_heading(o))
+				var fifth: String = rows[rows.find("flamethrower") + 3]
 				var after: Array = Loadout.saved("charizard").moves
 				var ok := after == ["airslash", fifth, "dragonclaw", "flareblitz"]
 				var stored := FileAccess.get_file_as_string(Loadout.path)
@@ -509,6 +536,100 @@ func _wait(s: float) -> void:
 func _ok(case_name: String, passes: bool, detail := "") -> void:
 	_results.append([case_name, passes])
 	print("%s  %s  %s" % ["OK   " if passes else "FAIL ", case_name, detail])
+
+
+## The selection's random picks and random moves, each battle's moves over the defaults, and the
+## groups of the Moves screen's list.
+func _prep_test() -> void:
+	await get_tree().physics_frame
+	Loadout.path = "user://loadouts_test.json"
+	DirAccess.remove_absolute(ProjectSettings.globalize_path(Loadout.path))
+	Loadout.restore()
+	var ordered := true
+	var whole := true
+	var rolls_ok := true
+	for sp in Roster.POKEMON:
+		var groups := Loadout.move_groups(sp)
+		var listed: Array = groups[0] + groups[1]
+		var can := Loadout.moves_for(sp)
+		whole = whole and listed.size() == can.size() and can.all(func(mv): return mv in listed) \
+			and Roster.POKEMON[sp].moves.all(func(mv): return mv in groups[0])
+		for group in groups:
+			for i in range(1, group.size()):
+				ordered = ordered and not Loadout._listed_before(group[i], group[i - 1])
+				var ta := UiKit.TYPE_ORDER.find(Moves.DATA[group[i - 1]].type)
+				ordered = ordered and ta <= UiKit.TYPE_ORDER.find(Moves.DATA[group[i]].type)
+		for roll in 50:
+			var four := Loadout.random_moves(sp)
+			rolls_ok = rolls_ok and Loadout.valid(sp, {"moves": four, "ability": ""}).moves == four \
+				and four.any(func(mv): return Moves.DATA[mv].get("power", 0) > 0)
+	_ok("Groups: every move once, the default four among its own", whole)
+	_ok("Groups: by type, then by name", ordered)
+	_ok("Groups: what most learn is common, what few learn is not", Loadout.is_common("protect") and not Loadout.is_common("flamethrower"))
+	_ok("Random moves: always four it can use, one an attack", rolls_ok)
+
+	var m: Menu = main.menu
+	m._edit_return = "main"
+	m.edit_sp = "charizard"
+	m.edit_slot = 0
+	var options := m.edit_options()
+	_ok("List: its own under a heading, then the common under another", options[0] == Menu.OWN_MOVES and options.has(Menu.COMMON_MOVES) \
+		and options.find("flamethrower") < options.find(Menu.COMMON_MOVES) and options.find("protect") > options.find(Menu.COMMON_MOVES))
+
+	# Picking: 1 vs 1 and 3 vs 3, all at random.
+	m.screen = "selection"
+	m.choice.format = "1v1"
+	m.sel_phase = "p1"
+	m._random_pick()
+	_ok("Random pick: moves on to the rival", m.sel_phase == "p2" and Roster.POKEMON.has(m.choice.p1), m.choice.p1)
+	m._random_pick()
+	_ok("Random pick: the rival's goes to the options", m.sel_phase == "setup", m.choice.p2)
+	m.choice.format = "3v3"
+	m.choice.team = []
+	m.choice.team2 = []
+	m.sel_phase = "p1"
+	for i in Party.SIZE * 2:
+		m._random_pick()
+	var bases: Array = m.choice.team.map(func(sp): return Roster.base_of(sp))
+	_ok("Random pick: fills both teams with no one twice", m.sel_phase == "setup" and m.choice.team.size() == 3 and m.choice.team2.size() == 3 \
+		and bases.all(func(b): return bases.count(b) == 1), "%s %s" % [m.choice.team, m.choice.team2])
+	m.setup_cursor = 0
+	m._open_battle_moves()
+	_ok("3 vs 3: the Moves screen lists just the six picks", m.edit_entries().size() == 6 and m.edit_phase == "pokemon" and m.edit_side == 0)
+	m._leave_moves()
+
+	# This battle's moves: over the defaults, for that side only, gone with the pick.
+	m.choice.format = "1v1"
+	m.choice.team = []
+	m.choice.team2 = []
+	m.choice.p1 = "charizard"
+	m.choice.p2 = "charizard"
+	m._to_setup()
+	m._open_battle_moves()
+	_ok("1 vs 1: the Moves screen lists both picks", m.edit_entries() == [[0, "charizard"], [1, "charizard"]])
+	m._edit_pick(1)
+	var set_moves: Array = ["airslash", "dragonclaw", "flareblitz", "earthquake"]
+	m._store_edit({"moves": set_moves, "ability": "solarpower"})
+	_ok("Set for the battle: the rival's pick has it", m.battle_loadout(1, "charizard").moves == set_moves and m.battle_loadout(1, "charizard").ability == "solarpower")
+	_ok("Set for the battle: my same Pokémon does not", Loadout.is_default("charizard") and m.battle_loadout(0, "charizard") == Loadout.default_for("charizard"))
+	m._leave_moves()
+	main.start_battle("charizard", "charizard", "normal")
+	_ok("Set for the battle: it fights with it", main.fighters[1].data.moves == set_moves and main.fighters[1].data.passive.id == "solarpower" \
+		and main.fighters[0].data.moves == Roster.POKEMON["charizard"].moves, "%s" % [main.fighters[1].data.moves])
+	_ok("Set for the battle: the defaults stay saved as they were", Loadout.is_default("charizard"))
+	m._store_edit(Loadout.default_for("charizard"))
+	_ok("Set back to the default, nothing is left to restore", m.choice.loadouts[1].is_empty())
+	m._store_edit({"moves": set_moves, "ability": "solarpower"})
+	m.choice.p2 = "snorlax"
+	m._to_setup()
+	_ok("Another pick drops what was set for the old one", m.choice.loadouts[1].is_empty() and m.battle_loadout(1, "snorlax") == Loadout.default_for("snorlax"))
+	m._random_battle_moves()
+	_ok("Random moves from the options: for both sides", m.choice.loadouts[0].has("charizard") or m.choice.loadouts[1].has("snorlax"))
+	main.start_battle("charizard", "snorlax", "normal")
+	_ok("Random moves: they reach the fighters", main.fighters[1].data.moves == m.battle_loadout(1, "snorlax").moves)
+	var fails := _results.filter(func(r): return not r[1]).size()
+	print("RESULT: %d of %d" % [_results.size() - fails, _results.size()])
+	get_tree().quit()
 
 
 ## Every move each Pokémon can take in the Moves menu besides its own four, used once

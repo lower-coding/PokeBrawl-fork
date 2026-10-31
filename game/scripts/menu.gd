@@ -10,12 +10,14 @@ extends Node
 ##   connecting  trying to join someone else's game
 ##   format      Battle, Training and hosting online: 1 vs 1 or 3 vs 3, before anyone picks
 ##   selection   Pokémon grid on top, each side's picks below with their moves, and the
-##               battle's options (stage, difficulty, rules, edit moves, fight). Online: each
-##               picks their own and the host picks the stage and the rules. A team stays
-##               hidden from the rival until both are ready
+##               battle's options (stage, difficulty, rules, edit moves, fight). Random picks a
+##               Pokémon on the grid and rolls moves on the options. Online: each picks their
+##               own and the host picks the stage and the rules. A team stays hidden from the
+##               rival until both are ready
 ##   rules       a 3 vs 3's rules for this battle (BattleRules), from the selection
-##   moves       each Pokémon's four moves and ability, its stats sheet and each move's
-##               details (also opened from the selection, for last-minute changes)
+##   moves       each Pokémon's default four moves and ability, its stats sheet and each move's
+##               details. Opened from the selection it lists only that battle's picks, and what
+##               changes there lasts for that battle (prepping)
 ##   options     controls, sound, screen and language (Options)
 ##   vs          both face to face before the battle
 ## Logic and input live here; MenuDraw draws. Visible text is English and goes through tr()
@@ -44,6 +46,9 @@ const FORMATS := [["1v1", "1 vs 1", "One Pokémon each."],
 	["3v3", "3 vs 3", "Three Pokémon a side, one on the field at a time. Switch between them."],
 	["back", "Back", ""]]
 const IP_CHARS := "0123456789."
+## Headings among a move slot's options: rows that are not moves and the cursor skips.
+const OWN_MOVES := "#own"
+const COMMON_MOVES := "#common"
 ## The profile's name: up to NAME_MAX of these (with the pad, each letter goes round them).
 const NAME_MAX := 12
 const NAME_CHARS := "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789 -_."
@@ -63,10 +68,11 @@ var is_open := false
 var screen := "title"
 var cursor := 0
 ## The next battle. "format": 1v1 or 3v3; "team", "team2": each side's picks in a 3 vs 3, the
-## first one leads (it is "p1" or "p2" too); "rules": BattleRules. Not saved: it lasts until the
+## first one leads (it is "p1" or "p2" too); "rules": BattleRules; "loadouts": per side, species ->
+## the moves and ability set for this battle, over its defaults. Not saved: it lasts until the
 ## game closes.
 var choice := {"p1": "pikachu", "p2": "snorlax", "diff": "normal", "mode": "combat", "stage": "night",
-	"format": "1v1", "team": [], "team2": [], "rules": BattleRules.defaults()}
+	"format": "1v1", "team": [], "team2": [], "rules": BattleRules.defaults(), "loadouts": [{}, {}]}
 var team_preview := ""           # a 3 vs 3's pick: who the cursor is on, shown in the next slot
 var form_pick := {}              # wall Pokémon -> the form showing (in memory only)
 var rules_cursor := 1            # the Rules screen: highlighted row (0 is a heading)
@@ -98,6 +104,7 @@ var _generating := false
 # Moves screen: pokemon (list), slots (its 4 + ability), list (options for the slot)
 var edit_phase := "pokemon"
 var edit_sp := ""
+var edit_side := -1              # whose pick is being edited; -1, a default rather than a pick
 var edit_slot := 0               # 0-3: moves, 4: ability
 var edit_cursor := 0             # highlighted option in the list
 var edit_top := 0                # first option shown (the list scrolls)
@@ -263,6 +270,7 @@ func _go(p: String) -> void:
 	elif p == "moves":
 		edit_phase = "pokemon"
 		cursor = cell_of(choice.p1)
+		edit_side = -1
 		edit_sp = pokemon_list()[cursor]
 	elif p != "vs":
 		_free_renders()
@@ -275,6 +283,7 @@ func online_connected() -> void:
 	rival_version = ""
 	rival_ready = false
 	message = ""
+	choice.loadouts = [{}, {}]
 	if not is_open:
 		open_menu("selection")
 	else:
@@ -369,6 +378,7 @@ func _menu_frame(delta: float) -> void:
 					choice.format = FORMATS[cursor][0]
 					choice.team = []
 					choice.team2 = []
+					choice.loadouts = [{}, {}]
 					if _hosting:
 						var err: String = main.start_net(true, "")
 						message = err
@@ -603,6 +613,9 @@ func _selection() -> void:
 	if sel_phase == "setup":
 		_setup_input(list)
 		return
+	if _pressed("menu_info"):
+		_random_pick()
+		return
 	var to := cursor
 	if _pressed("move_right"):
 		to = mini(cursor + 1, n - 1)
@@ -615,16 +628,7 @@ func _selection() -> void:
 	if to != cursor:
 		_pick_on_wall(to)
 	if _accept():
-		_sound("ok")
-		if team_battle():
-			_team_pick(list[cursor])
-			return
-		choice[sel_phase] = list[cursor]
-		if sel_phase == "p1" and not online:
-			sel_phase = "p2"
-			cursor = cell_of(choice.p2)
-		else:
-			_to_setup()
+		_take(list[cursor])
 	elif _pressed("menu_back"):
 		_sound("back")
 		if team_battle() and not (online and choice.team.is_empty()):
@@ -641,8 +645,36 @@ func _selection() -> void:
 			_go("main")
 
 
+## "sp" is this side's pick: on to the next side, or to the battle's options.
+func _take(sp: String) -> void:
+	_sound("ok")
+	if team_battle():
+		_team_pick(sp)
+		return
+	choice[sel_phase] = sp
+	if sel_phase == "p1" and not online:
+		sel_phase = "p2"
+		cursor = cell_of(choice.p2)
+	else:
+		_to_setup()
+
+
+## A random Pokémon or form for whoever is picking, one not on its team yet.
+func _random_pick() -> void:
+	var team: Array = choice[_picks_key()] if team_battle() else []
+	var pool := all_forms().filter(func(sp): return not on_team(sp, team))
+	if pool.is_empty():
+		return
+	var sp: String = pool.pick_random()
+	cursor = cell_of(sp)
+	team_preview = sp
+	main.audio.cry(sp, main.camera.global_position, 1.0, -22.0)
+	_take(sp)
+
+
 func _to_setup() -> void:
 	sel_phase = "setup"
+	_keep_picked_loadouts()
 	var items := setup_items()
 	setup_cursor = items.size() - 1          # straight on Fight / Ready
 	if online:
@@ -658,6 +690,9 @@ func _setup_input(list: Array) -> void:
 			_sound("back")
 			me_ready = false
 			send_choice()
+		return
+	if _pressed("mov2"):
+		_random_battle_moves()
 		return
 	# The options sit side by side: left and right go through them, up and down change them.
 	if _pressed("move_left"):
@@ -693,15 +728,7 @@ func _setup_input(list: Array) -> void:
 				rules_top = 0
 			"build":
 				_sound("ok")
-				_edit_return = "selection"
-				var keep := sel_phase
-				_go("moves")
-				edit_sp = choice.p1
-				cursor = cell_of(edit_sp)
-				edit_slot = 0
-				# A 3 vs 3 has three to edit: from the list of Pokémon.
-				edit_phase = "pokemon" if team_battle() else "slots"
-				sel_phase = keep
+				_open_battle_moves()
 			"fight":
 				_sound("ok")
 				_start_vs(choice.p1, choice.p2)
@@ -718,6 +745,89 @@ func _setup_input(list: Array) -> void:
 			send_choice()
 		else:
 			cursor = cell_of(choice[sel_phase])
+
+
+# ---------------------------------------------------------------- this battle's moves
+
+## The Moves screen came from the selection: it is about this battle, not the defaults.
+func prepping() -> bool:
+	return _edit_return == "selection"
+
+
+## This battle's picks, each as [side, species]. Online, only mine: the rival sets its own.
+func battle_picks() -> Array:
+	var out: Array = []
+	for side in (1 if online else 2):
+		var lead: String = choice.p1 if side == 0 else choice.p2
+		for sp in (choice["team" if side == 0 else "team2"] if team_battle() else [lead]):
+			out.append([side, sp])
+	return out
+
+
+## A pick's moves and ability in this battle: what was set for it, or else its default (mine, what
+## the Moves menu saved; the AI's, the roster's).
+func battle_loadout(side: int, sp: String) -> Dictionary:
+	var edited: Dictionary = choice.loadouts[side].get(sp, {})
+	return edited if not edited.is_empty() else _default_loadout(side, sp)
+
+
+func _default_loadout(side: int, sp: String) -> Dictionary:
+	return main.my_loadout(sp) if side == 0 else Loadout.default_for(sp)
+
+
+func _set_battle_loadout(side: int, sp: String, lo: Dictionary) -> void:
+	var checked := Loadout.valid(sp, lo)
+	if checked == _default_loadout(side, sp):
+		choice.loadouts[side].erase(sp)
+	else:
+		choice.loadouts[side][sp] = checked
+
+
+## What was set for a Pokémon lasts while it stays picked.
+func _keep_picked_loadouts() -> void:
+	var picks := battle_picks()
+	for side in 2:
+		for sp in choice.loadouts[side].keys():
+			if not [side, sp] in picks:
+				choice.loadouts[side].erase(sp)
+
+
+func _roll_moves(side: int, sp: String) -> void:
+	var lo := battle_loadout(side, sp)
+	lo.moves = Loadout.random_moves(sp)
+	_set_battle_loadout(side, sp, lo)
+
+
+## Random moves for every pick of this battle, from its options.
+func _random_battle_moves() -> void:
+	_sound("ok")
+	for pick in battle_picks():
+		_roll_moves(pick[0], pick[1])
+	if online:
+		send_choice()
+
+
+## The random button: whatever fits where it shows.
+func _press_random() -> void:
+	if screen == "moves":
+		if prepping() and edit_phase != "list":
+			_sound("ok")
+			_roll_moves(edit_side, edit_sp)
+	elif sel_phase != "setup":
+		_random_pick()
+	elif not (online and me_ready):
+		_random_battle_moves()
+
+
+## The Moves screen for this battle's picks. With only one, straight to its slots.
+func _open_battle_moves() -> void:
+	_edit_return = "selection"
+	var keep := sel_phase
+	_go("moves")
+	sel_phase = keep
+	_edit_pick(0)
+	edit_slot = 0
+	edit_phase = "pokemon" if edit_entries().size() > 1 else "slots"
 
 
 # ---------------------------------------------------------------- picking a team
@@ -1001,10 +1111,11 @@ const EDIT_ROWS := 8             # options shown at once in the list
 
 
 ## Moves screen: pick a Pokémon in the list, then one of its four moves (or its ability),
-## then what goes there. Every change is saved at once (Loadout). Y / X shows or hides
-## the details of the highlighted move; X / R restores the defaults (see ask_restore).
+## then what goes there. Every change is saved at once (Loadout), or kept for this battle when
+## prepping. Y / X shows or hides the details of the highlighted move; X / R restores the
+## defaults (see ask_restore); RB / E rolls random moves when prepping.
 func _edit_moves() -> void:
-	var list := pokemon_list()
+	var list := edit_entries()
 	var n := list.size()
 	if _pressed("menu_info") and edit_phase != "pokemon":
 		details = not details
@@ -1012,21 +1123,23 @@ func _edit_moves() -> void:
 	if _pressed("menu_extra"):
 		ask_restore()
 		return
+	if _pressed("mov2"):
+		_press_random()
 	match edit_phase:
 		"pokemon":
-			if _pressed("mov1") and _next_form():
+			if not prepping() and _pressed("mov1") and _next_form():
 				_sound("move")
-				edit_sp = pokemon_list()[cursor]
+				_edit_pick(cursor)
 				main.audio.cry(edit_sp, main.camera.global_position, 1.0, -22.0)
 				return
 			var before := cursor
 			cursor = _cycle(cursor, n)
 			if cursor != before:
-				edit_sp = list[cursor]
+				_edit_pick(cursor)
 				main.audio.cry(edit_sp, main.camera.global_position, 1.0, -22.0)
 			if _accept():
 				_sound("ok")
-				edit_sp = list[cursor]
+				_edit_pick(cursor)
 				edit_slot = 0
 				edit_phase = "slots"
 			elif _pressed("menu_back"):
@@ -1034,26 +1147,30 @@ func _edit_moves() -> void:
 				_leave_moves()
 		"slots":
 			edit_slot = _cycle(edit_slot, 5)
+			# Left and right, to the next pick without going back to the list.
+			if prepping() and n > 1 and (_pressed("move_left") or _pressed("move_right")):
+				_sound("move")
+				_edit_pick((cursor + (1 if _pressed("move_right") else n - 1)) % n)
+				main.audio.cry(edit_sp, main.camera.global_position, 1.0, -22.0)
 			if _accept():
 				_sound("ok")
 				var options := edit_options()
-				var lo := Loadout.saved(edit_sp)
+				var lo := edit_loadout()
 				edit_cursor = maxi(options.find(lo.moves[edit_slot] if edit_slot < 4 else lo.ability), 0)
 				edit_top = clampi(edit_cursor - EDIT_ROWS / 2, 0, maxi(options.size() - EDIT_ROWS, 0))
 				edit_phase = "list"
 			elif _pressed("menu_back"):
 				_sound("back")
-				if _edit_return == "selection" and not team_battle():
+				if n == 1:
 					_leave_moves()
 				else:
 					edit_phase = "pokemon"
 		"list":
 			var options := edit_options()
-			edit_cursor = _cycle(edit_cursor, options.size())
-			edit_top = clampi(edit_top, edit_cursor - EDIT_ROWS + 1, edit_cursor)
+			_browse_options(options)
 			if _accept():
 				_sound("ok")
-				var lo := Loadout.saved(edit_sp)
+				var lo := edit_loadout()
 				var pick: String = options[edit_cursor]
 				if edit_slot < 4:
 					# Already in another slot: they swap places.
@@ -1063,33 +1180,64 @@ func _edit_moves() -> void:
 					lo.moves[edit_slot] = pick
 				else:
 					lo.ability = pick
-				Loadout.store(edit_sp, lo)
+				_store_edit(lo)
 				edit_phase = "slots"
 			elif _pressed("menu_back"):
 				_sound("back")
 				edit_phase = "slots"
 
 
-## Restores the default moves and ability, after asking: every Pokémon's from the list of
-## Pokémon, the one being edited from its slots or a slot's options.
+## Up and down through the options, past the headings; left and right, to the other group of moves.
+func _browse_options(options: Array) -> void:
+	var n := options.size()
+	var before := edit_cursor
+	edit_cursor = _cycle(edit_cursor, n)
+	if edit_cursor != before and is_heading(options[edit_cursor]):
+		edit_cursor = (edit_cursor + (n - 1 if _pressed("move_up") else 1)) % n
+	var common := options.find(COMMON_MOVES)
+	if common >= 0 and (_pressed("move_left") or _pressed("move_right")):
+		_sound("move")
+		edit_cursor = 1 if edit_cursor > common else common + 1
+	edit_top = clampi(edit_top, edit_cursor - EDIT_ROWS + 1, edit_cursor)
+	# A group's first move brings its heading into view.
+	if edit_cursor > 0 and is_heading(options[edit_cursor - 1]):
+		edit_top = mini(edit_top, edit_cursor - 1)
+
+
+## Restores the defaults, after asking. Prepping, only what was set for this battle: every pick's
+## from the list of picks, the one being edited from its slots or a slot's options. Otherwise the
+## saved ones, every Pokémon's or the one being edited's, the same way.
 func ask_restore() -> void:
+	if not restorable():
+		_sound("back")
+		return
 	if restore_all():
-		if all_forms().all(Loadout.is_default):
-			_sound("back")
-			return
-		ask(tr("Restore every Pokémon's default moves and abilities?"), func(): Loadout.restore())
-	else:
-		if Loadout.is_default(edit_sp):
-			_sound("back")
-			return
-		var sp := edit_sp
-		ask(tr("Restore %s's default moves and ability?") % tr(Roster.POKEMON[sp].display_name), func():
+		if prepping():
+			ask(tr("Restore every pick's default moves and ability?"), func(): choice.loadouts = [{}, {}])
+		else:
+			ask(tr("Restore every Pokémon's default moves and abilities?"), func(): Loadout.restore())
+		return
+	var sp := edit_sp
+	var side := edit_side
+	ask(tr("Restore %s's default moves and ability?") % tr(Roster.POKEMON[sp].display_name), func():
+		if prepping():
+			choice.loadouts[side].erase(sp)
+		else:
 			Loadout.restore(sp)
-			edit_phase = "slots")
+		edit_phase = "slots")
 
 
 func restore_all() -> bool:
 	return edit_phase == "pokemon"
+
+
+## Whether there is anything for the restore button to put back.
+func restorable() -> bool:
+	if prepping():
+		if restore_all():
+			return not (choice.loadouts[0].is_empty() and choice.loadouts[1].is_empty())
+		return choice.loadouts[edit_side].has(edit_sp)
+	return not (all_forms().all(Loadout.is_default) if restore_all() else Loadout.is_default(edit_sp))
 
 
 func _leave_moves() -> void:
@@ -1121,11 +1269,44 @@ func _cycle(i: int, n: int) -> int:
 	return i
 
 
-## What can go in the slot being edited: move ids, or ability ids for slot 4.
+## What can go in the slot being edited: ability ids for slot 4; for the others, move ids under
+## their headings (is_heading), its own moves first and then the common ones.
 func edit_options() -> Array:
 	if edit_slot < 4:
-		return Loadout.moves_for(edit_sp)
+		var groups := Loadout.move_groups(edit_sp)
+		return [OWN_MOVES] + groups[0] + ([COMMON_MOVES] + groups[1] if not groups[1].is_empty() else [])
 	return Loadout.abilities_for(edit_sp).map(func(a): return a.id)
+
+
+func is_heading(option: String) -> bool:
+	return option == OWN_MOVES or option == COMMON_MOVES
+
+
+## Who the Moves screen lists, each as [side, species]: this battle's picks, or (side -1) the wall.
+func edit_entries() -> Array:
+	if prepping():
+		return battle_picks()
+	return pokemon_list().map(func(sp): return [-1, sp])
+
+
+## The Moves screen onto its entry "i".
+func _edit_pick(i: int) -> void:
+	var who: Array = edit_entries()[i]
+	cursor = i
+	edit_side = who[0]
+	edit_sp = who[1]
+
+
+## The moves and ability of the Pokémon being edited.
+func edit_loadout() -> Dictionary:
+	return battle_loadout(edit_side, edit_sp) if prepping() else Loadout.saved(edit_sp)
+
+
+func _store_edit(lo: Dictionary) -> void:
+	if prepping():
+		_set_battle_loadout(edit_side, edit_sp, lo)
+	else:
+		Loadout.store(edit_sp, lo)
 
 
 ## The move whose details are shown: the highlighted option, or the highlighted slot's.
@@ -1134,7 +1315,7 @@ func shown_move() -> String:
 		var options := edit_options()
 		return options[edit_cursor] if not options.is_empty() else ""
 	if edit_phase == "slots" and edit_slot < 4:
-		return Loadout.saved(edit_sp).moves[edit_slot]
+		return edit_loadout().moves[edit_slot]
 	return ""
 
 
@@ -1144,7 +1325,7 @@ func shown_move() -> String:
 ## have picked: a team seen as it is being picked could just be countered.
 func send_choice() -> void:
 	if main.net:
-		var d := {"t": "choice", "species": choice.p1, "ready": me_ready, "loadout": main.my_loadout(choice.p1), "trainer": main.options.trainer, "name": main.options.shown_name(),
+		var d := {"t": "choice", "species": choice.p1, "ready": me_ready, "loadout": battle_loadout(0, choice.p1), "trainer": main.options.trainer, "name": main.options.shown_name(),
 			"ver": Menu.version()}
 		if main.net.host:
 			d.stage = choice.stage            # so the rival sees the stage from the start
@@ -1157,7 +1338,7 @@ func send_choice() -> void:
 				d.team = choice.team
 				d.loadouts = {}
 				for sp in choice.team:
-					d.loadouts[sp] = main.my_loadout(sp)
+					d.loadouts[sp] = battle_loadout(0, sp)
 		main.net.send_event(d)
 
 
@@ -1173,6 +1354,7 @@ func room_settings(d: Dictionary) -> void:
 	choice.format = d.format
 	choice.team = []
 	choice.team2 = []
+	choice.loadouts = [{}, {}]
 	me_ready = false
 	sel_phase = "p1"
 	team_preview = choice.p1
@@ -1411,6 +1593,8 @@ func _mouse(ev: InputEvent) -> void:
 				_clicked = z.i >= 0
 			"restore":
 				ask_restore()
+			"rand":
+				_press_random()
 			"tslot":
 				_remove_pick(z.i / Party.SIZE, z.i % Party.SIZE)
 			"form":
@@ -1421,7 +1605,7 @@ func _mouse(ev: InputEvent) -> void:
 				# From the list of Pokémon, straight to that slot of the highlighted one.
 				if edit_phase == "pokemon":
 					_sound("ok")
-					edit_sp = pokemon_list()[cursor]
+					_edit_pick(cursor)
 					edit_slot = z.i
 					edit_phase = "slots"
 				else:
@@ -1433,14 +1617,13 @@ func _mouse(ev: InputEvent) -> void:
 
 
 ## A click on a Pokémon of the Moves screen: picks it, or from its slots or options
-## changes to it (not when it came from a 1 vs 1's selection, which is for one Pokémon).
+## changes to it.
 func _click_moves_pokemon(i: int) -> void:
 	if edit_phase == "pokemon":
 		_clicked = true
-	elif (_edit_return != "selection" or team_battle()) and pokemon_list()[i] != edit_sp:
+	elif i != cursor:
 		_sound("ok")
-		cursor = i
-		edit_sp = pokemon_list()[i]
+		_edit_pick(i)
 		edit_slot = 0
 		edit_phase = "slots"
 		details = false
@@ -1463,8 +1646,7 @@ func _hover(z: Dictionary) -> void:
 				confirm.on = z.i
 		"mvp":
 			if screen == "moves" and edit_phase == "pokemon" and z.i != cursor:
-				cursor = z.i
-				edit_sp = pokemon_list()[cursor]
+				_edit_pick(z.i)
 				main.audio.cry(edit_sp, main.camera.global_position, 1.0, -22.0)
 		"slot":
 			if edit_phase == "slots":

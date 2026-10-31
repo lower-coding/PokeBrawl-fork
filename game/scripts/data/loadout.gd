@@ -9,9 +9,13 @@ extends RefCounted
 ## Where they are saved (tests use their own file).
 static var path := "user://loadouts.json"
 const LEARNED := ["level", "egg", "tm", "tutor"]
+## A move more than this share of the roster can use is common.
+const COMMON_SHARE := 0.5
 
 static var _saved := {}
 static var _loaded := false
+static var _learners := {}       # move -> how many Pokémon can use it
+static var _groups := {}         # species and language -> its move_groups
 
 
 ## Moves it can use: its default four first, then the others it learns that are done.
@@ -26,6 +30,49 @@ static func moves_for(sp: String) -> Array:
 		if learns.has(m) and not m in out and ResourceLoader.exists(Moves.DATA[m].script):
 			out.append(m)
 	return out
+
+
+## Its moves in two groups, for the Moves screen: its own, and the common ones (its default four are
+## always its own). Each by type, then by name as it reads in this language.
+static func move_groups(sp: String) -> Array:
+	var key := sp + TranslationServer.get_locale()
+	if not _groups.has(key):
+		var own: Array = []
+		var common: Array = []
+		for m in moves_for(sp):
+			(common if is_common(m) and not m in Roster.POKEMON[sp].moves else own).append(m)
+		own.sort_custom(_listed_before)
+		common.sort_custom(_listed_before)
+		_groups[key] = [own, common]
+	return _groups[key]
+
+
+static func is_common(move: String) -> bool:
+	if _learners.is_empty():
+		for sp in Roster.POKEMON:
+			for m in moves_for(sp):
+				_learners[m] = _learners.get(m, 0) + 1
+	return _learners.get(move, 0) > Roster.POKEMON.size() * COMMON_SHARE
+
+
+static func _listed_before(a: String, b: String) -> bool:
+	var ta := UiKit.TYPE_ORDER.find(Moves.DATA[a].type)
+	var tb := UiKit.TYPE_ORDER.find(Moves.DATA[b].type)
+	if ta != tb:
+		return ta < tb
+	var na := TranslationServer.translate(Moves.DATA[a].display_name)
+	var nb := TranslationServer.translate(Moves.DATA[b].display_name)
+	return na.naturalnocasecmp_to(nb) < 0
+
+
+## Four different random moves it can use, at least one an attack: with none it could not fight.
+static func random_moves(sp: String) -> Array:
+	var pool := moves_for(sp)
+	pool.shuffle()
+	var four := pool.slice(0, 4)
+	if four.all(func(m): return Moves.DATA[m].get("power", 0) <= 0):
+		four[0] = pool.filter(func(m): return Moves.DATA[m].get("power", 0) > 0).pick_random()
+	return four
 
 
 ## Abilities it can pick: its default one first, then those of its own in the games that
