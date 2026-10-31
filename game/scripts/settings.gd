@@ -2,7 +2,7 @@ class_name Settings
 extends Node
 ## The player's options, saved in user://settings.cfg and applied when loaded and on every
 ## change: the battle controls (each action on keyboard and on gamepad), music and effects
-## volume, window mode, vertical sync and frame cap, camera shake, rumble and language.
+## volume, window mode, vertical sync and frame cap, camera shake, rumble, crosshair and language.
 ## The Options screen (Menu, drawn by MenuDraw) works through items(), menu_input() and
 ## menu_event(). Tests start from the defaults and never save, so a player's settings
 ## never change what a test sees.
@@ -16,6 +16,7 @@ const LANGUAGES := ["", "en", "es"]
 var main: Node
 var rumble := true
 var shake := 1.0
+var crosshair := false
 var music := 0.5
 var sfx := 1.0
 var fullscreen := true
@@ -46,6 +47,7 @@ func load_saved() -> void:
 		return
 	rumble = cf.get_value("game", "rumble", rumble)
 	shake = cf.get_value("game", "shake", shake)
+	crosshair = cf.get_value("game", "crosshair", crosshair)
 	language = cf.get_value("game", "language", language)
 	trainer = TrainerData.valid(cf.get_value("profile", "trainer", trainer))
 	player_name = str(cf.get_value("profile", "name", player_name)).substr(0, Menu.NAME_MAX)
@@ -64,6 +66,7 @@ func save() -> void:
 	var cf := ConfigFile.new()
 	cf.set_value("game", "rumble", rumble)
 	cf.set_value("game", "shake", shake)
+	cf.set_value("game", "crosshair", crosshair)
 	cf.set_value("game", "language", language)
 	cf.set_value("profile", "trainer", trainer)
 	cf.set_value("profile", "name", player_name)
@@ -132,6 +135,8 @@ func items() -> Array:
 		"help": tr("How much the camera shakes on hits.")})
 	out.append({"id": "rumble", "kind": "toggle", "label": tr("Rumble"),
 		"value": tr("On") if rumble else tr("Off"), "help": tr("The gamepad rumbles on hits.")})
+	out.append({"id": "crosshair", "kind": "toggle", "label": tr("Crosshair"),
+		"value": tr("On") if crosshair else tr("Off"), "help": tr("With nothing locked on, marks where your moves go.")})
 	out.append({"id": "language", "kind": "choice", "label": tr("Language"),
 		"value": {"": tr("System"), "en": "English", "es": "Español"}[language], "help": tr("The game's language.")})
 	return out
@@ -218,6 +223,8 @@ func _change(id: String, step: int) -> void:
 			shake = clampf(snappedf(shake + 0.25 * step, 0.25), 0.0, 1.0)
 		"rumble":
 			rumble = not rumble
+		"crosshair":
+			crosshair = not crosshair
 		"fullscreen":
 			fullscreen = not fullscreen
 			apply(true)

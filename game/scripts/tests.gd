@@ -2494,6 +2494,14 @@ func _hud_test() -> void:
 	main.camera.yaw = atan2(-toward.x, -toward.z)
 	main.camera.pitch = -0.2
 	await _wait(0.8)
+	# The crosshair is an option, off unless turned on.
+	_ok("The crosshair starts off", not main.options.crosshair)
+	_capture("hud_crosshair_off")
+	var row: Array = main.options.items().filter(func(it): return it.id == "crosshair")
+	_ok("The Options screen has it, as a toggle", row.size() == 1 and row[0].kind == "toggle" and row[0].value == tr("Off"), str(row))
+	main.options._change("crosshair", 1)
+	_ok("Changing the option turns it on", main.options.crosshair)
+	await _wait(0.1)
 	var cam: Camera3D = main.get_viewport().get_camera_3d()
 	var on_rival: Vector2 = cam.unproject_position(b.center()) / main.hud._s
 	var cross: Vector2 = main.hud.crosshair_at(a)

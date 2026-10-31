@@ -123,8 +123,8 @@ mouse wheel scrolls.
   hold the button and turn the stream with the stick; it hits several times and drains energy.
 - **Lock-on** locks what the camera looks at: the rival or one of its decoys (Substitute's doll,
   Double Team's clones). Locked on, a flick of the right stick or a sweep of the mouse switches
-  target. With the camera free, moves go where the camera looks, marked by a crosshair; homing
-  shots still home in.
+  target. With the camera free, moves go where the camera looks; homing shots still home in.
+  **Options > Crosshair** (off by default) marks where they go.
 - **Stat changes** show under each HP bar as in Pokémon Showdown: `1.5× Atk` in green, `0.67× Def`
   in red.
 

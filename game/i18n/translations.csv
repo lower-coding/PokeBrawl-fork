@@ -701,3 +701,5 @@ Def,Def,Def
 SpA,SpA,AtE
 SpD,SpD,DfE
 Spe,Spe,Vel
+Crosshair,Crosshair,Punto de mira
+"With nothing locked on, marks where your moves go.","With nothing locked on, marks where your moves go.","Sin nada fijado, marca adónde van tus movimientos."

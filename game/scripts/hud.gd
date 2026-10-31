@@ -8,6 +8,7 @@ extends CanvasLayer
 ##   under the top  in a 3 vs 3, each side's bench and switches; after a KO, the next one to pick
 ##   bottom right   the battle log
 ##   over the rival the lock-on arrow; with nothing locked on, a crosshair where moves go
+##                  (if turned on in the options)
 ## Everything is measured in GUI pixels (G) and multiplied by the integer scale _s.
 
 const GUI := "res://gui/cobblemon/"
@@ -731,7 +732,7 @@ func crosshair_at(j: Fighter) -> Vector2:
 
 ## Four ticks and a dot, light on a dark outline so it reads on any floor.
 func _crosshair(j: Fighter) -> void:
-	if j.state == "ko" or main.paused or main._end_t >= 0.0:
+	if not main.options.crosshair or j.state == "ko" or main.paused or main._end_t >= 0.0:
 		return
 	var c := crosshair_at(j)
 	if c.x < 0.0:
