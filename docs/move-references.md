@@ -233,6 +233,26 @@ it.
 
 ---
 
+## Goodra
+Pokkén, Smash and the anime are **not researched yet** for these three: their designs come from the
+games' rules and Cobblemon's pieces. Do that before tuning their look.
+
+**Water Pulse** · *Now:* suds at its feet, then a ring of water that flies straight and widens as
+it goes, with what it touches. 20% to confuse.
+- [Games] The 20% confusion. Cobblemon: `waterpulse_actorsuds`, `_actorring`, `_target`, `_targetsplash`.
+
+**Mud Shot** · *Now:* a quick lean back and a fast straight glob (our own `mudshot_ball`). Always -1
+Speed, a small stain where it lands.
+- [Games] The Speed drop. Cobblemon has no Mud Shot: pieces from Mud Bomb, whose `_actor` flies by
+  itself on its own timing, so it is not used.
+
+**Acid Spray** · *Now:* a short rear back and a lobbed glob (our own `acidspray_ball`) that does not
+follow. Always -2 Sp. Def, a sizzling burst, no puddle.
+- [Games] The Sp. Def drop. Cobblemon: `acidspray_actorfling`, `_actortrail`, `_target`, `_targetsizzle`,
+  `_targetsmoke`; its `_actor` flies by itself too.
+
+---
+
 ## Decided
 
 - **27 Oct 2026:** Pokkén's counters and chains (Rapid Spin destroying projectiles, Swords Dance

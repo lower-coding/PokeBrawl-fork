@@ -35,6 +35,7 @@ const PROFILE := {
 	"garchomp": {"dist": [2.0, 5.5], "aggression": 0.8, "circle_around": 0.5},
 	"greninja": {"dist": [4.0, 8.0], "aggression": 0.65, "circle_around": 1.0},
 	"scizor": {"dist": [1.8, 4.5], "aggression": 0.8, "circle_around": 0.6},
+	"goodra": {"dist": [4.0, 8.0], "aggression": 0.45, "circle_around": 0.35},
 }
 
 var main: Node

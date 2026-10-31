@@ -702,6 +702,8 @@ func _mark_tex(kind: String, radius: float) -> Texture2D:
 			_paint_puddle(img, side, noise, rng)
 		"wet":
 			_paint_blotch(img, side, noise, rng, [Color(0.06, 0.14, 0.2), Color(0.1, 0.22, 0.3), Color(0.2, 0.38, 0.5)], Color(0.7, 0.9, 1.0), 0.02)
+		"mud":
+			_paint_blotch(img, side, noise, rng, [Color(0.2, 0.13, 0.07), Color(0.3, 0.2, 0.11), Color(0.42, 0.29, 0.16)], Color(0.55, 0.4, 0.24), 0.02)
 	img.generate_mipmaps()
 	var t := ImageTexture.create_from_image(img)
 	_marks[key] = t

@@ -2,7 +2,8 @@ class_name Abilities
 extends RefCounted
 ## Abilities beyond each Pokémon's default one (Roster.POKEMON[...].passive), by Showdown id.
 ## An ability listed here becomes selectable in the Moves menu for every Pokémon that has it
-## in the games (Species.DATA[...].abilities). Its effect lives in fighter.gd, by id.
+## in the games (Species.DATA[...].abilities) or as a deliberate exception (Roster
+## "extra_abilities"). Its effect lives in fighter.gd, by id.
 ##   display_name, text          player-facing, in English (translated when drawn)
 
 const DATA := {
@@ -34,4 +35,10 @@ const DATA := {
 		"text": "The sandstorm does not hurt it, and in it projectiles follow it worse."},
 	"lightmetal": {"display_name": "Light Metal",
 		"text": "Half its weight: it dodges a little further, but hits send it further too."},
+	"sapsipper": {"display_name": "Sap Sipper",
+		"text": "Grass moves do nothing to it and raise its Attack one stage (x1.5 for the battle)."},
+	"hydration": {"display_name": "Hydration",
+		"text": "In the rain it cures its status condition at the end of every turn (3 s)."},
+	"overcoat": {"display_name": "Overcoat",
+		"text": "The sandstorm does not hurt it, and powder moves do nothing to it."},
 }

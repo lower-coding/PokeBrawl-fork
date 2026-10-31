@@ -228,7 +228,7 @@ ready for, from the most direct to the most ambitious. Any of them is a good pla
 The content is data first, so adding to it does not mean touching the battle system.
 
 - **Moves.** Each move is an entry in `moves.gd` plus a script, and the scripts share bases
-  (dashes, punches, body slams, projectiles, held beams): the 79 moves done today come from 52
+  (dashes, punches, body slams, projectiles, held beams): the 82 moves done today come from 55
   scripts, and many new ones only need data. The ten Pokémon learn 404 moves in the games,
   grouped into families to design them together in
   [docs/learnset-plan.md](docs/learnset-plan.md). As soon as a move's script exists, every
@@ -239,7 +239,7 @@ The content is data first, so adding to it does not mean touching the battle sys
   large part of them, so a new Pokémon is mostly its roster entry (how it moves and dodges), its AI style and a check of its
   animations. The plan is in [docs/roster-plan.md](docs/roster-plan.md).
 - **Abilities** hook into battle events, the way Pokémon Showdown does it, so each new one is
-  a small piece of code next to the 22 already working.
+  a small piece of code next to the 26 already working.
 - **Tests keep it safe:** `loadouts` fights every Pokémon with every move it can pick,
   `mechanics` checks the rules and the AI can play itself (`--aivsai`).
 

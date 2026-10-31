@@ -108,7 +108,7 @@ It is wide but flat: you can jump over it.,It is wide but flat: you can jump ove
 Short range: keeping your distance shuts it down.,Short range: keeping your distance shuts it down.,Corto alcance: guardar la distancia lo anula.
 "It catches fire before setting off and goes straight: step aside. If it misses, it is wide open.","It catches fire before setting off and goes straight: step aside. If it misses, it is wide open.","Arde antes de salir y va en línea recta: apártate de lado. Si falla, queda muy expuesto."
 "Almost no warning, but it goes straight: one step to the side is enough. If it misses, it stops dead.","Almost no warning, but it goes straight: one step to the side is enough. If it misses, it stops dead.","Sale casi sin aviso pero en línea recta: un paso de lado basta. Si falla, queda quieto."
-The cannons charge up first. It turns very slowly: step out of the line sideways.,The cannons charge up first. It turns very slowly: step out of the line sideways.,Los cañones se cargan antes. Gira muy despacio: sal de la línea de lado.
+The water gathers first. It turns very slowly: step out of the line sideways.,The water gathers first. It turns very slowly: step out of the line sideways.,Antes se acumula el agua. Gira muy despacio: sal de la línea de lado.
 It steers poorly: jump over it or dodge when it arrives.,It steers poorly: jump over it or dodge when it arrives.,Gira con poca precisión: salta por encima o esquiva cuando llegue.
 "Long reach but in a line: it misses from the side. After the pull, dodge before the next hit.","Long reach but in a line: it misses from the side. After the pull, dodge before the next hit.","Alcanza lejos pero en línea: de lado no llega. Tras el tirón, esquiva antes del siguiente golpe."
 "They spread out with distance: from far away, slip between them.","They spread out with distance: from far away, slip between them.","Se abren con la distancia: lejos, pasa entre ellas."
@@ -284,7 +284,7 @@ The turn gives it away: back off or dodge through it.,The turn gives it away: ba
 The raised arm warns you: step aside.,The raised arm warns you: step aside.,El brazo en alto te avisa: apártate.
 "Hit it while it focuses, even lightly: it loses its focus.","Hit it while it focuses, even lightly: it loses its focus.","Golpéale mientras se concentra, aunque sea flojo: pierde la concentración."
 "You see the leap coming: dodge as it falls, or step out of where it will land. Long recovery if it misses.","You see the leap coming: dodge as it falls, or step out of where it will land. Long recovery if it misses.","El salto se ve venir: esquiva cuando caiga o sal de donde va a aterrizar. Si falla, tarda en recuperarse."
-"The cannons frost over before firing; from afar, step out of its line. Walk around the ice strip or jump it.","The cannons frost over before firing; from afar, step out of its line. Walk around the ice strip or jump it.","Los cañones se escarchan antes de disparar; de lejos, sal de su línea. Rodea la franja de hielo o sáltala."
+"Frost gathers before it fires; from afar, step out of its line. Walk around the ice strip or jump it.","Frost gathers before it fires; from afar, step out of its line. Walk around the ice strip or jump it.","Se acumula escarcha antes de disparar; de lejos, sal de su línea. Rodea la franja de hielo o sáltala."
 "It follows you until it stops for an instant: dodge then. With a status condition on you, it hurts twice as much.","It follows you until it stops for an instant: dodge then. With a status condition on you, it hurts twice as much.","Te sigue hasta que se para un instante: esquiva entonces. Si tienes un problema de estado, duele el doble."
 The doll has no shadow and never moves: unlock and look around. Gengar shows itself as soon as it attacks.,The doll has no shadow and never moves: unlock and look around. Gengar shows itself as soon as it attacks.,El muñeco no tiene sombra y nunca se mueve: quita el fijado y busca. Gengar se deja ver en cuanto ataca.
 The copies have no shadow and never attack: the real one is the one that hits you.,The copies have no shadow and never attack: the real one is the one that hits you.,Las copias no tienen sombra y nunca atacan: el real es el que te pega.
@@ -464,7 +464,7 @@ A flat blade of air that can be jumped over. Usable in the air.,A flat blade of 
 "Two quick swipes, stepping in.","Two quick swipes, stepping in.",Dos zarpazos rápidos avanzando.
 Charges in a line wrapped in fire. Light hits do not stop it. It takes recoil.,Charges in a line wrapped in fire. Light hits do not stop it. It takes recoil.,Embiste en línea envuelto en fuego. Los golpes ligeros no lo paran. Se hace daño al acertar.
 Shoots forward wrapped in water. Its fastest move.,Shoots forward wrapped in water. Its fastest move.,Sale disparado envuelto en agua. Su movimiento más rápido.
-Hold to fire both cannons. Pushes very hard; it cannot move while firing.,Hold to fire both cannons. Pushes very hard; it cannot move while firing.,Mantén para disparar los dos cañones. Empuja muchísimo y no se mueve mientras dispara.
+Hold to fire a high-pressure stream. Pushes very hard; it cannot move while firing.,Hold to fire a high-pressure stream. Pushes very hard; it cannot move while firing.,Mantén para disparar un chorro a presión. Empuja muchísimo y no se mueve mientras dispara.
 "Spins around the field in its shell, steered with the stick. Clears slowness and raises its Speed.","Spins around the field in its shell, steered with the stick. Clears slowness and raises its Speed.",Gira por el campo metido en el caparazón; se dirige con el stick. Quita la lentitud y sube su Velocidad.
 A fast straight beam that leaves ice on the ground. The ice slows whoever steps on it.,A fast straight beam that leaves ice on the ground. The ice slows whoever steps on it.,Un rayo recto y rápido que deja hielo en el suelo. Pisarlo te frena.
 Two long vines lash out and pull the target in.,Two long vines lash out and pull the target in.,Dos lianas largas que azotan y atraen al rival.
@@ -676,3 +676,23 @@ Puts every rule back on its default.,Puts every rule back on its default.,Devuel
 Picking: %d of %d,Picking: %d of %d,Eligiendo: %d de %d
 Format: %s,Format: %s,Formato: %s
 The host sets the rules.,The host sets the rules.,Las reglas las pone el anfitrión.
+Gooey,Gooey,Baba
+Hydration,Hydration,Hidratación
+Water Pulse,Water Pulse,Hidropulso
+Mud Shot,Mud Shot,Disparo Lodo
+Acid Spray,Acid Spray,Bomba Ácida
+Goodra,Goodra,Goodra
+Sap Sipper,Sap Sipper,Herbívoro
+Overcoat,Overcoat,Funda
+A ring of water that widens as it flies. It can confuse.,A ring of water that widens as it flies. It can confuse.,Un anillo de agua que se ensancha al volar. Puede confundir.
+A straight shot of mud. It always lowers the target's Speed.,A straight shot of mud. It always lowers the target's Speed.,Un disparo recto de lodo. Siempre baja la Velocidad del rival.
+A lobbed glob of acid. It always sharply lowers the target's Sp. Def.,A lobbed glob of acid. It always sharply lowers the target's Sp. Def.,Lanza en parábola una masa de ácido. Siempre baja mucho la Def. Esp. del rival.
+The further it goes the wider it gets: step aside early or dodge through it.,The further it goes the wider it gets: step aside early or dodge through it.,"Cuanto más lejos llega, más ancho es: apártate pronto o atraviésalo con la esquiva."
+It is slow and arcs: walk out from under it or dodge through it.,It is slow and arcs: walk out from under it or dodge through it.,Es lenta y va en arco: sal de debajo o atraviésala con la esquiva.
+"Heavy and slimy. Controls the mid range with water and ice, and whoever hits it up close gets slower and slower.","Heavy and slimy. Controls the mid range with water and ice, and whoever hits it up close gets slower and slower.","Pesado y viscoso. Controla la media distancia con agua e hielo, y quien lo golpea de cerca se vuelve cada vez más lento."
+Each contact move that hits it lowers the attacker's Speed one stage for the battle.,Each contact move that hits it lowers the attacker's Speed one stage for the battle.,Cada movimiento de contacto que lo golpea baja un nivel la Velocidad del atacante durante el combate.
+Grass moves do nothing to it and raise its Attack one stage (x1.5 for the battle).,Grass moves do nothing to it and raise its Attack one stage (x1.5 for the battle).,"Los movimientos de tipo Planta no le hacen nada y suben un nivel su Ataque (x1,5 durante el combate)."
+In the rain it cures its status condition at the end of every turn (3 s).,In the rain it cures its status condition at the end of every turn (3 s).,Con lluvia cura su problema de estado al final de cada turno (3 s).
+"The sandstorm does not hurt it, and powder moves do nothing to it.","The sandstorm does not hurt it, and powder moves do nothing to it.",La tormenta de arena no le hace daño y los movimientos de polvos no le afectan.
+1,1,1
+2,2,2

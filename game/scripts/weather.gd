@@ -5,10 +5,11 @@ extends Node3D
 ## replaces the old one. What it does:
 ##   sun   Fire moves x1.5, Water x0.5. Chlorophyll doubles Speed; Solar Power raises
 ##         Sp. Atk x1.5 but loses 1/8 of its max HP each turn; Solar Beam barely charges.
-##   rain  Water moves x1.5, Fire x0.5. Rain Dish heals 1/16 of its max HP each turn.
+##   rain  Water moves x1.5, Fire x0.5. Rain Dish heals 1/16 of its max HP each turn;
+##         Hydration cures its status each turn.
 ##   sand  Rock types' Sp. Def x1.5. Everyone else loses 1/16 of its max HP each turn,
-##         except Ground and Steel types and Sand Veil, which also makes projectiles
-##         track it worse (x0.8, its evasion in the games).
+##         except Ground and Steel types, Overcoat and Sand Veil, which also makes
+##         projectiles track it worse (x0.8, its evasion in the games).
 ##   snow  Ice types' Defense x1.5.
 ## Each copy applies the per-turn effects to its own Pokémon (online, HP travels with the
 ## state). On screen: a tint, falling rain, sand or snow, and the turns left on the HUD.
@@ -107,7 +108,7 @@ func _end_of_turn() -> void:
 		var id: String = f.data.passive.id
 		match kind:
 			"sand":
-				var spared: bool = f.types.any(func(t): return t in ["rock", "ground", "steel"]) or id == "sandveil"
+				var spared: bool = f.types.any(func(t): return t in ["rock", "ground", "steel"]) or id in ["sandveil", "overcoat"]
 				if not spared:
 					f._damage_direct(f.hp_max / 16.0)
 					main.vfx.text(f.center() + Vector3.UP * 0.8, tr("Buffeted by the sandstorm"), Color(0.85, 0.65, 0.4))
@@ -115,6 +116,12 @@ func _end_of_turn() -> void:
 				if id == "raindish":
 					f.heal(f.hp_max / 16.0)
 					main.vfx.text(f.center() + Vector3.UP * 0.8, tr("Rain Dish"), Roster.TYPE_COLOR.water)
+				if id == "hydration" and f.status != "":
+					# Asleep or frozen, it gets up now, not when that would have worn off.
+					if f.status in ["slp", "frz"]:
+						f._stunned = minf(f._stunned, 0.2)
+					f.cure_status()
+					main.vfx.text(f.center() + Vector3.UP * 0.8, tr("Hydration"), Roster.TYPE_COLOR.water)
 			"sun":
 				if id == "solarpower":
 					f._damage_direct(f.hp_max / 8.0)
