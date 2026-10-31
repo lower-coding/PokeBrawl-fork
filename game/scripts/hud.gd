@@ -4,7 +4,8 @@ extends CanvasLayer
 ## the same measurements (BattleOverlay.kt and BattleMoveSelection.kt):
 ##   top            each Pokémon's frame with its live portrait, HP and status
 ##   bottom left    the four moves on tiles tinted by type
-##   above them     the player's dodges and energy
+##   above them     the player's dodges and energy; in a 3 vs 3 its switches and bench
+##   under the top  in a 3 vs 3, a pip per team member; after a KO, the next one to pick
 ##   bottom right   the battle log
 ##   over the rival the lock-on arrow
 ## Everything is measured in GUI pixels (G) and multiplied by the integer scale _s.
@@ -29,7 +30,8 @@ var _lag := [1.0, 1.0]
 var _not_ready := [0.0, 0.0, 0.0, 0.0]
 var _log: Array = []                 # [{text, t}]
 var _log_t := 0.0
-var _portraits: Array = []            # [{vp, model, cam, height, placed, t0}]
+var _portraits: Array = []            # [{vp, model, cam, height, placed, t0, side, sp}]
+var _spare_portraits: Array = []      # the same, for those on the bench
 var _t := 0.0
 var _dbg: MeshInstance3D
 var _dbg_im := ImmediateMesh.new()
@@ -114,43 +116,69 @@ func warn_not_ready(i: int) -> void:
 ## Each frame holds the Cobblemon model itself in a separate world, like in Cobblemon:
 ## a camera fixed on the face and the Pokémon in its idle animation.
 func prepare_portraits(species_list: Array) -> void:
-	for r in _portraits:
+	for r in _portraits + _spare_portraits:
 		r.vp.queue_free()
 	_portraits.clear()
+	_spare_portraits.clear()
 	for i in species_list.size():
-		var sp: String = species_list[i]
-		var data: Dictionary = Roster.POKEMON[sp]
-		var vp := SubViewport.new()
-		vp.own_world_3d = true
-		vp.transparent_bg = true
-		vp.msaa_3d = Viewport.MSAA_4X
-		vp.size = Vector2i(28, 28) * _s
-		vp.render_target_update_mode = SubViewport.UPDATE_ALWAYS
-		add_child(vp)
-		var m := PokeModel.new()
-		m.setup(sp)
-		var box: AABB = m._res.mesh.get_aabb()
-		var esc: float = data.height / maxf(box.size.y, 0.05)
-		m.scale = Vector3.ONE * esc
-		# Three-quarter view facing the center of the screen.
-		m.rotation.y = PI + (0.55 if i == 0 else -0.55)
-		vp.add_child(m)
-		m.play("battle_idle" if m.has_anim("battle_idle") else "ground_idle", 0.0)
-		var cam := Camera3D.new()
-		cam.fov = 30.0
-		vp.add_child(cam)
-		var sun := DirectionalLight3D.new()
-		sun.rotation = Vector3(-0.7, 0.5, 0.0)
-		sun.light_energy = 1.25
-		vp.add_child(sun)
-		var amb := WorldEnvironment.new()
-		amb.environment = Environment.new()
-		amb.environment.ambient_light_source = Environment.AMBIENT_SOURCE_COLOR
-		amb.environment.ambient_light_color = Color(0.85, 0.87, 0.95)
-		amb.environment.ambient_light_energy = 0.75
-		amb.environment.tonemap_mode = Environment.TONE_MAPPER_FILMIC
-		vp.add_child(amb)
-		_portraits.append({"vp": vp, "model": m, "cam": cam, "height": data.height, "placed": false, "t0": _t})
+		_portraits.append(_portrait(species_list[i], i))
+
+
+## Side "i"'s bench: its portrait is made now and kept ready, not rendered, so a switch shows
+## it at once and with no hitch.
+func prepare_spare_portrait(i: int, sp: String) -> void:
+	_spare_portraits.append(_portrait(sp, i))
+
+
+## A switch: side "i"'s frame shows another Pokémon; the one it had goes back to the spares.
+func swap_portrait(i: int, sp: String) -> void:
+	var old: Dictionary = _portraits[i]
+	old.vp.render_target_update_mode = SubViewport.UPDATE_DISABLED
+	_spare_portraits.append(old)
+	_lag[i] = 1.0
+	for k in _spare_portraits.size():
+		var r: Dictionary = _spare_portraits[k]
+		if r.side == i and r.sp == sp:
+			_spare_portraits.remove_at(k)
+			r.vp.render_target_update_mode = SubViewport.UPDATE_ALWAYS
+			_portraits[i] = r
+			return
+	_portraits[i] = _portrait(sp, i)
+
+
+func _portrait(sp: String, i: int) -> Dictionary:
+	var data: Dictionary = Roster.POKEMON[sp]
+	var vp := SubViewport.new()
+	vp.own_world_3d = true
+	vp.transparent_bg = true
+	vp.msaa_3d = Viewport.MSAA_4X
+	vp.size = Vector2i(28, 28) * _s
+	vp.render_target_update_mode = SubViewport.UPDATE_ALWAYS
+	add_child(vp)
+	var m := PokeModel.new()
+	m.setup(sp)
+	var box: AABB = m._res.mesh.get_aabb()
+	var esc: float = data.height / maxf(box.size.y, 0.05)
+	m.scale = Vector3.ONE * esc
+	# Three-quarter view facing the center of the screen.
+	m.rotation.y = PI + (0.55 if i == 0 else -0.55)
+	vp.add_child(m)
+	m.play("battle_idle" if m.has_anim("battle_idle") else "ground_idle", 0.0)
+	var cam := Camera3D.new()
+	cam.fov = 30.0
+	vp.add_child(cam)
+	var sun := DirectionalLight3D.new()
+	sun.rotation = Vector3(-0.7, 0.5, 0.0)
+	sun.light_energy = 1.25
+	vp.add_child(sun)
+	var amb := WorldEnvironment.new()
+	amb.environment = Environment.new()
+	amb.environment.ambient_light_source = Environment.AMBIENT_SOURCE_COLOR
+	amb.environment.ambient_light_color = Color(0.85, 0.87, 0.95)
+	amb.environment.ambient_light_energy = 0.75
+	amb.environment.tonemap_mode = Environment.TONE_MAPPER_FILMIC
+	vp.add_child(amb)
+	return {"vp": vp, "model": m, "cam": cam, "height": data.height, "placed": false, "t0": _t, "side": i, "sp": sp}
 
 
 func _frame(r: Dictionary) -> void:
@@ -192,6 +220,12 @@ func _process(delta: float) -> void:
 		# Framed once the animation has put the skeleton in its pose.
 		if not r.placed and _t - r.t0 > 0.25:
 			_frame(r)
+	for r in _spare_portraits:
+		if r.vp.size != Vector2i(28, 28) * _s:
+			r.vp.size = Vector2i(28, 28) * _s
+		if not r.placed and _t - r.t0 > 0.25:
+			_frame(r)
+			r.vp.render_target_update_mode = SubViewport.UPDATE_DISABLED
 	_c.queue_redraw()
 	_debug()
 
@@ -260,6 +294,13 @@ func _draw_ui() -> void:
 		_resources(j, Vector2(11, gh - 76))
 	if j:
 		_locked(j)
+	if not main.parties.is_empty():
+		_party_pips(main.parties[0], Vector2(52, 52), 1.0)
+		_party_pips(main.parties[1], Vector2(gw - 52, 52), -1.0)
+		if j and j.party:
+			_bench(j.party, Vector2(11, gh - 92))
+			if j.party.replacing:
+				_next_prompt(j.party, gw, gh)
 	for f in main.fighters:
 		if is_instance_valid(f) and f._boost_t > 0.0 and f.boosted_hits > 0:
 			_boost_bar(f)
@@ -403,6 +444,62 @@ func _resources(l: Fighter, g: Vector2) -> void:
 			Color(1.0, 0.62, 0.3) if l.flight > float(l.data.flight.stamina) * 0.25 else Color(0.95, 0.35, 0.25))
 
 
+## A pip per team member, from "g" along "dir": lit while it can fight, the one out brighter.
+func _party_pips(p: Party, g: Vector2, dir: float) -> void:
+	for k in p.members.size():
+		var f: Fighter = p.members[k]
+		var c := g + Vector2(dir * k * 7.0, 0.0)
+		_c.draw_circle(c * _s, 3.0 * _s, Color(0.05, 0.06, 0.09, 0.85))
+		if f.state != "ko":
+			_c.draw_circle(c * _s, 2.0 * _s, INK if f == p.active else Color("e0553e"))
+
+
+## Above the energy: the switches you have (a pip each, with the wait for the next one as a
+## line under them) and a chip per teammate with its button, HP and, if it just left, the
+## seconds until it can come back.
+func _bench(p: Party, g: Vector2) -> void:
+	var x := g.x
+	for k in Party.MAX_CHARGES:
+		var c := Vector2(x + 3.5, g.y + 4.0)
+		_c.draw_circle(c * _s, 3.5 * _s, Color(0.05, 0.06, 0.09, 0.85))
+		if k < p.charges:
+			_c.draw_circle(c * _s, 2.5 * _s, Color("ffc94a"))
+		x += 9
+	if p.charges < Party.MAX_CHARGES:
+		_rect(Vector2(g.x, g.y + 9), Vector2(16.0 * p.recharge_share(), 1), Color("ffc94a"))
+	x += 4
+	for slot in 2:
+		var f := p.slot_member(slot)
+		if f == null:
+			continue
+		var usable := p.can_switch(slot) or (p.replacing and f.state != "ko")
+		var a := 1.0 if usable else 0.45
+		_rect(Vector2(x, g.y), Vector2(74, 10), Color(0.05, 0.06, 0.09, 0.85 * a))
+		var pl := _p_log()
+		_text(Vector2(x + 2, g.y + 0.5) * _s, Controls.glyph("switch%d" % (slot + 1)), pl, Color("ffc94a", a))
+		_text(Vector2(x + 11, g.y + 0.5) * _s, tr(f.data.display_name), pl, Color(INK, a))
+		if f.state != "ko" and p.locked_for(f) > 0.0 and not p.replacing:
+			_text(Vector2(x + 72, g.y + 0.5) * _s, "%d" % ceilf(p.locked_for(f)), pl, Color(INK, a), 1)
+		var share := clampf(f.hp / f.hp_max, 0.0, 1.0)
+		_rect(Vector2(x + 1, g.y + 8.5), Vector2(72.0 * share, 1), _hp_color(share))
+		x += 77
+
+
+## After a KO, while the next one is yours to pick.
+func _next_prompt(p: Party, gw: float, gh: float) -> void:
+	if p.alive_count() < 2:
+		return
+	var y := gh * 0.32
+	_rect(Vector2(gw * 0.5 - 90, y - 3), Vector2(180, 34), Color(0.05, 0.06, 0.09, 0.8))
+	_text(Vector2(gw * 0.5, y) * _s, "%s (%d)" % [tr("Pick your next Pokémon"), ceilf(maxf(p.replace_t, 0.0))], _p_log(), INK, 0)
+	var row := y + 11.0
+	for slot in 2:
+		var f := p.slot_member(slot)
+		if f and f.state != "ko":
+			_text(Vector2(gw * 0.5, row) * _s, "%s  %s" % [Controls.glyph("switch%d" % (slot + 1)), tr(f.data.display_name)], _p_log(), INK, 0)
+			row += 9.0
+
+
 ## Swords Dance: over the boosted Pokémon, two crossed blades and a gold bar with the time
 ## left, with a notch per boosted hit still to come.
 func _boost_bar(f: Fighter) -> void:
@@ -501,6 +598,8 @@ func _pause_menu(_gw: float, _gh: float) -> void:
 		[Controls.glyph("lock_on"), tr("Lock on")],
 		["%s %s %s %s" % [Controls.glyph("mov1"), Controls.glyph("mov2"), Controls.glyph("mov3"), Controls.glyph("mov4")], tr("Moves")],
 	]
+	if not main.parties.is_empty():
+		rows.append(["%s %s" % [Controls.glyph("switch1"), Controls.glyph("switch2")], tr("Switch Pokémon")])
 	var y := 360.0
 	for r in rows:
 		var gw := maxf(u.width(r[0], 28.0, u.heavy) + 24.0, 48.0)

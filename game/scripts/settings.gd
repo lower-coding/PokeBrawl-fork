@@ -9,7 +9,7 @@ extends Node
 
 const PATH := "user://settings.cfg"
 const ROWS := 12                     # rows shown at once on the screen (it scrolls)
-const BINDABLE := ["jump", "dodge", "lock_on", "mov1", "mov2", "mov3", "mov4", "descend", "pause"]
+const BINDABLE := ["jump", "dodge", "lock_on", "mov1", "mov2", "mov3", "mov4", "descend", "switch1", "switch2", "pause"]
 const FPS_CAPS := [0, 60, 120, 144, 240]
 const LANGUAGES := ["", "en", "es"]
 
@@ -147,6 +147,8 @@ func _action_name(a: String) -> String:
 		"mov3": return tr("Move 3")
 		"mov4": return tr("Move 4")
 		"descend": return tr("Descend (flying)")
+		"switch1": return tr("Switch 1")
+		"switch2": return tr("Switch 2")
 		"pause": return tr("Pause")
 	return a
 

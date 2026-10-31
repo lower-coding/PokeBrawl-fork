@@ -48,6 +48,7 @@ godot --path game -- --p1=charizard --p2=pikachu --diff=hard --stage=league
 | Argument | Values |
 |---|---|
 | `--p1`, `--p2` | `pikachu`, `snorlax`, `charizard`, `blastoise`, `venusaur`, `lucario`, `gengar`, `garchomp`, `greninja`, `scizor` |
+| `--team`, `--team2` | a 3 vs 3 against the AI (prototype): `--team=charizard,lucario,venusaur`; the first one leads, a missing `--team2` is filled from the roster. See [3 vs 3](#3-vs-3-prototype) |
 | `--diff` | `easy`, `normal`, `hard` |
 | `--stage` | `night` (default), `floating`, `league` |
 | `--training` | still or active rival: **R** resets, **T** stops or frees the rival, **F3** shows the hitboxes |
@@ -86,6 +87,7 @@ godot --path game -- --p1=charizard --p2=pikachu --diff=hard --stage=league
 | Move 3 | LT | L2 | Right click |
 | Move 4 | RT | R2 | F |
 | Pause | Menu | Options | Esc |
+| Switch Pokémon (3 vs 3) | X, Y | □, △ | 1, 2 |
 | Fly (Charizard, Gengar) | A in the air to take off; hold A to climb | ✕ the same | Space the same |
 | Descend while flying | LS (click the left stick) | L3 | Ctrl |
 | Debug view | View | Share | F3 |
@@ -121,6 +123,26 @@ mouse wheel scrolls.
 - **Lock-on** locks what the camera looks at: the rival or one of its decoys (Substitute's doll,
   Double Team's clones). Locked on, a flick of the right stick or a sweep of the mouse switches
   target. With the camera free, moves go where the camera looks; homing shots still home in.
+
+### 3 vs 3 (prototype)
+
+Three Pokémon a side, one on the field at a time, launched with `--team` (offline only; there
+is no team selection in the menus yet). Every number is at the top of
+[party.gd](game/scripts/party.gd).
+
+- **A switch is a commitment.** The Pokémon stands there for about a second, glowing, while its
+  trainer throws the ball, and can be hit all along: a hit that beats its poise cuts the switch.
+  That is longer than nearly every move's startup, so it has to be a read, not a reaction. The
+  one coming in lands in the same spot, with no invulnerability.
+- **Switches are scarce.** You start with one and hold up to two; another comes every 25 s, 1 s
+  sooner per hit you land. A switch that gets cut still costs it. The one that left cannot come
+  back for 10 s.
+- **It refreshes nothing.** The energy belongs to the team. On the bench, HP, cooldowns and status
+  wait as they were. Stat stages, confusion and decoys are lost on leaving, as in the games.
+- **After a KO** you pick the next one within 3 s (the healthiest if you do not). It is free, lands
+  on your side with 1 s of invulnerability, and your team gets 30 energy. The Pokémon that made
+  the KO loses its stat stages, so one boost does not sweep all three.
+- **The League's field** closes 2.5 times slower.
 
 ## The roster
 
@@ -174,6 +196,8 @@ godot --headless --path game -- --test=mechanics          # acceptance cases of 
 godot --headless --path game -- --test=loadouts           # every Pokémon with every move it can pick
 godot --headless --path game -- --test=status             # also: status_moves, abilities, new_moves
 godot --headless --path game -- --test=deflect            # also: clash, lockon, league, trainers
+godot --headless --path game -- --test=team               # the rules of 3 vs 3 and switching
+godot --headless --path game -- --aivsai --test=team_battles --battles=20 --speed=4   # random teams: length, switches, wins
 godot --path game -- --test=menu                          # the menus with simulated input
 godot --path game -- --test=menu_moves                    # also: menu_options, menu_profile, menu_wheel
 godot --path game -- --test=moves --p1=charizard          # every move, with captures

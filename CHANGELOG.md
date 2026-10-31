@@ -3,6 +3,15 @@
 All notable changes to this project are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [Unreleased]
+
+### Added
+- 3 vs 3 with switching (prototype, offline, launched with `--team`): a switch takes about a
+  second, can be hit and cut, costs a scarce charge and refreshes nothing; the energy belongs to
+  the team and the bench waits as it was. After a KO you pick the next one. The AI switches too.
+  Shots left flying by a Pokémon that switched out spare its teammates. See the README. New
+  tests: `--test=team` and `--aivsai --test=team_battles`.
+
 ## [Demo] - 2026-10-29
 
 The demo: the first version to play.

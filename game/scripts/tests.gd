@@ -9,6 +9,9 @@ extends Node
 ##   mechanics   headless: concrete cases from the acceptance criteria (dodging a
 ##               projectile, jumping the wave, punishing a recovery, combo limit,
 ##               hitstop)
+##   team        headless: the rules of 3 vs 3 and switching (Party)
+##   team_battles --aivsai [--battles=N] [--speed=x] [--diff=...]: random teams, AI against
+##               AI; how long they last, how often they switch, who wins
 ## Captures go to captures/ and a dated copy to captures/history/.
 
 var main: Node
@@ -156,6 +159,12 @@ func _ready() -> void:
 			_league_test()
 		"lockon":
 			_lockon_test()
+		"team":
+			_team_test()
+		"team_battles":
+			_team_battles()
+		"team_shots":
+			_team_shots()
 		"music":
 			# The tracks the game finds (in the exported build, inside its package).
 			await get_tree().process_frame
@@ -1770,6 +1779,377 @@ func _league_test() -> void:
 	main.camera.target = a
 	var fails := _results.filter(func(r): return not r[1]).size()
 	print("RESULT: %d of %d" % [_results.size() - fails, _results.size()])
+	get_tree().quit()
+
+
+# ---------------------------------------------------------------- 3 vs 3
+
+func _team_battle(lead_a: String, team_a: String, lead_b: String, team_b: String, gap := 6.0) -> Array:
+	main._args.team = team_a
+	main._args.team2 = team_b
+	return await _setup(lead_a, lead_b, Vector3(-gap, 0, 0), Vector3(gap, 0, 0))
+
+
+## A hit from "by" on "to", straight into combat.
+func _team_hit(by: Fighter, to: Fighter, strength := 1) -> String:
+	var g := Hit.new()
+	g.user = by
+	g.local = false
+	g.move_id = "thundershock"
+	g.type = "electric"
+	g.cat = "special"
+	g.strength = strength
+	g.damage = 52.0
+	return main.combat.apply(g, to, to.center())
+
+
+## A plain shot of "by"'s, for what happens to shots in flight.
+func _team_shot(by: Fighter, pos: Vector3, velocity: Vector3, life: float, target: Node3D) -> Dictionary:
+	var g := Hit.new()
+	g.user = by
+	g.move_id = "shadowball"
+	g.type = "ghost"
+	g.cat = "special"
+	g.damage = 50.0
+	var node := Node3D.new()
+	main.add_child(node)
+	return main.combat.projectile({"user": by, "pos": pos, "velocity": velocity, "radius": 0.3, "lifetime": life, "hit": g, "node": node, "track": 0.0, "target": target})
+
+
+## Presses switch "slot" and waits until the switch is over; the seconds it took.
+func _team_switch(p: Party, slot: int) -> float:
+	var out: Fighter = p.active
+	var t0 := t
+	out.ctrl.press("switch%d" % (slot + 1))
+	while p.active == out and t - t0 < 4.0:
+		await get_tree().physics_frame
+	return t - t0
+
+
+func _team_faint_and_wait(p: Party) -> Fighter:
+	var out: Fighter = p.active
+	out._damage_direct(999999.0)
+	var t0 := t
+	while p.active == out and t - t0 < 7.0:
+		await get_tree().physics_frame
+	return p.active
+
+
+func _team_test() -> void:
+	await get_tree().physics_frame
+	var ab: Array = await _team_battle("charizard", "charizard,lucario,venusaur", "garchomp", "garchomp,gengar,blastoise")
+	var a: Fighter = ab[0]
+	var b: Fighter = ab[1]
+	var pa: Party = main.parties[0]
+	var luc: Fighter = pa.members[1]
+	var ven: Fighter = pa.members[2]
+	_ok("Each side has its three, in order", pa.members.map(func(f): return f.species) == ["charizard", "lucario", "venusaur"]
+		and main.parties[1].members[1].species == "gengar")
+	_ok("Only two are on the field", main.fighters == [a, b] and main.combat.targets.size() == 2)
+	_ok("The bench does not run or show", luc.process_mode == Node.PROCESS_MODE_DISABLED and not luc.visible)
+	_ok("Starts with one switch", pa.charges == Party.START_CHARGES)
+
+	# The switch itself.
+	a.energy = 37.0
+	a.cds["dragonclaw"] = 3.0
+	a.boost("atk", 2)
+	a.hp = 500.0
+	a.inflict("psn")
+	var took: float = await _team_switch(pa, 0)
+	_ok("A switch takes as long as designed", pa.active == luc and took >= Party.RECALL + Party.FLIGHT.x and took <= Party.RECALL + Party.FLIGHT.y + 0.1, "%.2f s" % took)
+	_ok("Spends the charge", pa.charges == 0)
+	_ok("Everyone points at the new one", main.fighters[0] == luc and b.rival == luc and luc.rival == b and main.ai.rival == luc and main.camera.target == luc and main.trainers[0].fighter == luc)
+	_ok("Only the new one can be hit", luc in main.combat.targets and not a in main.combat.targets)
+	_ok("Energy goes with the team", luc.energy >= 37.0 and luc.energy < 55.0, "%.1f" % luc.energy)
+	_ok("Lands where the other one stood", luc.global_position.distance_to(a.global_position) < 0.5)
+	_ok("A moment before it can act, without invulnerability", luc.state == "enter" and luc.invulnerable <= 0.0, luc.state)
+	_ok("Stat stages are lost on leaving", a.stages.atk == 0)
+
+	# On the bench nothing changes.
+	var hp0: float = a.hp
+	var cd0: float = a.cd("dragonclaw")
+	var st0: float = a.status_t
+	await _wait(1.5)
+	_ok("On the bench HP, cooldowns and status wait", a.hp == hp0 and a.cd("dragonclaw") == cd0 and a.status_t == st0 and a.status == "psn" and cd0 > 0.0,
+		"hp %.0f cd %.2f status %s %.2f" % [a.hp, cd0, a.status, st0])
+
+	# Cost and lockout.
+	_ok("No charge, no switch", not pa.can_switch(1))
+	luc.ctrl.press("switch2")
+	await _wait(0.1)
+	_ok("Pressing without a charge does nothing", luc.state == "free" and pa.active == luc, luc.state)
+	pa._recharge = 0.1
+	await _wait(0.2)
+	_ok("Charges come back with time", pa.charges == 1 and pa._recharge > Party.RECHARGE - 1.0, "%d, %.1f" % [pa.charges, pa._recharge])
+	var waited: float = pa._recharge
+	_ok("A landed hit shortens the wait", _team_hit(luc, b) == "hit" and pa._recharge <= waited - Party.HIT_BONUS + 0.001, "%.2f -> %.2f" % [waited, pa._recharge])
+	_ok("The one that left is locked out", pa.slot_member(0) == a and pa.locked_for(a) > 0.0 and not pa.can_switch(0), "%.1f s" % pa.locked_for(a))
+	await _wait(0.5)
+	_ok("The other one can come", pa.can_switch(1))
+	pa.lockout[a] = 0.05
+	await _wait(0.2)
+	_ok("The lockout ends", pa.can_switch(0))
+
+	# Teammates and shots in flight.
+	_ok("Shots of the one that left spare its team", main.combat.spares(a, luc) and main.combat.spares(luc, a) and not main.combat.spares(a, b))
+	var hp1: float = luc.hp
+	_team_shot(a, luc.center() + Vector3(2.0, 0, 0), Vector3(-10.0, 0, 0), 0.5, null)
+	await _wait(0.4)
+	_ok("Passes through its teammate", luc.hp == hp1, "%.0f -> %.0f" % [hp1, luc.hp])
+	var shot: Dictionary = _team_shot(b, b.center() + Vector3(0, 6.0, 0), Vector3(0, 0.1, 0), 3.0, luc)
+	var took2: float = await _team_switch(pa, 1)
+	_ok("Shots in flight turn to the new one", pa.active == ven and shot.target == ven, "%.2f s" % took2)
+
+	# Hits cut it; the charge stays spent.
+	ab = await _team_battle("charizard", "charizard,lucario,venusaur", "garchomp", "garchomp,gengar,blastoise")
+	a = ab[0]
+	b = ab[1]
+	pa = main.parties[0]
+	a.ctrl.press("switch1")
+	await _wait(0.1)
+	_ok("Recalling, it can be hit", a.state == "recall" and a.hittable() and a.invulnerable <= 0.0, a.state)
+	var res: String = _team_hit(b, a)
+	_ok("A hit cuts it", res == "hit" and a.state in ["stunned", "knocked_down"] and pa.pending == null and pa.active == a and pa.cut == 1, "%s %s" % [res, a.state])
+	_ok("The charge stays spent", pa.charges == 0)
+	await _wait(1.3)
+	_ok("Nobody comes out afterwards", main.fighters[0] == a and a.appear_glow == 0.0)
+	# The Pokémon's poise holds against light hits, as with a move.
+	ab = await _team_battle("blastoise", "blastoise,lucario,venusaur", "garchomp", "garchomp,gengar,charizard")
+	a = ab[0]
+	b = ab[1]
+	pa = main.parties[0]
+	a.ctrl.press("switch1")
+	await _wait(0.1)
+	_ok("A heavy Pokémon holds against a light hit", _team_hit(b, a, 0) == "armor" and a.state == "recall", a.state)
+	_ok("Not against a medium one", _team_hit(b, a, 1) == "hit" and a.state != "recall", a.state)
+	# Nothing to do but dodge while stunned: a switch does not get you out.
+	a.ctrl.press("switch1")
+	await _wait(0.03)
+	_ok("Stunned, no switch", a.state != "recall" and pa.pending == null, a.state)
+
+	# After a KO.
+	ab = await _team_battle("charizard", "charizard,lucario,venusaur", "garchomp", "garchomp,gengar,blastoise")
+	a = ab[0]
+	b = ab[1]
+	pa = main.parties[0]
+	a.energy = 20.0
+	b.boost("atk", 2)
+	var charges0: int = pa.charges
+	a._damage_direct(999999.0)
+	_ok("A KO does not end the battle", main._end_t < 0.0 and pa.replacing)
+	var t0 := t
+	while pa.active == a and t - t0 < 6.0:
+		await get_tree().physics_frame
+	var next: Fighter = pa.active
+	_ok("Someone comes out by itself", next != a and next.state != "ko" and main.fighters[0] == next and t - t0 <= Party.KO_CHOICE + Party.KO_FLIGHT + 0.1, "%s in %.2f s" % [next.species, t - t0])
+	_ok("Lands on its side, safe for a moment", next.global_position.distance_to(next.start_pos) < 0.5 and next.invulnerable > 0.5, "%.2f" % next.invulnerable)
+	_ok("The team gets energy", next.energy >= 50.0 and next.energy < 80.0, "%.1f" % next.energy)
+	_ok("It costs no switch", pa.charges == charges0)
+	_ok("The one that made the KO loses its stages", b.stages.atk == 0)
+	await _wait(1.2)
+	_ok("Then it is free and can be hit", next.state == "free" and next.invulnerable <= 0.0, next.state)
+
+	# The player picks the next one; with no answer, the healthiest.
+	ab = await _team_battle("charizard", "charizard,lucario,venusaur", "garchomp", "garchomp,gengar,blastoise")
+	a = ab[0]
+	pa = main.parties[0]
+	a.is_player = true
+	main._no_input = 0.0
+	a._damage_direct(999999.0)
+	await _wait(0.2)
+	Input.action_press("switch2")
+	await _wait(0.1)
+	Input.action_release("switch2")
+	t0 = t
+	while pa.active == a and t - t0 < 6.0:
+		await get_tree().physics_frame
+	_ok("The player picks", pa.active.species == "venusaur" and pa.active.is_player and not a.is_player, pa.active.species)
+	ab = await _team_battle("charizard", "charizard,lucario,venusaur", "garchomp", "garchomp,gengar,blastoise")
+	a = ab[0]
+	pa = main.parties[0]
+	a.is_player = true
+	pa.members[1].hp = 10.0
+	t0 = t
+	a._damage_direct(999999.0)
+	while pa.active == a and t - t0 < 6.0:
+		await get_tree().physics_frame
+	_ok("Out of time, the healthiest", pa.active.species == "venusaur" and t - t0 >= Party.KO_CHOICE, "%s in %.2f s" % [pa.active.species, t - t0])
+	pa.active.is_player = false
+
+	# To the last one, then a rematch.
+	ab = await _team_battle("charizard", "charizard,lucario,venusaur", "garchomp", "garchomp,gengar,blastoise")
+	a = ab[0]
+	b = ab[1]
+	pa = main.parties[0]
+	await _team_faint_and_wait(pa)
+	_ok("Two down: still on", main._end_t < 0.0)
+	await _team_faint_and_wait(pa)
+	_ok("One left: still on", main._end_t < 0.0 and pa.alive_count() == 1)
+	pa.active._damage_direct(999999.0)
+	_ok("All three down: the battle ends", main._end_t >= 0.0, "%.2f" % main._end_t)
+	main.rematch()
+	await _wait(0.2)
+	_ok("A rematch brings back the lead, everyone whole", main.fighters[0] == a and pa.active == a and pa.alive_count() == 3 and pa.members.all(func(f): return f.hp == f.hp_max) and a.process_mode == Node.PROCESS_MODE_INHERIT and a.visible and not pa.members[1].visible and pa.charges == Party.START_CHARGES and b.rival == a and main.combat.targets.has(a))
+	var took3: float = await _team_switch(pa, 0)
+	_ok("And it can switch again", pa.active == pa.members[1], "%.2f s" % took3)
+
+	# A stage with a void.
+	main.set_stage("floating")
+	ab = await _team_battle("charizard", "charizard,lucario,venusaur", "garchomp", "garchomp,gengar,blastoise")
+	a = ab[0]
+	pa = main.parties[0]
+	_ok("Over the platform, it can switch", pa.can_switch(0))
+	a.global_position = Vector3(60.0, -1.0, 0.0)
+	_ok("Over the pit, it cannot", not pa.can_switch(0))
+	_ok("Nobody lands over the pit", main.arena.inside(pa._entry_spot(Vector3(60.0, 0.0, 0.0)), 0.5))
+	a.global_position = Vector3(-6.0, 0.0, 0.0)
+
+	# The League's field closes slower.
+	main.set_stage("league")
+	ab = await _team_battle("charizard", "charizard,lucario,venusaur", "garchomp", "garchomp,gengar,blastoise")
+	var st: LeagueStadium = main.arena
+	st.zone_t = 0.0
+	await _wait(1.0)
+	if DisplayServer.get_name() == "headless":
+		_ok("The League's clock goes slower in 3 vs 3", main.field_pace == main.PARTY_FIELD_PACE)
+	else:
+		_ok("The League's clock goes slower in 3 vs 3", main.field_pace == main.PARTY_FIELD_PACE and st.zone_t < 0.6, "%.2f" % st.zone_t)
+	main.set_stage("night")
+
+	# The AI against a bad matchup.
+	ab = await _team_battle("pikachu", "pikachu,charizard,blastoise", "garchomp", "garchomp,gengar,scizor", 9.0)
+	var pp: Party = main.parties[0]
+	var rival_ai := AI.new()
+	rival_ai.main = main
+	rival_ai.me = ab[0]
+	rival_ai.rival = ab[1]
+	rival_ai.difficulty = "hard"
+	rival_ai.process_physics_priority = -10
+	main.add_child(rival_ai)
+	main.player_ai = rival_ai
+	pp.charges = 2
+	var t1 := t
+	while pp.switches == 0 and t - t1 < 25.0:
+		await get_tree().physics_frame
+	_ok("The AI gets out of a bad matchup", pp.switches > 0, "%.1f s" % (t - t1))
+	main.player_ai = null
+	rival_ai.queue_free()
+
+	# And a 1 vs 1 is as it was.
+	main._args.erase("team")
+	main._args.erase("team2")
+	ab = await _setup("charizard", "garchomp", Vector3(-6, 0, 0), Vector3(6, 0, 0))
+	a = ab[0]
+	a.ctrl.press("switch1")
+	await _wait(0.1)
+	_ok("In a 1 vs 1 nothing changes", main.parties.is_empty() and a.party == null and a.state == "free" and main.field_pace == 1.0, a.state)
+	var fails := _results.filter(func(r): return not r[1]).size()
+	print("RESULT: %d of %d" % [_results.size() - fails, _results.size()])
+	get_tree().quit()
+
+
+## With a window: the HUD of a 3 vs 3, a recall, the one coming in and the pick after a KO, and
+## the longest frame around a switch (it builds a portrait).
+func _team_shots() -> void:
+	await get_tree().physics_frame
+	var ab: Array = await _team_battle("charizard", "charizard,lucario,venusaur", "garchomp", "garchomp,gengar,blastoise")
+	var a: Fighter = ab[0]
+	var pa: Party = main.parties[0]
+	a.is_player = true
+	main._no_input = 0.0
+	await _wait(0.5)
+	_capture("team_hud")
+	a.ctrl.press("switch1")
+	await _wait(0.45)
+	_capture("team_recall")
+	var t0 := t
+	while pa.active == a and t - t0 < 2.0:
+		await get_tree().process_frame
+	await _wait(0.12)
+	_capture("team_coming_in")
+	await _wait(0.8)
+	_capture("team_after_switch")
+	# Measured without captures, which take longer than any frame.
+	await _wait(0.5)
+	pa.charges = 2
+	var baseline := 0.0
+	t0 = t
+	while t - t0 < 1.0:
+		await get_tree().process_frame
+		baseline = maxf(baseline, get_process_delta_time())
+	var longest := 0.0
+	pa.active.ctrl.press("switch2")
+	t0 = t
+	while t - t0 < 1.5:
+		await get_tree().process_frame
+		longest = maxf(longest, get_process_delta_time())
+	print("longest frame: %.1f ms standing, %.1f ms around a switch" % [baseline * 1000.0, longest * 1000.0])
+	pa.active._damage_direct(999999.0)
+	await _wait(0.6)
+	_capture("team_pick_next")
+	await _wait(3.5)
+	_capture("team_next_out")
+	pa.active.is_player = false
+	get_tree().quit()
+
+
+## Random teams, AI against AI: the numbers the design aims at. Without the window, --speed
+## runs it faster than real time.
+func _team_battles() -> void:
+	await get_tree().physics_frame
+	var total := int(main._args.get("battles", "10"))
+	var speed := float(main._args.get("speed", "1"))
+	var diff: String = main._args.get("diff", "normal")
+	var rows: Array = []
+	var wins_by_species := {}
+	var games_by_species := {}
+	for n in total:
+		seed(1000 + n)
+		var names: Array = Roster.POKEMON.keys()
+		names.shuffle()
+		main._args.team = ",".join(names.slice(0, 3))
+		main._args.team2 = ",".join(names.slice(3, 6))
+		main.start_battle(names[0], names[3], diff)
+		# More ticks a second, not longer ones: time_scale alone would stretch each physics step
+		# and the battle would no longer be the one played at 60 Hz.
+		Engine.physics_ticks_per_second = roundi(60.0 * speed)
+		Engine.max_physics_steps_per_frame = maxi(8, roundi(8.0 * speed))
+		Engine.time_scale = speed
+		await get_tree().physics_frame
+		if n == 0:
+			print("physics step: %.1f ms of battle" % (get_physics_process_delta_time() * 1000.0))
+		var t0 := t
+		while main._end_t < 0.0 and t - t0 < 900.0:
+			await get_tree().physics_frame
+		var p0: Party = main.parties[0]
+		var p1: Party = main.parties[1]
+		var left := [p0.alive_count(), p1.alive_count()]
+		var row := {"t": t - t0, "sw": p0.switches + p1.switches, "cut": p0.cut + p1.cut, "kos": 6 - left[0] - left[1], "left": left, "done": main._end_t >= 0.0}
+		rows.append(row)
+		for k in 2:
+			var won: bool = left[k] > 0 and left[1 - k] == 0
+			for sp in names.slice(k * 3, k * 3 + 3):
+				games_by_species[sp] = int(games_by_species.get(sp, 0)) + 1
+				wins_by_species[sp] = int(wins_by_species.get(sp, 0)) + (1 if won else 0)
+		print("battle %d: %s vs %s  %.0f s  switches %d (cut %d)  KOs %d  left %d-%d%s" % [n + 1, names.slice(0, 3), names.slice(3, 6), row.t, row.sw, row.cut, row.kos, left[0], left[1], "" if row.done else "  UNFINISHED"])
+	var sum_t := 0.0
+	var sum_sw := 0
+	var sum_cut := 0
+	var sum_ko := 0
+	var unfinished := 0
+	for r in rows:
+		sum_t += r.t
+		sum_sw += r.sw
+		sum_cut += r.cut
+		sum_ko += r.kos
+		unfinished += 0 if r.done else 1
+	print("SUMMARY: %d battles, mean %.0f s (min %.0f, max %.0f), %.1f KOs, %.1f switches each (a switch every %.0f s), %.0f%% of switches cut, %d unfinished" % [total, sum_t / total,
+		rows.map(func(r): return r.t).min(), rows.map(func(r): return r.t).max(), float(sum_ko) / total, float(sum_sw) / total, sum_t / maxf(sum_sw, 1), 100.0 * sum_cut / maxf(sum_sw, 1), unfinished])
+	var by := wins_by_species.keys()
+	by.sort_custom(func(x, y): return float(wins_by_species[x]) / games_by_species[x] > float(wins_by_species[y]) / games_by_species[y])
+	print("WINS: ", ", ".join(by.map(func(sp): return "%s %d/%d" % [sp, wins_by_species[sp], games_by_species[sp]])))
+	Engine.time_scale = 1.0
+	Engine.physics_ticks_per_second = 60
 	get_tree().quit()
 
 

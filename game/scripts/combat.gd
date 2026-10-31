@@ -41,6 +41,12 @@ func remove_from(user: Node) -> void:
 			g.active = false
 
 
+## Whether what "user" threw must pass through "o": itself, or a teammate that came out after
+## it switched (its shots keep flying once it has left).
+func spares(user, o) -> bool:
+	return o == user or (is_instance_valid(user) and is_instance_valid(o) and user is Fighter and o is Fighter and user.team == o.team)
+
+
 # ---------------------------------------------------------------- projectiles
 
 ## p: {user, pos, velocity, radius, lifetime, gravity, hit (a Hit in the world), node
@@ -93,7 +99,7 @@ func _clashes(delta: float) -> void:
 		var a: Dictionary = projectiles[i]
 		for j in range(i + 1, projectiles.size()):
 			var b: Dictionary = projectiles[j]
-			if not a.alive or not b.alive or a.get("clashed", false) or b.get("clashed", false) or a.user == b.user:
+			if not a.alive or not b.alive or a.get("clashed", false) or b.get("clashed", false) or spares(a.user, b.user):
 				continue
 			var a0: Vector3 = a.pos - a.velocity * delta
 			var b0: Vector3 = b.pos - b.velocity * delta
@@ -454,7 +460,7 @@ func _move_projectiles(delta: float) -> void:
 		# Bodies in the way (swept as a capsule).
 		if not finished or against == "world":
 			for o in targets:
-				if o == p.user or not o.hittable():
+				if spares(p.user, o) or not o.hittable():
 					continue
 				var seg: Array = o.body()
 				var d := dist_seg_seg(before, where, seg[0], seg[1])
@@ -486,7 +492,7 @@ func _move_projectiles(delta: float) -> void:
 # ---------------------------------------------------------------- tests
 
 func _try(g: Hit, o: Node) -> void:
-	if o == g.user or not o.hittable():
+	if spares(g.user, o) or not o.hittable():
 		return
 	var id := o.get_instance_id()
 	if g.hit_list.has(id) and (g.interval <= 0.0 or clock - g.hit_list[id] < g.interval):
