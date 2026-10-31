@@ -1,7 +1,7 @@
 # PokeBrawl
 
 Real-time 3D Pokémon battles in the style of the anime, built in Godot with Cobblemon's models.
-Ten Pokémon, against the AI or 1 vs 1 online with a friend.
+Ten Pokémon, against the AI or online with a friend, 1 vs 1 or 3 vs 3.
 
 ![Charizard facing Lucario's Aura Sphere in the League Stadium](docs/images/battle.png)
 
@@ -57,7 +57,7 @@ godot --path game -- --p1=charizard --p2=pikachu --diff=hard --stage=league
 
 ## What is in
 
-- **Battle** against the AI (easy, normal, hard), **Online** 1 vs 1 and **Training**.
+- **Battle** against the AI (easy, normal, hard), **Online** and **Training**, 1 vs 1 or 3 vs 3.
 - **Moves:** each Pokémon's four moves and its ability, picked from the ones it learns in the
   games (79 moves and 22 abilities so far). Every move has its details: power, cooldown, reach,
   timings and how to counter it. **Restore defaults** puts them back.
@@ -127,7 +127,7 @@ mouse wheel scrolls.
 
 ### 3 vs 3 (prototype)
 
-Three Pokémon a side, one on the field at a time (offline only). **Battle** and **Training** ask
+Three Pokémon a side, one on the field at a time. **Battle**, **Training** and hosting online ask
 for the format first. In a 3 vs 3 each side picks three on the wall, seeing each one's model, types,
 ability and moves; the first one leads, and picking one again (or clicking it on its card) takes
 it out. The **Rules** tab then sets that battle's rules: they hold for its rematches and stay in
@@ -173,15 +173,16 @@ jumps, dodges, flight) is its own. References from Pokkén, Smash and the anime 
 are in [docs/move-references.md](docs/move-references.md); the plan to grow the roster is in
 [docs/roster-plan.md](docs/roster-plan.md).
 
-## Online (1 vs 1)
+## Online
 
-- Main menu → **Online**: one player picks **Host game**, the other **Join** and types the host's
-  IP.
+- Main menu → **Online**: one player picks **Host game** and the format, 1 vs 1 or 3 vs 3, the other
+  **Join** and types the host's IP.
 - The waiting screen shows the host's IPs: local, VPN if any, and public if the router opened the
   port by itself (UPnP). Otherwise, open port **7777 UDP** on the router or use a LAN VPN such as
   Radmin VPN or ZeroTier.
-- Both pick and get ready; then VS and battle. The host picks the stadium and the ping is shown
-  at the top.
+- Both pick and get ready; then VS and battle. The host picks the stadium and, in a 3 vs 3, the
+  rules, and the ping is shown at the top. A 3 vs 3's teams stay hidden from the rival until both
+  are ready: only how many have been picked shows.
 - After a KO, a rematch starts once every player has asked for it; "pick others" goes back to
   the selection without disconnecting. With nobody choosing, the game goes back to the
   selection by itself after 15 s. There is no pause or KO slow motion online.
@@ -192,7 +193,8 @@ How it keeps latency low: ENet over UDP with small custom packets; every frame c
 and your own Pokémon's state unreliably, while events (hits, start, rematch) go on a reliable
 channel. Each player is in charge of their own Pokémon, so your input is applied with no delay;
 the rival's copy runs their presses fast-forwarded by the ping and is corrected with their real
-state. Hits are confirmed by whoever takes them.
+state. Hits are confirmed by whoever takes them. In a 3 vs 3 each player is in charge of their
+own team too: their switches and picks reach the rival's copy as reliable events.
 
 ## Tests
 

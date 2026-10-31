@@ -184,7 +184,7 @@ func _tile_art(id: String, x: float, y: float, w: float, _hgt: float, o: float) 
 			u.tex(m.render("menu_b", m.choice.p2, Vector2i(300, 340), -0.5), _tile_x(x, y + 230.0) + 10.0, y + 60.0, 300.0, 340.0, Color(1, 1, 1, 0.35 + 0.65 * o))
 			u.tex(m.render("menu_a", m.choice.p1, Vector2i(420, 470), 0.5), _tile_x(x, y + 300.0) + w - 430.0, y + 10.0, 420.0, 470.0)
 		"online":
-			u.title(_tile_x(x, y + 120.0) + w - 50.0, y + 20.0, "1 VS 1", 110.0, Color(1, 1, 1, 0.14), 1)
+			u.title(_tile_x(x, y + 120.0) + w - 50.0, y + 20.0, "VS", 110.0, Color(1, 1, 1, 0.14), 1)
 		"moves":
 			var lo := Loadout.saved(m.choice.p1)
 			var ix := _tile_x(x, y + 90.0) + w - 70.0
@@ -229,7 +229,7 @@ func _card(x: float, y: float, w: float, lines: Array, col: Color) -> void:
 
 func _waiting() -> void:
 	_header(tr("Waiting for rival"), UiKit.GREEN)
-	var lines: Array = [tr("Give your friend one of these IPs:")]
+	var lines: Array = [tr("Format: %s") % tr("3 vs 3" if m.team_battle() else "1 vs 1"), tr("Give your friend one of these IPs:")]
 	var net: Net = m.main.net
 	if net and net.public_ip != "":
 		lines.append(tr("Over the internet: %s") % net.public_ip)
@@ -355,7 +355,7 @@ func _wall(list: Array, setup: float) -> void:
 			if sp in m.choice.team:
 				tx = _token(tx, y + 8.0, "1P", UiKit.RED)
 			if sp in m.choice.team2:
-				_token(tx, y + 8.0, "CPU", UiKit.GREY)
+				_token(tx, y + 8.0, "2P" if m.online else "CPU", UiKit.BLUE if m.online else UiKit.GREY)
 			continue
 		if sp == m.choice.p1 and (m.sel_phase != "p1" or m.me_ready):
 			tx = _token(tx, y + 8.0, "1P", UiKit.RED)
@@ -513,6 +513,12 @@ func _team_card(side: int) -> void:
 			preview = sp != ""
 		var cx := x + 22.0 + i * cw
 		_team_slot(side, i, sp, preview, picking, cx, y, cw - 6.0, hgt, col)
+	# Online the rival's team stays hidden until both are ready: only how far along it is.
+	if not left and m.online:
+		var ready: bool = m.rival_ready
+		var line: String = tr("Ready") if ready else tr("Picking: %d of %d") % [m.rival_count, Party.SIZE]
+		u.slant(x + w - 360.0, y + 34.0, 300.0, 54.0, UiKit.YELLOW if ready else UiKit.DARK)
+		u.title(x + w - 336.0, y + 40.0, line.to_upper(), 38.0, UiKit.DARK if ready else UiKit.INK, -1, 250.0)
 
 
 func _team_slot(side: int, i: int, sp: String, preview: bool, picking: bool, cx: float, y: float, cw: float, hgt: float, col: Color) -> void:
@@ -549,7 +555,9 @@ func _team_slot(side: int, i: int, sp: String, preview: bool, picking: bool, cx:
 
 
 func _loadout_of(side: int, sp: String) -> Dictionary:
-	return m.main.my_loadout(sp) if side == 0 else Loadout.default_for(sp)
+	if side == 0:
+		return m.main.my_loadout(sp)
+	return Loadout.valid(sp, m.rival_loadouts.get(sp, {})) if m.online else Loadout.default_for(sp)
 
 
 func _loadout(side: int) -> Dictionary:
@@ -808,7 +816,11 @@ func _rules() -> void:
 	u.slant(1260.0, 150.0, 600.0, 330.0, UiKit.PANEL, UiKit.TALL)
 	u.slant(1260.0, 150.0, 14.0, 330.0, UiKit.RED, UiKit.TALL)
 	u.para(1320.0, 186.0, cur.get("help", ""), 500.0, 26.0, UiKit.INK, u.bold, 1.3, 8)
-	u.hints([[tr("< >"), tr("Adjust")], [Controls.glyph("menu_back"), tr("Back")]])
+	if m.rules_editable():
+		u.hints([[tr("< >"), tr("Adjust")], [Controls.glyph("menu_back"), tr("Back")]])
+	else:
+		u.text(1320.0, 500.0, tr("The host sets the rules."), 26.0, UiKit.YELLOW, u.bold)
+		u.hints([[Controls.glyph("menu_back"), tr("Back")]])
 
 
 # ---------------------------------------------------------------- VS

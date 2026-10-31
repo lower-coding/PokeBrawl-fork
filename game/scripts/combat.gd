@@ -47,6 +47,13 @@ func spares(user, o) -> bool:
 	return o == user or (is_instance_valid(user) and is_instance_valid(o) and user is Fighter and o is Fighter and user.team == o.team)
 
 
+## Whether projectile "p" was thrown by "f" or a teammate (each team numbers its shots: online
+## the events about one say which by its number).
+func shot_by(p: Dictionary, f: Fighter) -> bool:
+	var shooter = p.get("shooter")
+	return is_instance_valid(shooter) and is_instance_valid(f) and shooter.team == f.team
+
+
 # ---------------------------------------------------------------- projectiles
 
 ## p: {user, pos, velocity, radius, lifetime, gravity, hit (a Hit in the world), node
@@ -106,7 +113,7 @@ func _clashes(delta: float) -> void:
 			if dist_seg_seg(a0, a.pos, b0, b.pos) >= a.radius + b.radius:
 				continue
 			if main.net:
-				var mine: Dictionary = a if a.get("shooter") == main.net.local else b
+				var mine: Dictionary = a if shot_by(a, main.net.local) else b
 				var theirs: Dictionary = b if mine == a else a
 				main.net.send_event({"t": "clash", "h": mine.get("seq", -1), "g": theirs.get("seq", -1)})
 			clash(a, b)
@@ -614,7 +621,11 @@ func _predicted_hit(g: Hit, o: Fighter, point: Vector3, mult: float, flow: bool)
 	var strength := g.strength
 	if attacker is Fighter and is_instance_valid(attacker):
 		attacker.on_strike(o, g, "hit")
-		attacker.energy = minf(Fighter.ENERGY_MAX, attacker.energy + 3.0)
+		# Its team's energy, even with a shot left flying when it switched out.
+		var credit: Fighter = attacker.party.active if attacker.party else attacker
+		credit.energy = minf(Fighter.ENERGY_MAX, credit.energy + 3.0)
+		if attacker.party and not flow:
+			attacker.party.on_landed_hit()
 		if attacker.boosted_hits > 0 and g.cat == "physical":
 			attacker.boosted_hits -= 1
 		if not flow:

@@ -7,7 +7,10 @@ extends Node
 ##   jumps        times the copy had to snap to a new position
 ##   hp           both HP values as each copy sees them (compared afterwards)
 ##   ping         measured round trip
-## At the end it prints a NET_FINAL line with a summary to compare both copies.
+##   stuck_ko     seconds the rival's copy lay fainted while its owner said it was not
+## At the end it prints a NET_FINAL line with a summary to compare both copies. In a 3 vs 3
+## (both with --team) it has, for each battle, who came out on each side, in order, and everyone's
+## HP as this copy saw them: the owner's record of a team must match the other copy's.
 
 var main: Node
 var _t := 0.0
@@ -18,6 +21,8 @@ var _last_pos := Vector3.ZERO
 var _battles: Array = []
 var _hits_taken := 0
 var _hp_before := -1.0
+var _stuck_ko := 0.0
+var _counted := false            # this battle's end has been written down
 
 
 func _ready() -> void:
@@ -35,6 +40,8 @@ func _physics_process(delta: float) -> void:
 			var age_t: float = s.outbound + (net._t - s.received)
 			var real: Vector3 = s.pos + s.speed * clampf(age_t, 0.0, 0.3)
 			_deviations.append(r.global_position.distance_to(real))
+			if r.state == "ko" and s.state != "ko":
+				_stuck_ko += delta
 		if _last_pos != Vector3.ZERO and r.global_position.distance_to(_last_pos) > 2.0:
 			_jumps += 1
 		_last_pos = r.global_position
@@ -42,8 +49,14 @@ func _physics_process(delta: float) -> void:
 		if _hp_before >= 0.0 and l.hp < _hp_before - 0.5:
 			_hits_taken += 1
 		_hp_before = l.hp
-		if main._end_t >= 0.0 and (_battles.is_empty() or _battles.back().t < _t - 5.0):
+		if main._end_t < 0.0:
+			_counted = false
+		if main._end_t >= 0.0 and not _counted:
+			_counted = true
 			_battles.append({"t": _t, "winner": "me" if l.state != "ko" else "rival", "my_hp": l.hp, "rival_hp": r.hp})
+			if not main.parties.is_empty():
+				_battles.back().merge(_teams())
+				print("TEAMS ", JSON.stringify(_teams()))
 			print("BATTLE %d: winner %s · my HP %d · rival HP %d" % [_battles.size(), _battles.back().winner, l.hp, r.hp])
 			# Rematch by votes: the guest asks first; nothing may start until the host asks
 			# too (two seconds later).
@@ -64,6 +77,18 @@ func _physics_process(delta: float) -> void:
 			print("t=%3ds  waiting for connection..." % int(_t))
 	if _t > dur:
 		_final()
+
+
+func _teams() -> Dictionary:
+	var out := {}
+	for k in 2:
+		var p: Party = main.parties[k]
+		var who := "mine" if k == 0 else "rival"
+		out[who] = p.history.duplicate()
+		out[who + "_hp"] = p.members.map(func(f): return int(f.hp))
+		out[who + "_switches"] = p.switches
+		out[who + "_cut"] = p.cut
+	return out
 
 
 func _mean(a: Array) -> float:
@@ -91,11 +116,13 @@ func _final() -> void:
 		"deviation_mean": snappedf(_mean(_deviations), 0.01),
 		"deviation_p95": snappedf(_percentile(_deviations, 0.95), 0.01),
 		"jumps": _jumps,
+		"stuck_ko": snappedf(_stuck_ko, 0.1),
 		"battles": _battles.size(),
 		"won": _battles.filter(func(c): return c.winner == "me").size(),
 		"hits_taken": _hits_taken,
 		"my_hp": net.local.hp if net and net.local else -1,
 		"rival_hp_seen": net.remote.hp if net and net.remote and is_instance_valid(net.remote) else -1,
+		"records": _battles,
 	}
 	print("NET_FINAL ", JSON.stringify(data))
 	get_tree().quit()

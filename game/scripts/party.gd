@@ -25,7 +25,10 @@ extends Node
 ## the team gets ko_energy energy. The stat stages of the Pokémon that made the KO go too, so a
 ## single boosted Pokémon does not sweep all three.
 ##
-## Offline only: Net keeps one Pokémon per player.
+## Online each player is in charge of their own team, as with their own Pokémon (Net). The owner
+## decides every switch and pick and tells the other copy with reliable events (_tell); "remote",
+## that copy only follows them (the net_* functions, called by main.gd) and gets the charges
+## with each state packet.
 
 const SIZE := 3
 const FLIGHT_DIST := Vector2(6.0, 24.0)  # meters from the trainer for ball_near and ball_far
@@ -38,9 +41,11 @@ var side := 0                            # its index in main.fighters
 var members: Array = []                  # in the order they were picked; the first one leads
 var active: Fighter
 var rules := {}                          # this battle's (BattleRules)
+var remote := false                      # online: the rival's team; this copy only follows it
 var charges := 0
 var switches := 0                        # switches started this battle (tests)
 var cut := 0                             # of those, how many a hit cut short
+var history: Array = []                  # who has come out this battle, in order (tests)
 var pending: Fighter = null              # who a switch in progress is bringing in
 var lockout := {}                        # Fighter -> seconds until it can come back
 var replacing := false                   # its Pokémon fainted and the next one is on its way
@@ -54,12 +59,14 @@ var _faint_t := 0.0
 var _flight_t := 0.0
 
 
-func setup(m: Node, s: int, list: Array, battle_rules: Dictionary) -> void:
+func setup(m: Node, s: int, list: Array, battle_rules: Dictionary, follows := false) -> void:
 	main = m
 	side = s
 	members = list
 	active = list[0]
 	rules = battle_rules
+	remote = follows
+	history = [active.species]
 	_full_charges()
 	for f in list:
 		f.party = self
@@ -109,7 +116,7 @@ func recall_share() -> float:
 
 func can_switch(slot: int) -> bool:
 	var f := slot_member(slot)
-	if f == null or f.state == "ko" or charges < 1 or pending != null or replacing or locked_for(f) > 0.0:
+	if f == null or f.state == "ko" or charges < 1 or pending != null or replacing or locked_for(f) > 0.0 or main._end_t >= 0.0:
 		return false
 	# Falling off a stage with a void: too late, nobody can be sent out over the pit.
 	return active.state == "free" and (main.arena.void_y == -INF or main.arena.inside(active.global_position, 0.0))
@@ -136,6 +143,7 @@ func begin_recall(slot: int) -> void:
 	main.hud.log_entry(tr("%s, come back!") % tr(active.data.display_name))
 	main.session.event("switch", {"team": side, "from": active.species, "to": pending.species, "charges": charges,
 		"hp": snappedf(active.hp / active.hp_max, 0.01)})
+	_tell({"t": "recall", "to": pending.species, "total": _recall_total})
 
 
 ## One step of the recall; true once it is over and "active" is someone else. It glows more
@@ -148,14 +156,17 @@ func step_recall(t: float) -> bool:
 	if not _ball_out and t >= float(rules.recall):
 		_ball_out = true
 		main.switch_ball(side, active.global_position + Vector3.UP * 0.7, _recall_total - float(rules.recall))
-	if t < _recall_total:
+	# Online, the rival's copy waits for its owner's word.
+	if remote or t < _recall_total:
 		return false
 	var out := active
 	var incoming := pending
 	pending = null
 	if float(rules.lockout) > 0.0:
 		lockout[out] = rules.lockout
-	_swap(incoming, _entry_spot(out.global_position), out.face_yaw)
+	var spot := _entry_spot(out.global_position)
+	_tell_swap("swap", incoming, spot, out.face_yaw)
+	_swap(incoming, spot, out.face_yaw)
 	incoming.enter_field()
 	return true
 
@@ -165,12 +176,14 @@ func on_recall_cut() -> void:
 	pending = null
 	cut += 1
 	main.vfx.text(active.center() + Vector3.UP * 0.9, tr("Interrupted!"), Color(1.0, 0.6, 0.4))
+	_tell({"t": "recall_cut"})
 
 
 func _swap(incoming: Fighter, pos: Vector3, yaw: float) -> void:
 	var out := active
 	out.leave_field()
 	active = incoming
+	history.append(incoming.species)
 	incoming.take_field(pos, yaw, out)
 	main.on_party_swap(side, out, incoming)
 	main.reveal_from_ball(incoming)
@@ -192,6 +205,7 @@ func _entry_spot(p: Vector3) -> Vector3:
 func on_fainted(who: Fighter) -> void:
 	# Fainted on the bench (the recoil of a shot it left flying): nobody has to come out.
 	if who != active:
+		_tell({"t": "bench_ko", "sp": who.species})
 		return
 	pending = null
 	replacing = true
@@ -212,8 +226,10 @@ func _step_replacement(delta: float) -> void:
 	if not _ball_out:
 		_ball_out = true
 		_flight_t = KO_FLIGHT
+		var to := _entry_spot(active.start_pos) + Vector3.UP * 0.7
 		main.trainers[side].throw()
-		main.switch_ball(side, _entry_spot(active.start_pos) + Vector3.UP * 0.7, KO_FLIGHT)
+		main.switch_ball(side, to, KO_FLIGHT)
+		_tell({"t": "replace_ball", "to": to})
 	_flight_t -= delta
 	if _flight_t > 0.0:
 		return
@@ -247,12 +263,126 @@ func _send_replacement() -> void:
 	var foe: Fighter = fainted.rival
 	var spot := _entry_spot(fainted.start_pos)
 	var to_foe: Vector3 = foe.global_position - spot
-	_swap(incoming, spot, atan2(to_foe.x, to_foe.z))
+	var yaw := atan2(to_foe.x, to_foe.z)
+	_tell_swap("replace", incoming, spot, yaw)
+	_swap(incoming, spot, yaw)
 	incoming.energy = minf(Fighter.ENERGY_MAX, incoming.energy + float(rules.ko_energy))
 	incoming.invulnerable = rules.ko_invuln
 	incoming.enter_field()
 	foe.clear_stages()
 	main.session.event("replacement", {"team": side, "to": incoming.species, "left": alive_count()})
+
+
+# ---------------------------------------------------------------- online
+
+## To the other copy of this team, if there is one and this is the owner's.
+func _tell(d: Dictionary) -> void:
+	if main.net and not remote:
+		d.b = main.net.battle
+		main.net.send_event(d)
+
+
+## From this team's owner, to the copy that follows it.
+func net_event(d: Dictionary) -> void:
+	match d.t:
+		"recall":
+			net_recall(str(d.get("to", "")), float(d.get("total", 1.0)))
+		"recall_cut":
+			net_recall_cut()
+		"swap":
+			net_swap(d)
+		"replace_ball":
+			net_replace_ball(d.to)
+		"replace":
+			net_replace(d)
+		"bench_ko":
+			net_bench_ko(str(d.get("sp", "")))
+
+
+## Who comes out and where, with what the copy cannot know exactly: the health and status of the
+## one leaving and of the one coming in, which the bench has kept.
+func _tell_swap(kind: String, incoming: Fighter, pos: Vector3, yaw: float) -> void:
+	_tell({"t": kind, "to": incoming.species, "pos": pos, "yaw": yaw, "hp": incoming.hp,
+		"out_hp": active.hp, "out_status": active.status, "out_status_t": active.status_t})
+
+
+func _member(sp: String) -> Fighter:
+	for f in members:
+		if f.species == sp:
+			return f
+	return null
+
+
+## With each state packet: how many switches its owner has and how far along the next one is.
+func net_charges(n: int, share: float) -> void:
+	charges = n
+	_recharge = (1.0 - share) * float(rules.recharge)
+
+
+func net_recall(sp: String, total: float) -> void:
+	var f := _member(sp)
+	if f == null or f == active or active.state == "ko":
+		return
+	if active.action:
+		active.action.finish(true)
+		active.action = null
+	pending = f
+	switches += 1
+	_recall_total = total
+	_threw = false
+	_ball_out = false
+	active.start_recall()
+	main.hud.log_entry(tr("%s, come back!") % tr(active.data.display_name))
+
+
+## Its recall was cut on its owner's side (Fighter._switch_state does the rest).
+func net_recall_cut() -> void:
+	if active.state == "recall":
+		active._to_free()
+
+
+func net_swap(d: Dictionary) -> void:
+	var incoming := _member(str(d.get("to", "")))
+	if incoming == null or incoming == active:
+		return
+	var out := active
+	pending = null
+	out.hp = d.out_hp
+	out.status = d.out_status
+	out.status_t = d.out_status_t
+	if float(rules.lockout) > 0.0:
+		lockout[out] = rules.lockout
+	_swap(incoming, d.pos, d.yaw)
+	incoming.hp = d.hp
+	incoming.enter_field()
+
+
+func net_replace_ball(to: Vector3) -> void:
+	main.trainers[side].throw()
+	main.switch_ball(side, to, KO_FLIGHT)
+
+
+func net_replace(d: Dictionary) -> void:
+	var incoming := _member(str(d.get("to", "")))
+	if incoming == null or incoming == active:
+		return
+	# Its faint came with a state packet, which may not have arrived yet.
+	if active.state != "ko":
+		active._die({})
+	replacing = false
+	pending = null
+	var foe: Fighter = active.rival
+	_swap(incoming, d.pos, d.yaw)
+	incoming.hp = d.hp
+	incoming.invulnerable = rules.ko_invuln
+	incoming.enter_field()
+	foe.clear_stages()
+
+
+func net_bench_ko(sp: String) -> void:
+	var f := _member(sp)
+	if f and f != active and f.state != "ko":
+		f._die({})
 
 
 # ---------------------------------------------------------------- reading the matchup
@@ -293,15 +423,17 @@ func _physics_process(delta: float) -> void:
 		lockout[f] -= delta
 		if lockout[f] <= 0.0:
 			lockout.erase(f)
+	if float(rules.bench_heal) > 0.0:
+		for f in members:
+			if f != active and f.state != "ko":
+				f.heal(f.hp_max * float(rules.bench_heal) / 100.0 * delta)
+	if remote:
+		return
 	if charges < max_charges():
 		_recharge -= delta
 		if _recharge <= 0.0:
 			charges += 1
 			_recharge += float(rules.recharge)
-	if float(rules.bench_heal) > 0.0:
-		for f in members:
-			if f != active and f.state != "ko":
-				f.heal(f.hp_max * float(rules.bench_heal) / 100.0 * delta)
 	if replacing:
 		_step_replacement(delta)
 
@@ -326,3 +458,4 @@ func restart() -> void:
 	lockout.clear()
 	switches = 0
 	cut = 0
+	history = [lead.species]

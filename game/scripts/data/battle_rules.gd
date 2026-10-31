@@ -2,8 +2,8 @@ class_name BattleRules
 extends RefCounted
 ## What a 3 vs 3 can change from one battle to the next (Party reads them). They are picked for
 ## each battle, with the stage and the difficulty: in the selection's Rules screen (Menu) or
-## with --rules=id:value,id:value. A battle keeps them for its rematches, and the menu for the
-## next one until the game closes; they are never saved.
+## with --rules=id:value,id:value; online the host's are the ones that count. A battle keeps them
+## for its rematches, and the menu for the next one until the game closes; they are never saved.
 ##   default          what a battle plays by unless someone changes it
 ##   min, max, step   what the Rules screen and --rules allow
 ##   unit             how the value reads: "s", "%", "%/s", "x" or nothing
@@ -67,6 +67,19 @@ static func parsed(text: String) -> Dictionary:
 			push_warning("--rules: ignored \"%s\"" % piece)
 			continue
 		out[d.id] = clampf(kv[1].to_float(), d.min, d.max)
+	return out
+
+
+## Rules that came from the other player: the defaults for whatever is missing or makes no
+## sense, and values within what each rule allows.
+static func sanitized(rules) -> Dictionary:
+	var out := defaults()
+	if typeof(rules) != TYPE_DICTIONARY:
+		return out
+	for d in DEFS:
+		var v = rules.get(d.id)
+		if typeof(v) in [TYPE_INT, TYPE_FLOAT]:
+			out[d.id] = clampf(v, d.min, d.max)
 	return out
 
 

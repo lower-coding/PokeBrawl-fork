@@ -8,10 +8,11 @@ extends Node
 ##   waiting     host waiting: its IPs and whether the router opened the port
 ##   join        type the IP (keyboard, or digit by digit with the gamepad)
 ##   connecting  trying to join someone else's game
-##   format      Battle and Training: 1 vs 1 or 3 vs 3, before anyone picks
+##   format      Battle, Training and hosting online: 1 vs 1 or 3 vs 3, before anyone picks
 ##   selection   Pokémon grid on top, each side's picks below with their moves, and the
 ##               battle's options (stage, difficulty, rules, edit moves, fight). Online: each
-##               picks their own and the host picks the stage
+##               picks their own and the host picks the stage and the rules. A team stays
+##               hidden from the rival until both are ready
 ##   rules       a 3 vs 3's rules for this battle (BattleRules), from the selection
 ##   moves       each Pokémon's four moves and ability, its stats sheet and each move's
 ##               details (also opened from the selection, for last-minute changes)
@@ -29,7 +30,7 @@ const STAGE_TEXT := {"night": "A Galar stadium at night, packed and walled all r
 	"league": "The League's coliseum. The field closes in bit by bit: outside it you lose HP."}
 const COLUMNS := 5
 const MAIN_MENU := [["combat", "Battle", "Against the AI. Pick your Pokémon, the rival and the difficulty."],
-	["online", "Online", "1 vs 1 with a friend over the internet."],
+	["online", "Online", "1 vs 1 or 3 vs 3 with a friend over the internet."],
 	["training", "Training", "Still or active rival, no rush. R resets, T stops or frees the rival."],
 	["moves", "Moves", "Pick each Pokémon's four moves and its ability, and see what each one does."],
 	["options", "Options", "Controls, sound, screen and language."],
@@ -76,6 +77,10 @@ var rival_choice_id := ""
 var rival_loadout := {}          # the online rival's moves and ability (sent with its choice)
 var rival_trainer := ""          # and its trainer
 var rival_ready := false
+var rival_count := 0             # online 3 vs 3: how many the rival has picked
+var rival_team: Array = []       # its team, once it is ready (not before)
+var rival_loadouts := {}         # species -> moves and ability, for that team
+var _hosting := false            # the format screen is for a game about to be hosted
 var message := ""                # notices (connection errors, disconnects), already translated
 var ip := ""
 var confirm := {}                # a yes/no question on top: {text, yes (Callable), on (0 no, 1 yes)}
@@ -170,7 +175,13 @@ func _go(p: String) -> void:
 		if online:
 			if rival_choice_id != "":
 				choice.p2 = rival_choice_id
-			_send_choice()
+			rival_count = 0
+			rival_team = []
+			if team_battle():
+				choice.team = []
+				choice.team2 = []
+				team_preview = pokemon_list()[cursor]
+			send_choice()
 		elif team_battle():
 			# Back from a battle both teams are still picked: straight to its options.
 			if choice.team.size() == Party.SIZE and choice.team2.size() == Party.SIZE:
@@ -263,6 +274,7 @@ func _menu_frame(delta: float) -> void:
 				match MAIN_MENU[cursor][0]:
 					"combat", "training":
 						online = false
+						_hosting = false
 						choice.mode = MAIN_MENU[cursor][0]
 						main.mode = choice.mode
 						_go("format")
@@ -286,25 +298,28 @@ func _menu_frame(delta: float) -> void:
 			if _accept():
 				_sound("ok")
 				if FORMATS[cursor][0] == "back":
-					_go("main")
+					_go("online" if _hosting else "main")
 				else:
 					choice.format = FORMATS[cursor][0]
 					choice.team = []
 					choice.team2 = []
-					_go("selection")
+					if _hosting:
+						var err: String = main.start_net(true, "")
+						message = err
+						_go("waiting" if err == "" else "online")
+					else:
+						_go("selection")
 			elif _pressed("menu_back"):
 				_sound("back")
-				_go("main")
+				_go("online" if _hosting else "main")
 		"online":
 			_move_nav(ONLINE_NAV)
 			if _accept():
 				_sound("ok")
 				match ONLINE[cursor][0]:
 					"create":
-						var err: String = main.start_net(true, "")
-						message = err
-						if err == "":
-							_go("waiting")
+						_hosting = true
+						_go("format")
 					"join":
 						_go("join")
 						_key = Vector2i.ZERO
@@ -502,12 +517,12 @@ func _save_ip(text: String) -> void:
 
 ## The options under the picks, in order. Online the guest cannot change the stage.
 func setup_items() -> Array:
-	if online:
-		return ["stage", "build", "ready"]
-	var out: Array = ["stage"] if choice.mode == "training" else ["stage", "diff"]
+	var out: Array = ["stage"]
+	if not online and choice.mode != "training":
+		out.append("diff")
 	if team_battle():
 		out.append("rules")
-	return out + ["build", "fight"]
+	return out + ["build", "ready" if online else "fight"]
 
 
 func _selection() -> void:
@@ -544,7 +559,7 @@ func _selection() -> void:
 			_to_setup()
 	elif _pressed("menu_back"):
 		_sound("back")
-		if team_battle():
+		if team_battle() and not (online and choice.team.is_empty()):
 			_team_back()
 		elif online:
 			ask(tr("Leave the room? You will be disconnected."), func():
@@ -563,7 +578,7 @@ func _to_setup() -> void:
 	var items := setup_items()
 	setup_cursor = items.size() - 1          # straight on Fight / Ready
 	if online:
-		_send_choice()
+		send_choice()
 
 
 func _setup_input(list: Array) -> void:
@@ -574,7 +589,7 @@ func _setup_input(list: Array) -> void:
 		if _pressed("menu_back"):
 			_sound("back")
 			me_ready = false
-			_send_choice()
+			send_choice()
 		return
 	# The options sit side by side: left and right go through them, up and down change them.
 	if _pressed("move_left"):
@@ -625,22 +640,23 @@ func _setup_input(list: Array) -> void:
 			"ready":
 				_sound("ok")
 				me_ready = true
-				_send_choice()
+				send_choice()
 				main.check_start()
 	elif _pressed("menu_back"):
 		_sound("back")
 		sel_phase = "p1" if online else "p2"
 		if team_battle():
 			_last_pick_back(list)
+			send_choice()
 		else:
 			cursor = maxi(list.find(choice[sel_phase]), 0)
 
 
 # ---------------------------------------------------------------- picking a team
 
-## This battle is a 3 vs 3 (online is always 1 vs 1).
+## This battle is a 3 vs 3.
 func team_battle() -> bool:
-	return choice.format == "3v3" and not online
+	return choice.format == "3v3"
 
 
 ## A whole team for "side": its lead, the picks, then whoever comes next in the roster until it
@@ -663,12 +679,16 @@ func _team_pick(sp: String) -> void:
 	var picks: Array = choice[_picks_key()]
 	if sp in picks:
 		picks.erase(sp)
+		send_choice()
 		return
 	picks.append(sp)
 	if picks.size() < Party.SIZE:
+		send_choice()
 		return
 	choice[sel_phase] = picks[0]
-	if sel_phase == "p1":
+	if online:
+		_to_setup()
+	elif sel_phase == "p1":
 		sel_phase = "p2"
 		var list := pokemon_list()
 		cursor = maxi(list.find(choice.p2), 0)
@@ -694,6 +714,7 @@ func _last_pick_back(list: Array) -> void:
 	var sp: String = choice[_picks_key()].pop_back()
 	cursor = maxi(list.find(sp), 0)
 	team_preview = sp
+	send_choice()
 
 
 ## A click on a pick of the team being picked takes it out ("slot": its place on the team).
@@ -704,6 +725,7 @@ func _remove_pick(side: int, slot: int) -> void:
 	if slot < picks.size():
 		picks.remove_at(slot)
 		_sound("back")
+		send_choice()
 
 
 # ---------------------------------------------------------------- this battle's rules
@@ -751,10 +773,10 @@ func _rules_input() -> void:
 		change = -1
 	elif _pressed("move_right"):
 		change = 1
-	if change != 0 and it.kind == "choice":
+	if change != 0 and it.kind == "choice" and rules_editable():
 		choice.rules[it.id] = BattleRules.stepped(it.id, choice.rules[it.id], change)
 		_sound("move")
-	if _accept():
+	if _accept() and rules_editable():
 		_sound("move")
 		if it.kind == "action":
 			choice.rules = BattleRules.defaults()
@@ -765,6 +787,13 @@ func _rules_input() -> void:
 		screen = "selection"
 		enter_t = 0.0
 		setup_cursor = setup_items().find("rules")
+		if online:
+			send_choice()
+
+
+## Online only the host sets the rules; the guest can read them.
+func rules_editable() -> bool:
+	return not online or (main.net != null and main.net.host)
 
 
 # ---------------------------------------------------------------- profile
@@ -995,7 +1024,7 @@ func _leave_moves() -> void:
 		setup_cursor = setup_items().find("build")
 		cursor = maxi(pokemon_list().find(choice.p1), 0)
 		if online:
-			_send_choice()
+			send_choice()
 	else:
 		_go("main")
 
@@ -1032,13 +1061,62 @@ func shown_move() -> String:
 
 # ---------------------------------------------------------------- online
 
-func _send_choice() -> void:
+## What the rival gets to know of my choice. In a 3 vs 3, until I am ready, only how many I
+## have picked: a team seen as it is being picked could just be countered.
+func send_choice() -> void:
 	if main.net:
 		var d := {"t": "choice", "species": choice.p1, "ready": me_ready, "loadout": main.my_loadout(choice.p1), "trainer": main.options.trainer, "name": main.options.shown_name(),
 			"ver": Menu.version()}
 		if main.net.host:
 			d.stage = choice.stage            # so the rival sees the stage from the start
+			d.format = choice.format          # and the room's format and rules
+			d.rules = choice.rules
+		if team_battle():
+			d.count = choice.team.size()
+			if me_ready:
+				choice.team = team_ids(0, choice.p1)
+				d.team = choice.team
+				d.loadouts = {}
+				for sp in choice.team:
+					d.loadouts[sp] = main.my_loadout(sp)
 		main.net.send_event(d)
+
+
+## The guest: the room's format and rules, which the host decides. A format that changes starts
+## the picks over.
+func room_settings(d: Dictionary) -> void:
+	if main.net == null or main.net.host:
+		return
+	if d.has("rules"):
+		choice.rules = BattleRules.sanitized(d.rules)
+	if not d.get("format", choice.format) in ["1v1", "3v3"] or d.get("format", choice.format) == choice.format:
+		return
+	choice.format = d.format
+	choice.team = []
+	choice.team2 = []
+	me_ready = false
+	sel_phase = "p1"
+	team_preview = choice.p1
+	if is_open and screen == "selection":
+		cursor = maxi(pokemon_list().find(choice.p1), 0)
+		send_choice()
+
+
+## A 3 vs 3 rival's picks: how many, and its team and moves once it is ready.
+func rival_team_choice(d: Dictionary) -> void:
+	rival_count = int(d.get("count", 0))
+	rival_team = []
+	var team = d.get("team", [])
+	if not team is Array or team.size() != Party.SIZE:
+		return
+	var seen := {}
+	for sp in team:
+		if not sp is String or not Roster.POKEMON.has(sp) or seen.has(sp):
+			return
+		seen[sp] = true
+	rival_team = team
+	var loadouts = d.get("loadouts", {})
+	rival_loadouts = loadouts if loadouts is Dictionary else {}
 
 
 ## The online rival changes Pokémon or gets ready.
@@ -1349,4 +1427,4 @@ func _pick_on_wall(i: int) -> void:
 		choice[sel_phase] = list[cursor]
 	main.audio.cry(list[cursor], main.camera.global_position, 1.0, -22.0)
 	if online:
-		_send_choice()
+		send_choice()

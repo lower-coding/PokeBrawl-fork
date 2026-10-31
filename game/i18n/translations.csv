@@ -158,7 +158,6 @@ Easy,Easy,Fácil
 Hard,Hard,Difícil
 Battle,Battle,Combate
 "Against the AI. Pick your Pokémon, the rival and the difficulty.","Against the AI. Pick your Pokémon, the rival and the difficulty.","Contra la IA. Elige tu Pokémon, el rival y la dificultad."
-1 vs 1 with a friend over the internet.,1 vs 1 with a friend over the internet.,1 contra 1 con un amigo por internet.
 Training,Training,Entrenamiento
 "Still or active rival, no rush. R resets, T stops or frees the rival.","Still or active rival, no rush. R resets, T stops or frees the rival.","Rival quieto o activo, sin prisas. R reinicia, T para o suelta al rival."
 Quit,Quit,Salir
@@ -673,3 +672,7 @@ Rival's team: %d of %d,Rival's team: %d of %d,Equipo rival: %d de %d
 Pick or take out,Pick or take out,Elegir o quitar
 Lead,Lead,Primero
 Puts every rule back on its default.,Puts every rule back on its default.,Devuelve cada regla a su valor por defecto.
+1 vs 1 or 3 vs 3 with a friend over the internet.,1 vs 1 or 3 vs 3 with a friend over the internet.,1 contra 1 o 3 contra 3 con un amigo por internet.
+Picking: %d of %d,Picking: %d of %d,Eligiendo: %d de %d
+Format: %s,Format: %s,Formato: %s
+The host sets the rules.,The host sets the rules.,Las reglas las pone el anfitrión.

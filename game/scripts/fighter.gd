@@ -355,7 +355,7 @@ func inflict(kind: String) -> bool:
 	if state == "ko" or status != "" or status_lock > 0.0 or not Status.can_get(kind, types, data.passive.id):
 		return false
 	if is_remote:
-		main.net.send_event({"t": "effect", "type": "status", "v": 0.0, "move": kind})
+		main.net.send_event({"t": "effect", "type": "status", "v": 0.0, "move": kind, "to": species})
 		return true
 	status = kind
 	status_t = Status.DURATION.get(kind, 0.0)
@@ -448,7 +448,7 @@ func _status_process(delta: float) -> void:
 ## Pokémon.
 func effect(type: String, value: float, move := "") -> void:
 	if is_remote:
-		main.net.send_event({"t": "effect", "type": type, "v": value, "move": move})
+		main.net.send_event({"t": "effect", "type": type, "v": value, "move": move, "to": species})
 		return
 	match type:
 		"damage":
@@ -1249,7 +1249,7 @@ func boost(stat: String, n: int, source := "") -> void:
 		text = tr(source) + ": " + text
 	main.vfx.text(center() + Vector3.UP * 1.0, text, Color(1.0, 0.85, 0.4) if n > 0 else Color(0.6, 0.75, 1.0))
 	if not is_remote and main.net and main.net.linked:
-		main.net.send_event({"t": "boost", "stat": stat, "stages": stages[stat]})
+		main.net.send_event({"t": "boost", "stat": stat, "stages": stages[stat], "sp": species})
 
 
 func receive(info: Dictionary) -> String:
@@ -1531,10 +1531,12 @@ func leave_field() -> void:
 	model.mesh_instance.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_ON
 	appear_glow = 0.0
 	velocity = Vector3.ZERO
+	net_state = {}
 	bench()
 
 
-## Back on the field in place of "out": it carries on with the team's energy.
+## Back on the field in place of "out": it carries on with the team's energy. Online the team
+## also goes on counting its presses and its shots, so the two copies keep agreeing on both.
 func take_field(pos: Vector3, yaw: float, out: Fighter) -> void:
 	process_mode = Node.PROCESS_MODE_INHERIT
 	visible = true
@@ -1547,6 +1549,9 @@ func take_field(pos: Vector3, yaw: float, out: Fighter) -> void:
 	_buffer.clear()
 	ctrl.clear()
 	ctrl.held.clear()
+	ctrl.counter = out.ctrl.counter
+	shots = out.shots
+	net_state = {}
 	_was_grounded = true
 	_animate_base(0.0)
 	reset_physics_interpolation()

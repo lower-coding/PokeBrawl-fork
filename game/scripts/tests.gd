@@ -2021,6 +2021,7 @@ func _team_test() -> void:
 	_ok("One left: still on", main._end_t < 0.0 and pa.alive_count() == 1)
 	pa.active._damage_direct(999999.0)
 	_ok("All three down: the battle ends", main._end_t >= 0.0, "%.2f" % main._end_t)
+	_ok("No switching once it is over", not main.parties[1].can_switch(0))
 	main.rematch()
 	await _wait(0.2)
 	_ok("A rematch brings back the lead, everyone whole", main.fighters[0] == a and pa.active == a and pa.alive_count() == 3 and pa.members.all(func(f): return f.hp == f.hp_max) and a.process_mode == Node.PROCESS_MODE_INHERIT and a.visible and not pa.members[1].visible and pa.charges == int(R.start_charges) and b.rival == a and main.combat.targets.has(a))
@@ -2119,6 +2120,58 @@ func _team_test() -> void:
 	_ok("A team has no repeats and nobody unknown", main.menu.team_ids(0, "charizard") == ["charizard", "lucario", "venusaur"])
 	main.menu.choice.team = ["charizard"]
 	_ok("Picking the lead as a teammate does not repeat it", main.menu.team_ids(0, "charizard").count("charizard") == 1 and main.menu.team_ids(0, "charizard").size() == 3)
+	# Rules from the other player.
+	var from_net: Dictionary = BattleRules.sanitized({"recall": 99.0, "lockout": "x", "other": 1, "bench_heal": 2.0})
+	_ok("Rules from the network stay within limits", from_net.recall == 1.5 and from_net.lockout == R.lockout and from_net.bench_heal == 2.0 and not from_net.has("other"))
+	_ok("And nonsense gives the defaults", BattleRules.sanitized("nonsense") == R)
+	# The rival's copy of a team follows what its owner says, and does nothing by itself.
+	main.menu.choice.format = "3v3"
+	ab = await _team_battle("charizard", "charizard,lucario,venusaur", "garchomp", "garchomp,gengar,blastoise")
+	a = ab[0]
+	b = ab[1]
+	var pr: Party = main.parties[1]
+	pr.remote = true
+	var gengar: Fighter = pr.members[1]
+	var blast: Fighter = pr.members[2]
+	pr.net_event({"t": "recall", "to": "gengar", "total": 0.2})
+	_ok("The copy recalls when told", b.state == "recall" and pr.pending == gengar, b.state)
+	await _wait(0.5)
+	_ok("And waits for its owner, however long", pr.active == b and b.state == "recall" and pr.pending == gengar, b.state)
+	pr.net_recall_cut()
+	_ok("A cut on the owner's side cuts it here", b.state == "free" and pr.pending == null and pr.cut == 1, b.state)
+	pr.net_recall("gengar", 0.2)
+	gengar.hp = 300.0
+	pr.net_swap({"to": "gengar", "pos": Vector3(3, 0, 1), "yaw": 1.0, "hp": 123.0, "out_hp": 456.0, "out_status": "psn", "out_status_t": 5.0})
+	_ok("The switch comes with what the bench kept", pr.active == gengar and main.fighters[1] == gengar and gengar.hp == 123.0 and b.hp == 456.0 and b.status == "psn" and b.status_t == 5.0 and gengar.state == "enter" and gengar.global_position.distance_to(Vector3(3, 0, 1)) < 0.5 and a.rival == gengar,
+		"%s %.0f %.0f" % [pr.active.species, gengar.hp, b.hp])
+	_ok("And its lockout", pr.locked_for(b) > 0.0)
+	pr.net_charges(1, 0.5)
+	_ok("Its charges come from its owner", pr.charges == 1 and is_equal_approx(pr.recharge_share(), 0.5))
+	await _wait(0.3)
+	_ok("Which it does not recharge by itself", pr.charges == 1 and is_equal_approx(pr.recharge_share(), 0.5), "%.2f" % pr.recharge_share())
+	pr.net_recall("nobody", 0.2)
+	pr.net_swap({"to": "nobody"})
+	_ok("It ignores a member it does not have", pr.active == gengar and pr.pending == null)
+	a.boost("atk", 2)
+	gengar._damage_direct(999999.0)
+	_ok("A faint does not make it pick by itself", pr.replacing and pr.active == gengar and main._end_t < 0.0)
+	await _wait(pr.AI_PICK + 1.5)
+	_ok("It waits for its owner's pick", pr.active == gengar and pr.replacing)
+	pr.net_replace({"to": "blastoise", "pos": Vector3(6, 0, 0), "yaw": 0.0, "hp": 200.0})
+	_ok("The pick comes with its KO rules", pr.active == blast and blast.hp == 200.0 and blast.invulnerable > 0.0 and not pr.replacing and a.stages.atk == 0, "%s" % pr.active.species)
+	pr.net_bench_ko("garchomp")
+	_ok("A faint on the bench reaches the copy", b.state == "ko" and pr.alive_count() == 1 and main._end_t < 0.0)
+	pr.remote = false
+	# A pick that overtakes the faint: the copy faints it first.
+	ab = await _team_battle("charizard", "charizard,lucario,venusaur", "garchomp", "garchomp,gengar,blastoise")
+	b = ab[1]
+	pr = main.parties[1]
+	pr.remote = true
+	pr.net_replace({"to": "gengar", "pos": Vector3(6, 0, 0), "yaw": 0.0, "hp": 200.0})
+	_ok("A pick that overtakes the faint", b.state == "ko" and pr.active.species == "gengar" and not pr.replacing and main.fighters[1].species == "gengar")
+	pr.remote = false
+	main.menu.choice.rules = BattleRules.defaults()
+
 	# Picking on the wall, as the selection does.
 	var mn: Menu = main.menu
 	mn.choice.format = "3v3"

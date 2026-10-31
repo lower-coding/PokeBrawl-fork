@@ -245,8 +245,8 @@ The content is data first, so adding to it does not mean touching the battle sys
 
 ### The battle system
 
-- **Teams:** several Pokémon per side and switching between them. The trainers already stand
-  on the field and throw their Poké Balls; they are the base for it.
+- **Teams:** 3 vs 3 with switching is in, as a prototype. A team preview, other sizes and moves
+  that act on a switch (U-turn, hazards) are not.
 - **Doubles, 2 vs 2:** moves that hit an ally or both rivals, which today are left out.
 - **Items, terrains and more weather**, on top of the statuses and weather already in.
 - **Online:** more players and spectators. The rematch already counts the votes of every
