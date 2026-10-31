@@ -200,6 +200,10 @@ also play that way. Variety and freedom.
 treats them as separate Pokémon except the menus, where they share a cell (LB / L1 / Q or its tabs),
 and teams, which hold only one. **Without a Cobblemon model**, an openly licensed one compatible with
 non-commercial use can come in with its credit (`tools/import_pokemans.py`); its data still comes from Cobblemon.
+**Legendaries** are skipped by `tools/import_cobblemon.py` unless they are named in `ROSTER_LEGENDARIES`
+(Mewtwo). **A model with no attack clips** gets ours in `sources/cobblemon/<id>/moves.animation.json`, which
+`convert()` merges so the source's own file stays untouched. Mewtwo keeps its real stats (680 in all, the
+highest here) and pays in its kit: expect it on top until playtesting says otherwise.
 
 ---
 

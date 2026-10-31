@@ -137,8 +137,23 @@ def toxic_bubble(fr, f, n):
         put(fr, x, y, (240, 200, 250, 255))
 
 
+# ---------------------------------------------------------------- Disable: a tiny spark
+def spark(fr, f, n):
+    s = fr.size[0]
+    c = (s - 1) / 2
+    arm = 3.5 if f % 2 == 0 else 2.5
+    for y in range(s):
+        for x in range(s):
+            dx, dy = abs(x - c), abs(y - c)
+            if dx + dy <= 1.0:
+                put(fr, x, y, (255, 255, 254, 255))
+            elif (dx < 1 and dy <= arm) or (dy < 1 and dx <= arm):
+                put(fr, x, y, (255, 150, 226, 255))
+
+
 strip("toxic_bubble", 12, 4, toxic_bubble)
 strip("willowisp", 16, 6, wisp)
 strip("hypnosis_rings", 24, 6, hypno)
 strip("psy_ring", 25, 1, psy_ring)
 strip("yawn_bubble", 16, 4, bubble)
+strip("disable_spark", 10, 4, spark)

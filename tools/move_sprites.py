@@ -756,6 +756,29 @@ def chilling_water(px, side, f, n, rnd):
     _glob(px, side, f, n, [(0.25, hexc("e6fbff")), (0.55, hexc("9fdcf5")), (0.9, hexc("4f9fe0")), (2.0, hexc("23549c"))])
 
 
+def psyshock_shard(px, side, f, n, rnd):
+    """One long shard of pink crystal, on the diagonal: a pale core, a band of pink and a dark
+    rim, with a glint walking along it."""
+    c = (side - 1) / 2
+    glint = (f / n) * 2.0 - 1.0
+    for y in range(side):
+        for x in range(side):
+            along = ((x - c) - (y - c)) / (side * 0.5)
+            across = abs((x - c) + (y - c)) / (side * 0.5)
+            width = 0.42 * (1.0 - abs(along)) if abs(along) < 1.0 else -1.0
+            if across > width:
+                continue
+            k = across / max(width, 0.01)
+            if abs(along - glint) < 0.12 and k < 0.6:
+                put(px, side, x, y, hexc("ffffff"))
+            elif k < 0.35:
+                put(px, side, x, y, hexc("ffd8f4"))
+            elif k < 0.72:
+                put(px, side, x, y, hexc("f06ec8"))
+            else:
+                put(px, side, x, y, hexc("8a2c86"))
+
+
 if __name__ == "__main__":
     os.makedirs(OUTPUT, exist_ok=True)
     strip(6, 30, electro_ball, "electroball.png", 7)
@@ -778,3 +801,4 @@ if __name__ == "__main__":
     strip(6, 20, mud_shot, "mudshot_ball.png", 83)
     strip(6, 20, acid_spray, "acidspray_ball.png", 89)
     strip(6, 20, chilling_water, "chillingwater_ball.png", 97)
+    strip(4, 24, psyshock_shard, "psyshock_shard.png", 101)

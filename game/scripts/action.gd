@@ -27,6 +27,7 @@ var move_mult := 0.3
 var no_brake := false
 var no_gravity := false
 var faces_rival := true
+var hides_body := false          # gone from view while it lasts (Teleport)
 var turn_mult := 1.0
 var tint_col := Color.BLACK
 var tint_k := 0.0

@@ -233,7 +233,7 @@ ready for, from the most direct to the most ambitious. Any of them is a good pla
 The content is data first, so adding to it does not mean touching the battle system.
 
 - **Moves.** Each move is an entry in `moves.gd` plus a script, and the scripts share bases
-  (dashes, punches, body slams, projectiles, held beams): the 91 moves done today come from 61
+  (dashes, punches, body slams, projectiles, held beams): the 97 moves done today come from 65
   scripts, and many new ones only need data. The ten Pokémon learn 404 moves in the games,
   grouped into families to design them together in
   [docs/learnset-plan.md](docs/learnset-plan.md). As soon as a move's script exists, every

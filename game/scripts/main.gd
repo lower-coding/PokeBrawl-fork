@@ -667,6 +667,12 @@ func _net_event(d: Dictionary) -> void:
 				if int(d.stages) < int(net.remote.stages[d.stat]):
 					net.remote.lowered_t = Fighter.LOWERED_T
 				net.remote.stages[d.stat] = int(d.stages)
+		"confused":
+			if net.remote and d.get("sp", net.remote.species) == net.remote.species:
+				net.remote.confuse(float(d.secs))
+		"disabled":
+			if net.remote and d.get("sp", net.remote.species) == net.remote.species:
+				net.remote.said_disabled()
 		"rematch":
 			rematch()
 		"asks_rematch":

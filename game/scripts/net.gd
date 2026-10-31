@@ -305,6 +305,8 @@ func _pack() -> PackedByteArray:
 	b.put_u16(mask)
 	for a in ACTIONS:
 		b.put_u8(int(c.counter.get(a, 0)))
+	# Confused, a press fires another move: it travels with them, so the copy fires the same one.
+	b.put_u8(buttons_code(l.button_moves))
 	# Real state, to correct the copy.
 	for v in [l.global_position, l.velocity]:
 		b.put_float(v.x)
@@ -366,6 +368,7 @@ func _read_state(b: StreamPeerBuffer) -> void:
 			c.held[a] = true
 		else:
 			c.release(a)
+	r.button_moves = buttons_from(b.get_u8())
 	var s := {}
 	s.pos = Vector3(b.get_float(), b.get_float(), b.get_float())
 	s.speed = Vector3(b.get_float(), b.get_float(), b.get_float())
@@ -388,6 +391,15 @@ func _read_state(b: StreamPeerBuffer) -> void:
 	s.outbound = _outbound()
 	s.received = _t
 	r.net_state = s
+
+
+## Fighter.button_moves in one byte: two bits per button.
+static func buttons_code(order: Array) -> int:
+	return order[0] | order[1] << 2 | order[2] << 4 | order[3] << 6
+
+
+static func buttons_from(code: int) -> Array:
+	return [code & 3, code >> 2 & 3, code >> 4 & 3, code >> 6 & 3]
 
 
 ## Estimated one-way delay (s).

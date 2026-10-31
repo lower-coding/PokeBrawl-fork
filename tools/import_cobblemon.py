@@ -3,7 +3,7 @@
 Usage:  python tools/import_cobblemon.py <path to common/src/main/resources> [generations]
         [--only=kecleon,other]                   (default: all of generation 1)
 
-For each non-legendary species that walks or flies:
+For each non-legendary species (or one in ROSTER_LEGENDARIES) that walks or flies:
 - copies into sources/cobblemon/<id>/ what its "resolver" points to (model, animations,
   texture, shiny texture, emissive layer, Alpha eyes and the model's license),
 - converts it with convert_cobblemon.py into game/pokemon/<id>/.
@@ -21,6 +21,8 @@ import convert_cobblemon as conv
 ROOT = Path(__file__).resolve().parent.parent
 SOURCES = ROOT / "sources" / "cobblemon"
 EXCLUDED = {"legendary", "mythical", "restricted", "ultra_beast", "paradox"}
+# Legendaries the roster has on purpose.
+ROSTER_LEGENDARIES = {"mewtwo"}
 GEN_END = [0, 151, 251, 386, 493, 649, 721, 809, 905, 1025]
 
 
@@ -33,7 +35,7 @@ def _path(resources, ref):
 
 def import_species(resources, species_file):
     j = json.loads(species_file.read_text(encoding="utf-8"))
-    if not j.get("implemented") or EXCLUDED & set(j.get("labels", [])):
+    if not j.get("implemented") or (EXCLUDED & set(j.get("labels", [])) and species_file.stem not in ROSTER_LEGENDARIES):
         return None
     mov = j.get("behaviour", {}).get("moving", {})
     walks = mov.get("walk", {}).get("canWalk", True) and not mov.get("walk", {}).get("avoidsLand", False)

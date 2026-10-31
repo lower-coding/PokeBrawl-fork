@@ -3,7 +3,7 @@ extends Action
 ## while a ring at the rival's feet follows it; a moment before ("lock" seconds) the ring
 ## stops and turns white. Whoever stands there then is wrapped in a band of psychic light
 ## (an outline round its body), lifted into the air with pink sparks rising off it and, at
-## the top ("hold" seconds later), slammed down onto the ground, which cracks. The lift does a
+## the top ("lift_hold" seconds later), slammed down onto the ground, which cracks. The lift does a
 ## share of the damage ("lift_share"), the slam the rest. Dodge it (or leave the ring) when
 ## it turns white. It is not a projectile: it cannot be sent back. Reach "reach" metres.
 
@@ -69,7 +69,7 @@ func on_active() -> void:
 		"lifetime": 0.08, "contact": false, "damage": float(d.damage) * share, "knock": 0.0})
 	vfx.light(at + Vector3.UP, PINK, 4.0, 5.0, 0.4)
 	var user := l
-	var hold: float = d.hold
+	var hold: float = d.lift_hold
 	var rest: float = float(d.damage) * (1.0 - share)
 	g.on_strike = func(o: Node, _res: String):
 		vfx.outline(o, PINK, hold + 0.35)

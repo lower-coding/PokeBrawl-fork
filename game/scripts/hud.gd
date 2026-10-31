@@ -439,7 +439,8 @@ func _state(l: Fighter) -> String:
 ## name on top and button and cost below.
 func _moves(l: Fighter, g0: Vector2) -> void:
 	for i in 4:
-		var move: String = l.data.moves[i]
+		# Each tile is a button, so confused the moves change places and it can be read at a glance.
+		var move: String = l.data.moves[l.button_moves[i]]
 		var d: Dictionary = Moves.DATA[move]
 		var g := g0 + Vector2(0.0 if i % 2 == 0 else 92.0 + 13.0, 0.0 if i < 2 else 24.0 + 5.0)
 		var ready := l.ready(move)
@@ -472,9 +473,14 @@ func _moves(l: Fighter, g0: Vector2) -> void:
 			_text((g + Vector2(75, 14)) * _s, datum, pl, Color(dcol, a), 0)
 		# Cooldown and charge: a line at the bottom of the tile.
 		if missing > 0.0:
-			_rect(g + Vector2(2, 21), Vector2(87 * (1.0 - missing / maxf(Moves.cooldown(move), 0.01)), 1), Color(1, 1, 1, 0.55))
+			_rect(g + Vector2(2, 21), Vector2(87 * cooldown_done(missing, move), 1), Color(1, 1, 1, 0.55))
 		if using and d.get("chargeable", false) and l.action.phase == "startup":
 			_rect(g + Vector2(2, 21), Vector2(87 * l.action.charge, 1), INK)
+
+
+## How much of a move's cooldown has gone by; none while more is left than its own (a Disable).
+static func cooldown_done(missing: float, move: String) -> float:
+	return maxf(1.0 - missing / maxf(Moves.cooldown(move), 0.01), 0.0)
 
 
 ## The player's dodges (diamonds) and energy, above the moves.

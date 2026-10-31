@@ -6,6 +6,7 @@ extends Node
 ##   combat      AI vs AI on screen, with captures every few seconds
 ##   animations  each Pokémon goes through its states and transitions looking for
 ##               T-poses, sinking and stuck animations (see test_animations.gd)
+##   mewtwo      headless: only Mewtwo's cases of mechanics
 ##   mechanics   headless: concrete cases from the acceptance criteria (dodging a
 ##               projectile, jumping the wave, punishing a recovery, combo limit,
 ##               hitstop)
@@ -136,16 +137,16 @@ func _ready() -> void:
 			_plan = [[1.5, "", ""], [1.7, "menu_accept", ""], [2.0, "move_right", ""], [2.2, "move_right", ""], [2.4, "move_down", ""],
 				[2.9, "menu_accept", ""]]
 		"menu_forms":
-			# Battle, 1 vs 1: down to Urshifu's cell (the last), the form by key and by its tab, picked;
+			# Battle, 1 vs 1: down to the last cell and left to Urshifu's, the form by key and by its tab, picked;
 			# the rival, then the Moves screen and back; a 3 vs 3's team with it on.
 			_plan = [[1.5, "menu_accept", ""], [2.0, "menu_accept", ""], [2.6, "menu_accept", ""], [3.2, "move_down", ""], [3.4, "move_down", ""],
-				[3.6, "move_down", ""], [4.2, "", "forms_single"], [4.4, "mov1", ""], [5.0, "", "forms_rapid"], [5.2, "click:form:110", ""],
+				[3.6, "move_down", ""], [3.8, "move_left", ""], [4.2, "", "forms_single"], [4.4, "mov1", ""], [5.0, "", "forms_rapid"], [5.2, "click:form:110", ""],
 				[5.8, "", "forms_tab"], [6.0, "mov1", ""], [6.4, "menu_accept", ""], [7.0, "", "forms_rival"], [7.2, "menu_accept", ""],
 				[7.8, "", "forms_setup"]]
 		"menu_forms_team":
 			# Battle, 3 vs 3: a pick, then Urshifu's cell picked and flipped on the team, in place.
 			_plan = [[1.5, "menu_accept", ""], [2.0, "menu_accept", ""], [2.4, "move_right", ""], [2.8, "menu_accept", ""], [3.4, "menu_accept", ""],
-				[3.8, "move_down", ""], [4.0, "move_down", ""], [4.2, "move_down", ""], [4.6, "menu_accept", ""], [5.2, "", "forms_team_single"],
+				[3.8, "move_down", ""], [4.0, "move_down", ""], [4.2, "move_down", ""], [4.4, "move_left", ""], [4.6, "menu_accept", ""], [5.2, "", "forms_team_single"],
 				[5.4, "mov1", ""], [6.0, "", "forms_team_rapid"]]
 		"menu_options":
 			# Options: from the main menu, then down a few rows.
@@ -160,6 +161,8 @@ func _ready() -> void:
 			_mechanics()
 		"urshifu":
 			_urshifu_test()
+		"mewtwo":
+			_mewtwo_test()
 		"loadouts":
 			_loadouts()
 		"abilities":
@@ -1182,7 +1185,7 @@ func _new_moves() -> void:
 	await _wait(0.8)
 	ab[1].ctrl.move_input = Vector2.ZERO
 	_ok("Thunderbolt: a dodge as the ring locks avoids it", ab[1].hp == hp, "%d/%d" % [ab[1].hp, hp])
-	# Outrage: after it, the user is confused and its movement is turned around.
+	# Outrage: after it, the user is confused: its attack buttons are shuffled, its movement is not.
 	main._args["moves"] = "outrage,dragonclaw,earthquake,stoneedge"
 	ab = await _setup("garchomp", "snorlax", Vector3(-3, 0, 0), Vector3(1, 0, 0))
 	main._args.erase("moves")
@@ -1192,9 +1195,9 @@ func _new_moves() -> void:
 	await _wait(0.1)
 	g.ctrl.release("mov1")
 	await _wait(2.6)
-	var turned: Vector3 = g._world_dir(Vector2(1, 0))
-	_ok("Outrage leaves it confused, its movement turned around", g.confused > 0.0 and turned.dot(straight) < -0.9,
-		"confused %.1f s, dot %.2f" % [g.confused, turned.dot(straight)])
+	var after: Vector3 = g._world_dir(Vector2(1, 0))
+	_ok("Outrage leaves it confused, its buttons shuffled and its movement as it was", g.confused > 0.0 and g.button_moves != Fighter.BUTTONS_STRAIGHT and after.dot(straight) > 0.9,
+		"confused %.1f s, buttons %s, dot %.2f" % [g.confused, g.button_moves, after.dot(straight)])
 	var fails := _results.filter(func(r): return not r[1]).size()
 	print("RESULT: %d of %d" % [_results.size() - fails, _results.size()])
 	get_tree().quit()
@@ -1691,6 +1694,16 @@ func _mechanics() -> void:
 	main.set_stage(stage_before)
 	await _goodra_cases()
 	await _urshifu_cases()
+	await _mewtwo_cases()
+	var fails := _results.filter(func(r): return not r[1]).size()
+	print("RESULT: %d of %d" % [_results.size() - fails, _results.size()])
+	get_tree().quit()
+
+
+## Only Mewtwo's cases (--test=mewtwo), without the rest of the mechanics.
+func _mewtwo_test() -> void:
+	await get_tree().physics_frame
+	await _mewtwo_cases()
 	var fails := _results.filter(func(r): return not r[1]).size()
 	print("RESULT: %d of %d" % [_results.size() - fails, _results.size()])
 	get_tree().quit()
@@ -2142,6 +2155,414 @@ func _urshifu_cases() -> void:
 	m.sel_phase = phase
 	m.cursor = cursor
 	m.form_pick = {}
+
+
+## Mewtwo: Pressure, its six new moves and what they need from the shared rules.
+func _mewtwo_cases() -> void:
+	await _mewtwo_pressure()
+	await _mewtwo_disable()
+	await _mewtwo_confusion()
+	await _mewtwo_teleport()
+	await _mewtwo_boosts()
+	await _mewtwo_ai()
+
+
+## Pressure: the rival's cooldowns tick 1.1 times slower, only while Mewtwo is on the field.
+func _mewtwo_pressure() -> void:
+	var ab: Array = await _setup("mewtwo", "pikachu", Vector3(-6, 0, 0), Vector3(0, 0, 0))
+	var a: Fighter = ab[0]
+	var b: Fighter = ab[1]
+	b.cds["quickattack"] = 4.0
+	a.cds["psychic"] = 4.0
+	var t0 := t
+	while b.cd("quickattack") > 0.0 and t - t0 < 6.0:
+		await get_tree().physics_frame
+	_ok("Pressure: a rival's 4 s cooldown takes 4.4 s", absf(t - t0 - 4.4) < 0.1, "%.2f s" % [t - t0])
+	b.cds["quickattack"] = 4.0
+	a.cds["psychic"] = 4.0
+	t0 = t
+	while a.cd("psychic") > 0.0 and t - t0 < 6.0:
+		await get_tree().physics_frame
+	_ok("Pressure: its own side's 4 s cooldown takes 4 s", absf(t - t0 - 4.0) < 0.1, "%.2f s" % [t - t0])
+	var left := b.cd("quickattack")
+	a._damage_direct(999999.0)
+	b.cds["quickattack"] = 2.0
+	await _wait(1.0)
+	_ok("Pressure: normal speed once Mewtwo is KO", absf(b.cd("quickattack") - 1.0) < 0.05, "%.2f left (%.2f before)" % [b.cd("quickattack"), left])
+	# 3 vs 3: it stops when Mewtwo goes back and resumes when it returns.
+	ab = await _team_battle("mewtwo", "mewtwo,pikachu,snorlax", "lucario", "lucario,gengar,goodra")
+	a = ab[0]
+	b = ab[1]
+	b.cds["meteormash"] = 9.0
+	await _wait(1.0)
+	var slowed: float = 9.0 - b.cd("meteormash")
+	await _team_switch(a.party, 0)
+	await _wait(0.8)
+	b.cds["meteormash"] = 9.0
+	await _wait(1.0)
+	var free: float = 9.0 - b.cd("meteormash")
+	_ok("Pressure 3 vs 3: slower while Mewtwo is out", absf(slowed - 1.0 / Fighter.PRESSURE) < 0.05, "%.2f" % slowed)
+	_ok("Pressure 3 vs 3: normal once it is switched out", absf(free - 1.0) < 0.05, "%.2f" % free)
+	# Past the return lockout, with a switch to spend.
+	var party: Party = a.party
+	party.lockout.clear()
+	party.charges = 2
+	await _team_switch(party, 0 if party.slot_member(0) == a else 1)
+	await _wait(0.8)
+	b.cds["meteormash"] = 9.0
+	await _wait(1.0)
+	var again: float = 9.0 - b.cd("meteormash")
+	_ok("Pressure 3 vs 3: slower again when it returns", party.active == a and absf(again - 1.0 / Fighter.PRESSURE) < 0.05, "%.2f, Mewtwo out: %s" % [again, party.active == a])
+	main.menu.choice.format = "1v1"
+	# A cooldown longer than the move's own (a Disable) draws no negative line.
+	_ok("HUD: more cooldown left than its own is not negative", Hud.cooldown_done(3.0, "quickattack") == 0.0 and Hud.cooldown_done(0.0, "quickattack") == 1.0)
+
+
+func _mewtwo_disable() -> void:
+	var loadout := "disable,psychic,shadowball,confusion"
+	var ab: Array = await _with_moves("mewtwo", loadout, "lucario", 2.0)
+	var a: Fighter = ab[0]
+	var b: Fighter = ab[1]
+	var m: Array = b.data.moves
+	b.cds[m[1]] = 1.0
+	b.cds[m[2]] = 6.0
+	_strike(a, b, "disable")
+	_ok("Disable: moves with no cooldown go to 3 s", b.cd(m[0]) == 3.0 and b.cd(m[3]) == 3.0, "%.2f, %.2f" % [b.cd(m[0]), b.cd(m[3])])
+	_ok("Disable: 1 s left stays 1 s and 6 s left stays 6 s", b.cd(m[1]) == 1.0 and b.cd(m[2]) == 6.0, "%.2f, %.2f" % [b.cd(m[1]), b.cd(m[2])])
+	_ok("Disable: no damage and no stun", b.hp == b.hp_max and b.state == "free", "HP %d/%d, %s" % [b.hp, b.hp_max, b.state])
+	for k in m:
+		b.cds[k] = 5.0
+	var res := _strike(a, b, "disable")
+	_ok("Disable: all four cooling, it changes nothing", res == "status" and m.all(func(k): return b.cd(k) == 5.0), "%s" % res)
+	for guard in ["protect", "detect"]:
+		b.reset(Vector3(0, 0, 0), -PI * 0.5)
+		a.reset(Vector3(-2, 0, 0), PI * 0.5)
+		b.start(guard, "mov1")
+		await _wait(0.1)
+		res = _strike(a, b, "disable")
+		_ok("Disable: %s stops it" % guard, res in ["protected", "detected"] and b.cd(m[0]) == 0.0, "%s" % res)
+	# A dodge avoids the real spark; the real spark lands otherwise, and flies straight.
+	b.reset(Vector3(0, 0, 0), -PI * 0.5)
+	a.reset(Vector3(-2.5, 0, 0), PI * 0.5)
+	a.ctrl.press("mov1")
+	await _wait(0.2)
+	a.ctrl.release("mov1")
+	b.ctrl.move_input = Vector2(1, 0)
+	b.ctrl.press("dodge")
+	await _wait(0.5)
+	b.ctrl.move_input = Vector2.ZERO
+	_ok("Disable: a dodge avoids it", b.cd(m[0]) == 0.0, "%.2f" % b.cd(m[0]))
+	# A move running when it lands finishes, then takes its full cooldown.
+	ab = await _with_moves("mewtwo", loadout, "lucario", 2.0)
+	a = ab[0]
+	b = ab[1]
+	b.start("meteormash", "mov2")
+	_strike(a, b, "disable")
+	var running: bool = b.action != null and b.action.id == "meteormash"
+	var t0 := t
+	while b.action and t - t0 < 3.0:
+		await get_tree().physics_frame
+	_ok("Disable: a move running goes on, then takes its full cooldown", running and b.cd("meteormash") > Moves.cooldown("meteormash") - 0.1, "%.2f of %.2f" % [b.cd("meteormash"), Moves.cooldown("meteormash")])
+	# Point-blank on Pikachu, whose head is below Mewtwo's eyes.
+	ab = await _with_moves("mewtwo", loadout, "pikachu", 1.0)
+	a = ab[0]
+	b = ab[1]
+	a.ctrl.press("mov1")
+	await _wait(0.1)
+	a.ctrl.release("mov1")
+	await _wait(0.5)
+	_ok("Disable: connects at point-blank on Pikachu", b.cd("thundershock") > 2.0, "%.2f" % b.cd("thundershock"))
+	# Sent back by a move with "deflects": 2, it disables Mewtwo.
+	ab = await _with_moves("mewtwo", loadout, "lucario", 3.0)
+	a = ab[0]
+	b = ab[1]
+	a.ctrl.press("mov1")
+	await _wait(0.1)
+	a.ctrl.release("mov1")
+	var shot := {}
+	t0 = t
+	while shot.is_empty() and t - t0 < 0.6:
+		await get_tree().physics_frame
+		for p in main.combat.projectiles:
+			if p.hit.move_id == "disable":
+				shot = p
+	main.combat.deflect(shot, b, 2)
+	await _wait(0.5)
+	_ok("Disable: sent back, it disables its user", a.cd("psychic") > 2.0 and b.cd("meteormash") == 0.0, "%.2f, %.2f" % [a.cd("psychic"), b.cd("meteormash")])
+	_ok("Disable: reaches Gengar's moves too", "disable" in Loadout.moves_for("gengar"))
+
+
+func _mewtwo_confusion() -> void:
+	var loadout := "confusion,psychic,shadowball,teleport"
+	var ab: Array = await _with_moves("mewtwo", loadout, "lucario", 2.0)
+	var a: Fighter = ab[0]
+	var b: Fighter = ab[1]
+	a.ctrl.press("mov1")
+	await _wait(0.1)
+	a.ctrl.release("mov1")
+	var t0 := t
+	while b.hp == b.hp_max and t - t0 < 1.0:
+		await get_tree().physics_frame
+	_ok("Confusion: a hit always confuses for 2.5 s", b.hp < b.hp_max and absf(b.confused - 2.5) < 0.1, "HP %d/%d, %.2f s" % [b.hp, b.hp_max, b.confused])
+	await _wait(0.5)
+	var left := b.confused
+	_strike(a, b, "confusion")
+	_ok("Confusion: a second hit does not refresh it", b.confused <= left, "%.2f, was %.2f" % [b.confused, left])
+	b.confused = 0.02
+	await _wait(0.1)
+	b.confuse(2.5)
+	_ok("Confusion: nothing right after it ends", b.confused == 0.0, "%.2f" % b.confused)
+	await _wait(2.8)
+	b.confuse(2.5)
+	_ok("Confusion: nothing for 3 s after it ends", b.confused == 0.0, "%.2f" % b.confused)
+	await _wait(0.3)
+	b.confuse(2.5)
+	_ok("Confusion: then it works again", b.confused == 2.5, "%.2f" % b.confused)
+	# Every attack button fires another of its moves, and nothing else changes.
+	ab = await _with_moves("mewtwo", loadout, "snorlax", 6.0)
+	a = ab[0]
+	var straight: Vector3 = a._world_dir(Vector2(1, 0))
+	a.confuse(2.5)
+	var order: Array = a.button_moves.duplicate()
+	var sorted_order := order.duplicate()
+	sorted_order.sort()
+	_ok("Confusion: all four moves stay, none on its own button", sorted_order == Fighter.BUTTONS_STRAIGHT and range(4).all(func(i): return order[i] != i), "%s" % [order])
+	_ok("Confusion: movement stays as it was", a._world_dir(Vector2(1, 0)).dot(straight) > 0.9)
+	_ok("Confusion: the order fits the byte sent online", Net.buttons_from(Net.buttons_code(order)) == order, "%s" % [order])
+	a.ctrl.press("mov1")
+	await _wait(0.05)
+	a.ctrl.release("mov1")
+	_ok("Confusion: a button fires the move shuffled onto it and still holds it", a.action != null and a.action.id == a.data.moves[order[0]] and a.action.button == "mov1",
+		"%s, wanted %s" % [a.action.id if a.action else "nothing", a.data.moves[order[0]]])
+	a.confused = 0.02
+	await _wait(0.1)
+	_ok("Confusion: the buttons go back when it ends", a.button_moves == Fighter.BUTTONS_STRAIGHT, "%s" % [a.button_moves])
+	ab = await _setup("mewtwo", "urshifu", Vector3(-2, 0, 0), Vector3(0, 0, 0))
+	a = ab[0]
+	b = ab[1]
+	_strike(a, b, "confusion")
+	_ok("Confusion: a Dark type takes a little and is not confused", b.confused == 0.0 and b.hp < b.hp_max, "%.2f, HP %d/%d" % [b.confused, b.hp, b.hp_max])
+	# It reaches further to the side than Disable: the same spot, off to one side.
+	for move in ["confusion", "disable"]:
+		ab = await _with_moves("mewtwo", move + ",psychic,shadowball,teleport", "pikachu", 2.0)
+		a = ab[0]
+		b = ab[1]
+		b.global_position = a.global_position + a.forward() * 1.5 + a.forward().cross(Vector3.UP) * 1.9
+		a.start(move, "mov1")
+		a.action.faces_rival = false
+		await _wait(0.6)
+		var reached: bool = b.hp < b.hp_max or b.cd("thundershock") > 0.0
+		_ok("%s, 1.9 m off to the side: %s" % [move, "it reaches" if move == "confusion" else "it misses"], reached == (move == "confusion"), "HP %d/%d" % [b.hp, b.hp_max])
+	# Psyshock: against Defense, not Sp. Def.
+	ab = await _setup("mewtwo", "goodra", Vector3(-8, 0, 0), Vector3(0, 0, 0))
+	a = ab[0]
+	b = ab[1]
+	var shock := _formula("psyshock", a, b)
+	var plain := _formula("psychic", a, b)
+	_ok("Psyshock: beats Psychic against high Sp. Def", shock > plain * 1.4, "%.1f vs %.1f" % [shock, plain])
+	b.stages.spd = 2
+	_ok("Psyshock: a Sp. Def boost changes nothing", absf(_formula("psyshock", a, b) - shock) < 0.01, "%.1f" % _formula("psyshock", a, b))
+	b.stages.spd = 0
+	b.stages.def = 2
+	_ok("Psyshock: a Defense boost does", _formula("psyshock", a, b) < shock * 0.6, "%.1f" % _formula("psyshock", a, b))
+	b.stages.def = 0
+	var target: Fighter = await _use("mewtwo", "psyshock,psychic,shadowball,teleport", "goodra", 8.0, 1.2)
+	var dealt: float = target.hp_max - target.hp
+	_ok("Psyshock: the shard lands for the whole formula", absf(dealt - shock) < shock * 0.15, "%.1f vs %.1f" % [dealt, shock])
+	# Shadow Ball's look: a clip named after the move, on Mewtwo alone.
+	_ok("Clips: Mewtwo has all six", ["shadowball", "confusion", "disable", "special", "physical", "status"].all(func(c): return main.fighters[0].model.has_anim(c)))
+	ab = await _setup("gengar", "pikachu", Vector3(-6, 0, 0), Vector3(0, 0, 0))
+	_ok("Clips: Gengar's Shadow Ball keeps its own", not ab[0].model.has_anim("shadowball"))
+
+
+## Presses Teleport (its fourth move) and waits until it is back on its feet.
+func _teleports(a: Fighter) -> void:
+	a.ctrl.press("mov4")
+	await get_tree().physics_frame
+	a.ctrl.release("mov4")
+	var t0 := t
+	while a.state == "free" and t - t0 < 0.3:
+		await get_tree().physics_frame
+	while a.state != "free" and t - t0 < 1.5:
+		await get_tree().physics_frame
+
+
+func _mewtwo_teleport() -> void:
+	var ab: Array = await _setup("mewtwo", "snorlax", Vector3(-4, 0, 6), Vector3(0, 0, 8))
+	var a: Fighter = ab[0]
+	var b: Fighter = ab[1]
+	a.locked = false
+	a.ctrl.yaw = 0.0                 # the stick's forward is -Z
+	var from: Vector3 = a.global_position
+	await _teleports(a)
+	var went: Vector3 = a.global_position - from
+	_ok("Teleport: never moved, it goes where it faces", absf(went.length() - 8.0) < 0.5 and went.normalized().dot(a.forward()) > 0.95, "%.2f m" % went.length())
+	a.cds.clear()
+	a.ctrl.move_input = Vector2(0, 1)
+	await _wait(0.25)
+	from = a.global_position
+	await _teleports(a)
+	a.ctrl.move_input = Vector2.ZERO
+	went = a.global_position - from
+	_ok("Teleport: 8 m along the last movement", absf(went.length() - 8.0) < 1.2 and went.normalized().dot(Vector3.FORWARD) > 0.95, "%s" % went.snapped(Vector3.ONE * 0.01))
+	a.cds.clear()
+	a.ctrl.move_input = Vector2(1, 0)
+	await _wait(0.2)
+	a.ctrl.move_input = Vector2.ZERO
+	await _wait(0.5)
+	from = a.global_position
+	await _teleports(a)
+	went = a.global_position - from
+	_ok("Teleport: the same with the stick released", absf(went.length() - 8.0) < 0.5 and went.normalized().dot(Vector3.RIGHT) > 0.95, "%s" % went.snapped(Vector3.ONE * 0.01))
+	_ok("Teleport: it keeps its height", absf(went.y) < 0.05, "%.2f" % went.y)
+	# A dodge counts as movement; being hit does not.
+	a.cds.clear()
+	a.ctrl.move_input = Vector2(-1, 0)
+	a.ctrl.press("dodge")
+	await _wait(0.05)
+	a.ctrl.move_input = Vector2.ZERO
+	await _wait(0.7)
+	_ok("Teleport: a dodge counts as movement", a.last_move.dot(Vector3.LEFT) > 0.95, "%s" % a.last_move)
+	# It cannot be hit while gone and the body is back when it ends, also if it is cut.
+	a.cds.clear()
+	a.ctrl.press("mov4")
+	await get_tree().physics_frame
+	a.ctrl.release("mov4")
+	var t0 := t
+	while not (a.action and a.action.phase == "active") and t - t0 < 0.3:
+		await get_tree().physics_frame
+	await _wait(0.04)
+	var res := _strike(b, a, "bodyslam")
+	_ok("Teleport: it cannot be hit while gone", res == "dodged" and a.hp == a.hp_max, "%s" % res)
+	_ok("Teleport: the body is gone", not a.model.visible)
+	await _wait(0.6)
+	_ok("Teleport: the body is back when it ends", a.model.visible)
+	a.cds.clear()
+	a.ctrl.press("mov4")
+	await get_tree().physics_frame
+	a.ctrl.release("mov4")
+	t0 = t
+	while not (a.action and a.action.phase == "active") and t - t0 < 0.3:
+		await get_tree().physics_frame
+	await _wait(0.04)
+	a.stun_target(0.2)
+	await _wait(0.05)
+	_ok("Teleport: the body is back if it is cut", a.model.visible and a.action == null)
+	await _wait(0.5)
+	# Confused it still goes the way it moved: only the attack buttons change.
+	ab = await _setup("mewtwo", "snorlax", Vector3(-4, 0, 0), Vector3(0, 0, 8))
+	a = ab[0]
+	a.locked = false
+	a.ctrl.yaw = 0.0
+	a.confused = 5.0
+	a.ctrl.move_input = Vector2(0, 1)
+	await _wait(0.2)
+	a.ctrl.move_input = Vector2.ZERO
+	from = a.global_position
+	await _teleports(a)
+	went = a.global_position - from
+	_ok("Teleport: confused, it still goes the way it moved", went.normalized().dot(Vector3.FORWARD) > 0.9, "%s" % went.snapped(Vector3.ONE * 0.01))
+	# Walls stop it short, and it can leave a stage's edge, which no other move does.
+	var stage_before: String = main.arena.stage
+	ab = await _setup("mewtwo", "snorlax", Vector3(0, 0, -Arena.WIDTH * 0.5 + 3.0), Vector3(0, 0, 8))
+	a = ab[0]
+	a.locked = false
+	a.ctrl.yaw = 0.0
+	a.last_move = Vector3.FORWARD
+	from = a.global_position
+	await _teleports(a)
+	_ok("Teleport: a wall stops it short", from.distance_to(a.global_position) < 6.0, "%.2f m, z %.2f" % [from.distance_to(a.global_position), a.global_position.z])
+	main.set_stage("floating")
+	ab = await _setup("mewtwo", "snorlax", Vector3(0, 0, FloatingStadium.PLAT_Z - 3.0), Vector3(0, 0, 0))
+	a = ab[0]
+	a.locked = false
+	a.last_move = Vector3.BACK
+	from = a.global_position
+	await _teleports(a)
+	_ok("Teleport: it can leave a stage's edge", from.distance_to(a.global_position) > 6.5 and not main.arena.inside(a.global_position), "%s to %s" % [from.snapped(Vector3.ONE * 0.01), a.global_position.snapped(Vector3.ONE * 0.01)])
+	main.set_stage(stage_before)
+	# Its only way to have it is being one of its four defaults.
+	_ok("Teleport: offered to Mewtwo", "teleport" in Loadout.moves_for("mewtwo"))
+	var others := Roster.POKEMON.keys().filter(func(sp): return sp != "mewtwo" and "teleport" in Loadout.moves_for(sp))
+	_ok("Teleport: offered to nobody else", others.is_empty(), "%s" % [others])
+
+
+## Calm Mind and Agility, on the script they share with Bulk Up (whose cases are Urshifu's).
+func _mewtwo_boosts() -> void:
+	var ab: Array = await _with_moves("mewtwo", "calmmind,agility,psychic,teleport", "snorlax", 8.0)
+	var a: Fighter = ab[0]
+	var b: Fighter = ab[1]
+	a.start("calmmind", "mov1")
+	await _wait(0.4)
+	_strike(b, a, "bodyslam")
+	_ok("Calm Mind: a hit during it gives nothing", a.stages.spa == 0 and a.stages.spd == 0, "Sp. Atk %+d" % a.stages.spa)
+	await _wait(1.5)
+	a.cds.clear()
+	a.uses.clear()
+	a.energy = 100.0
+	a.ctrl.press("mov1")
+	await _wait(0.05)
+	a.ctrl.release("mov1")
+	await _wait(1.3)
+	_ok("Calm Mind: +1 Sp. Atk and +1 Sp. Def", a.stages.spa == 1 and a.stages.spd == 1, "%+d, %+d" % [a.stages.spa, a.stages.spd])
+	a.cds.clear()
+	a.energy = 100.0
+	a.ctrl.press("mov1")
+	await _wait(0.05)
+	a.ctrl.release("mov1")
+	await _wait(1.3)
+	a.cds.clear()
+	a.energy = 100.0
+	_ok("Calm Mind: a 3rd use is refused", not a.ready("calmmind") and a.stages.spa == 2, "uses left %d, %+d" % [a.uses.get("calmmind", -1), a.stages.spa])
+	a.ctrl.press("mov2")
+	await _wait(0.05)
+	a.ctrl.release("mov2")
+	await _wait(0.7)
+	a.cds.clear()
+	a.energy = 100.0
+	_ok("Agility: +2 Speed, 13.6 m/s", a.stages.spe == 2 and absf(a.data.speed * a.speed_stage() - 13.6) < 0.1, "%+d, %.1f m/s" % [a.stages.spe, a.data.speed * a.speed_stage()])
+	_ok("Agility: a 2nd use is refused", not a.ready("agility"), "uses left %d" % a.uses.get("agility", -1))
+	for sp in ["pikachu", "scizor", "lucario"]:
+		_ok("Agility: reaches %s" % sp, "agility" in Loadout.moves_for(sp))
+	_ok("Calm Mind: reaches Lucario", "calmmind" in Loadout.moves_for("lucario"))
+
+
+func _mewtwo_ai() -> void:
+	var ab: Array = await _setup("pikachu", "mewtwo", Vector3(-6, 0, 0), Vector3(0, 0, 0))
+	var a: Fighter = ab[0]
+	var b: Fighter = ab[1]
+	var ai: AI = main.ai
+	_ok("AI: Disable while the rival has moves to lose", ai._only_if(Moves.DATA.disable.ai, {}))
+	# "hold" means a held move (Action, AI._use): a number there would make the AI fail on it.
+	_ok("Data: \"hold\" is only ever true", Moves.DATA.values().all(func(d): return d.get("hold", false) is bool))
+	for k in a.data.moves.slice(0, 3):
+		a.cds[k] = 5.0
+	_ok("AI: no Disable with only one left to lose", not ai._only_if(Moves.DATA.disable.ai, {}))
+	a.cds.clear()
+	# It teleports the way out it chose, not the way it last walked.
+	var used := false
+	for i in 80:
+		b.last_move = Vector3.BACK
+		ai._dodge_toward(Vector3.LEFT, "thunderbolt")
+		used = b.ctrl.pressed.has("mov4")
+		if used:
+			break
+		b.ctrl.clear()
+	_ok("AI: Teleport goes the way out", used and b.last_move.dot(Vector3.LEFT) > 0.99, "%s" % b.last_move)
+	await _wait(0.6)
+	# Where a dodge stays on a floating stage and Teleport, going further, would not: it dodges.
+	var stage_before: String = main.arena.stage
+	main.set_stage("floating")
+	ab = await _setup("pikachu", "mewtwo", Vector3(-6, 0, 0), Vector3(FloatingStadium.PLAT_X - 8.0, 0, 0))
+	b = ab[1]
+	ai = main.ai
+	used = false
+	for i in 80:
+		ai._dodge_toward(Vector3.RIGHT, "thunderbolt")
+		used = used or b.ctrl.pressed.has("mov4")
+		b.ctrl.clear()
+	_ok("AI: no Teleport off the edge", not used)
+	main.set_stage(stage_before)
 
 
 # ---------------------------------------------------------------- trainers

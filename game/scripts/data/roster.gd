@@ -179,6 +179,18 @@ const POKEMON := {
 		"passive": {"id": "unseenfist", "display_name": "Unseen Fist",
 			"text": "Its contact moves go through Protect and Detect."},
 	},
+	"mewtwo": {
+		"display_name": "Mewtwo", "types": ["psychic"], "cat": "special",
+		"style": "Overwhelming psychic power at any range. It takes away the rival's moves and its footing, and is gone before the answer comes.",
+		"height": 2.0, "radius": 0.6, "poise": 0, "hp": 1180.0, "knockback": 0.85,
+		"speed": 8.8, "accel": 62.0, "turn": 15.0, "jump": 9.6, "gravity": 26.0, "air_control": 0.8,
+		"dodge": {"dist": 6.2, "dur": 0.22, "iframes": [0.03, 0.19], "recovery": 0.16, "charges": 3, "recharge": 0.9},
+		"points": {"locator_cannon_left": "locator_hand_secondary", "locator_cannon_right": "locator_hand_primary"},
+		# Teleport is a legacy move: being a default is what makes it available (Loadout.moves_for).
+		"moves": ["psychic", "shadowball", "confusion", "teleport"],
+		"passive": {"id": "pressure", "display_name": "Pressure",
+			"text": "While it is in play, the rival's moves take 10% longer to come back."},
+	},
 }
 
 ## Soft type matchups: a disadvantage matters, but it does not decide the battle on its own.

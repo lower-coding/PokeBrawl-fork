@@ -29,6 +29,9 @@ const COMBO_MAX := 5
 const DODGE_DELAY := 1.1        # s from the start of a dodge until charges start refilling again
 const RECOIL := 0.85               # speed when backing away from the locked-on rival
 const LOWERED_T := 3.0              # one turn: how long Lash Out stays doubled
+const CONFUSE_LOCK := 3.0           # how long after confusion it cannot be confused again
+const BUTTONS_STRAIGHT := [0, 1, 2, 3]
+const PRESSURE := 1.1               # how much longer the rival's cooldowns take (Pressure)
 
 var main: Node
 var species := "pikachu"
@@ -61,10 +64,14 @@ var action: Action = null
 var locked := true
 var face_yaw := 0.0                  # where it faces (the +Z of its frame)
 var slow := 1.0                     # Ice, Static...
-## Confused (Outrage's rage wearing off, and moves to come): seconds left with its movement
-## turned around, as with an inverted stick: left goes right, forward goes back. It sits
-## alongside a status (burned and confused at once is possible). Stars circle its head.
+## Confused (Outrage's rage wearing off, Confusion, Water Pulse): seconds left with its attack
+## buttons shuffled (button_moves). It sits alongside a status (burned and confused at once is
+## possible). Stars circle its head.
 var confused := 0.0
+var _confuse_lock := 0.0
+## Which move (index in data.moves) each attack button fires. Online it comes with the rival's
+## presses (Net), so its copy reads them the same way.
+var button_moves: Array = BUTTONS_STRAIGHT
 var _locked_decoy := false            # locked on a decoy (when it goes, the lock goes)
 var ai_driven := false                # its moves come from the AI (it never unlocks)
 var _confuse_fx := 0.0
@@ -115,6 +122,7 @@ var _stunned := 0.0
 var _combo := 0
 var _combo_clear := 0.0
 var _dodge_dir := Vector3.ZERO
+var last_move := Vector3.ZERO       # the way it last moved, flat (Teleport)
 var _last_dodge := -10.0
 var _dodge_fatigue := false
 var _dodge_reach := 1.0              # slowness (streams, ice) shortens the dodge
@@ -350,17 +358,29 @@ func has_status() -> bool:
 	return status != ""
 
 
+## Confusion for "secs" seconds, said over its head. It does not refresh while confused, and
+## for CONFUSE_LOCK seconds after it wears off nothing confuses it: a move that always confuses
+## cannot keep a rival that way. The owner tells the attacker's copy (net "confused").
+func confuse(secs: float) -> void:
+	if state == "ko" or confused > 0.0 or _confuse_lock > 0.0:
+		return
+	main.vfx.text(center() + Vector3.UP * 1.0, tr("Confused!"), Color(0.85, 0.7, 1.0))
+	confused = secs
+	button_moves = _shuffled_buttons()
+	if not is_remote and main.net and main.net.linked:
+		main.net.send_event({"t": "confused", "secs": secs, "sp": species})
+
+
+## A random order in which no button keeps its move.
+static func _shuffled_buttons() -> Array:
+	var order := BUTTONS_STRAIGHT.duplicate()
+	while range(order.size()).any(func(i): return order[i] == i):
+		order.shuffle()
+	return order
+
+
 ## Gives it a major status condition if it can get it (types, ability, none already), as
 ## in the games. Online, on the rival's copy, it is sent to the rival, who decides.
-## Confusion for "secs" seconds (longer wins), said over its head.
-func confuse(secs: float) -> void:
-	if state == "ko":
-		return
-	if confused <= 0.0:
-		main.vfx.text(center() + Vector3.UP * 1.0, tr("Confused!"), Color(0.85, 0.7, 1.0))
-	confused = maxf(confused, secs)
-
-
 func inflict(kind: String) -> bool:
 	if state == "ko" or status != "" or status_lock > 0.0 or not Status.can_get(kind, types, data.passive.id):
 		return false
@@ -666,6 +686,8 @@ func _physics_process(delta: float) -> void:
 func _edge_stop(before: Vector3) -> void:
 	if main.arena.void_y == -INF or is_remote or state not in ["action", "dive"]:
 		return
+	if action and action.d.get("off_edge", false):
+		return
 	var p := global_position
 	if main.arena.inside(p, 0.2):
 		return
@@ -683,13 +705,16 @@ func _edge_stop(before: Vector3) -> void:
 ## A status move that touched it (Toxic, Will-O-Wisp, the powders...): no damage or stun,
 ## only its status, if it can get it. As in the games, the type chart stops some ("respects_
 ## types": Thunder Wave does nothing to Ground types) and Grass types and Overcoat ignore
-## powders.
+## powders. Disable ("disables") has no status: it puts the target's moves on cooldown.
 func _status_move(md: Dictionary, info: Dictionary) -> String:
 	var kind: String = md.get("inflicts", "")
 	# Why it fails, as the games tell it: the type (or the ability), a status it already
 	# has, or the few seconds after one wears off.
 	var why := ""
-	if (md.get("respects_types", false) and Roster.immune(info.hit.type, types)) \
+	if md.has("disables"):
+		if not _disable_all(float(md.disables)):
+			why = tr("No effect")
+	elif (md.get("respects_types", false) and Roster.immune(info.hit.type, types)) \
 			or (md.get("powder", false) and ("grass" in types or data.passive.id == "overcoat")) \
 			or not Status.can_get("slp" if kind == "drowsy" else kind, types, data.passive.id):
 		why = tr("No effect")
@@ -710,6 +735,25 @@ func _status_move(md: Dictionary, info: Dictionary) -> String:
 		main.vfx.cobble(piece, center(), at.center() if at else null, data.height)
 	main.audio.play_sound(info.hit.move_id + "_hit", center(), -3.0)
 	return "status"
+
+
+## Disable: every move with no cooldown running waits "secs"; the others keep what they have
+## left. False if there was nothing to disable. The owner tells the attacker's copy.
+func _disable_all(secs: float) -> bool:
+	var any := false
+	for m in data.moves:
+		if cd(m) <= 0.0:
+			cds[m] = secs
+			any = true
+	if any:
+		said_disabled()
+		if not is_remote and main.net and main.net.linked:
+			main.net.send_event({"t": "disabled", "sp": species})
+	return any
+
+
+func said_disabled() -> void:
+	main.vfx.text(center() + Vector3.UP * 0.9, tr("Disabled!"), Color(0.75, 0.6, 1.0))
 
 
 func _secondary(md: Dictionary, info: Dictionary, at: Fighter) -> void:
@@ -745,13 +789,23 @@ func _start_cooldown(move: String) -> void:
 		cds[move] = maxf(cds.get(move, 0.0), c)
 
 
+## The rival on the field has Pressure: its cooldowns tick slower, whichever set them.
+func _pressured() -> bool:
+	return rival != null and is_instance_valid(rival) and rival.data.passive.id == "pressure" and rival.state not in ["ko", "recall"]
+
+
 func _timers(delta: float) -> void:
+	var cd_step := delta / PRESSURE if _pressured() else delta
 	for k in cds.keys():
-		cds[k] = maxf(0.0, cds[k] - delta)
+		cds[k] = maxf(0.0, cds[k] - cd_step)
 	invulnerable = maxf(0.0, invulnerable - delta)
 	static_mark = maxf(0.0, static_mark - delta)
+	_confuse_lock = maxf(0.0, _confuse_lock - delta)
 	if confused > 0.0:
 		confused = maxf(0.0, confused - delta)
+		if confused <= 0.0:
+			_confuse_lock = CONFUSE_LOCK
+			button_moves = BUTTONS_STRAIGHT
 		_confuse_fx -= delta
 		if _confuse_fx <= 0.0:
 			_confuse_fx = 0.2
@@ -851,8 +905,6 @@ func _consume(a: String) -> void:
 # ---------------------------------------------------------------- movement
 
 func _world_dir(v: Vector2) -> Vector3:
-	if confused > 0.0:
-		v = -v
 	var yaw := ctrl.yaw
 	var right := Vector3(cos(yaw), 0, -sin(yaw))
 	var fwd := Vector3(-sin(yaw), 0, -cos(yaw))
@@ -861,6 +913,9 @@ func _world_dir(v: Vector2) -> Vector3:
 
 
 func _move_free(delta: float, on_ground: bool, mult := 1.0) -> void:
+	var to := _world_dir(ctrl.move_input)
+	if to.length() > 0.3:
+		last_move = to.normalized()
 	var extra := (1.35 if translucent > 0.0 else 1.0) * speed_stage() * (0.5 if status == "par" else 1.0)
 	var wants: Vector3 = _world_dir(ctrl.move_input) * data.speed * slow * mult * extra
 	# Backing away (moving away from the locked-on rival) is 15% slower.
@@ -1020,7 +1075,7 @@ func _try_actions(on_ground: bool) -> void:
 	for i in 4:
 		var b := "mov%d" % (i + 1)
 		if _wants(b):
-			var move: String = data.moves[i]
+			var move: String = data.moves[button_moves[i]]
 			if ready(move) and not on_ground and Moves.DATA[move].get("needs_ground", false):
 				_consume(b)
 				_start_dive(move, b)
@@ -1121,7 +1176,7 @@ func _step_action(delta: float, on_ground: bool) -> void:
 			return
 		for i in 4:
 			var b := "mov%d" % (i + 1)
-			var move: String = data.moves[i]
+			var move: String = data.moves[button_moves[i]]
 			if _wants(b) and move != action.id and action.cancels_into(move) and ready(move):
 				_consume(b)
 				_start_cooldown(action.id)
@@ -1149,6 +1204,7 @@ func _start_dodge() -> void:
 	if d.length() < 0.3:
 		d = -forward()
 	_dodge_dir = d.normalized()
+	last_move = _dodge_dir
 	# Repeating it back to back is tiring: recovery gets longer and can be punished.
 	_dodge_fatigue = _time - _last_dodge < 0.75
 	# Slowed (inside a stream, chilled, charged): the dodge covers less ground, in the
@@ -1557,6 +1613,9 @@ func leave_field() -> void:
 		_switch_state("free")
 	clear_stages()
 	confused = 0.0
+	_confuse_lock = 0.0
+	button_moves = BUTTONS_STRAIGHT
+	last_move = Vector3.ZERO
 	drowsy = 0.0
 	slow = 1.0
 	_slow_t = 0.0
@@ -1629,6 +1688,9 @@ func reset(pos: Vector3, yaw: float) -> void:
 	uses.clear()
 	slow = 1.0
 	confused = 0.0
+	_confuse_lock = 0.0
+	button_moves = BUTTONS_STRAIGHT
+	last_move = Vector3.ZERO
 	burned = 0.0
 	poisoned = 0.0
 	steadfast_t = 0.0
@@ -1799,7 +1861,7 @@ func _process(delta: float) -> void:
 		tint_col += Vector3(0.4, 0.05, 0.02)
 	tint_col += Vector3.ONE * appear_glow * 1.4
 	model.set_param("tint", tint_col)
-	model.visible = appear > 0.01
+	model.visible = appear > 0.01 and not (action and action.hides_body)
 	model.scale = Vector3.ONE * _scale * clampf(appear, 0.05, 1.0)
 
 
