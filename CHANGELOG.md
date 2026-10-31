@@ -3,7 +3,7 @@
 All notable changes to this project are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
-## [Unreleased]
+## [demo-urshifu] - 2026-10-31
 
 ### Added
 - A crosshair option (Options > Game, off by default): when nothing is locked on, it marks the
