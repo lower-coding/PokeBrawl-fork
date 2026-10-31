@@ -1,59 +1,51 @@
 class_name Party
 extends Node
-## One side's team in a 3 vs 3 battle (--team): its Pokémon, who is out, and the rules of
-## switching. One Pokémon per side fights at a time; main.fighters only ever holds the two out
-## there, so everything else in the game sees a 1 vs 1 as usual.
+## One side's team in a 3 vs 3 battle: its Pokémon, who is out, and the rules of switching.
+## One Pokémon per side fights at a time; main.fighters only ever holds the two out there, so
+## everything else in the game sees a 1 vs 1 as usual. The numbers are this battle's
+## (BattleRules, "rules"); what follows names them.
 ##
 ## A switch is a committed move, paid from a scarce resource, that refreshes nothing:
-##   - It costs a charge (START_CHARGES, up to MAX_CHARGES, one more every RECHARGE seconds;
-##     each hit landed takes HIT_BONUS seconds off the wait). The charge is spent on starting,
+##   - It costs a charge (start_charges, up to max_charges, one more every recharge seconds;
+##     each hit landed takes hit_bonus seconds off the wait). The charge is spent on starting,
 ##     so a switch that gets cut short still costs it.
-##   - The Pokémon stands there for RECALL seconds and the ball's flight (FLIGHT, longer the
-##     further it is from its trainer), and can be hit all along: a hit that beats its poise
-##     cuts the switch. At that length it cannot answer a move it sees coming: nearly every
-##     move's startup is shorter. It has to be a read.
-##   - The one coming in lands where the other stood, LANDING seconds without acting and with
-##     no invulnerability. The one that left cannot come back for LOCKOUT seconds.
-##   - On the bench a Fighter does not run at all (Fighter.bench), so its HP, cooldowns and
-##     status stay as they were. The energy goes with the team (Fighter.take_field). What it
-##     does lose on leaving is its stat stages, confusion and decoys (Fighter.leave_field).
+##   - The Pokémon stands there for recall seconds and the ball's flight (ball_near to ball_far,
+##     longer the further it is from its trainer), and can be hit all along: a hit that beats
+##     its poise cuts the switch. By default that is longer than nearly every move's startup, so
+##     it cannot answer a move it sees coming: it has to be a read.
+##   - The one coming in lands where the other stood, landing seconds without acting and with
+##     no invulnerability. The one that left cannot come back for lockout seconds.
+##   - On the bench a Fighter does not run at all (Fighter.bench), so its cooldowns and status
+##     stay as they were, and so does its HP unless bench_heal gives some back. The energy goes
+##     with the team (Fighter.take_field). What it does lose on leaving is its stat stages,
+##     confusion and decoys (Fighter.leave_field).
 ##
-## After a KO the next one is free: its trainer picks within KO_CHOICE seconds (the healthiest
-## by default), it lands on its side of the field with KO_INVULN seconds of invulnerability
-## and the team gets KO_ENERGY energy. The stat stages of the Pokémon that made the KO go too,
-## so a single boosted Pokémon does not sweep all three.
+## After a KO the next one is free: its trainer picks within ko_choice seconds (the healthiest
+## by default), it lands on its side of the field with ko_invuln seconds of invulnerability and
+## the team gets ko_energy energy. The stat stages of the Pokémon that made the KO go too, so a
+## single boosted Pokémon does not sweep all three.
 ##
 ## Offline only: Net keeps one Pokémon per player.
 
 const SIZE := 3
-const START_CHARGES := 1
-const MAX_CHARGES := 2
-const RECHARGE := 25.0
-const HIT_BONUS := 1.0
-const LOCKOUT := 10.0
-const RECALL := 0.5
-const FLIGHT := Vector2(0.3, 0.6)        # seconds of the ball's flight, near and far
-const FLIGHT_DIST := Vector2(6.0, 24.0)  # meters from the trainer that give them
-const LANDING := 0.2
-const KO_CHOICE := 3.0
+const FLIGHT_DIST := Vector2(6.0, 24.0)  # meters from the trainer for ball_near and ball_far
 const KO_MIN := 1.0                      # the faint plays out at least this long
 const KO_FLIGHT := 0.6
-const KO_INVULN := 1.0
-const KO_ENERGY := 30.0
 const AI_PICK := 1.2                     # how long the AI thinks over its next Pokémon
 
 var main: Node
 var side := 0                            # its index in main.fighters
 var members: Array = []                  # in the order they were picked; the first one leads
 var active: Fighter
-var charges := START_CHARGES
+var rules := {}                          # this battle's (BattleRules)
+var charges := 0
 var switches := 0                        # switches started this battle (tests)
 var cut := 0                             # of those, how many a hit cut short
 var pending: Fighter = null              # who a switch in progress is bringing in
 var lockout := {}                        # Fighter -> seconds until it can come back
 var replacing := false                   # its Pokémon fainted and the next one is on its way
 var replace_t := 0.0                     # seconds left to pick it
-var _recharge := RECHARGE
+var _recharge := 0.0
 var _recall_total := 0.0
 var _threw := false
 var _ball_out := false
@@ -62,18 +54,29 @@ var _faint_t := 0.0
 var _flight_t := 0.0
 
 
-func setup(m: Node, s: int, list: Array) -> void:
+func setup(m: Node, s: int, list: Array, battle_rules: Dictionary) -> void:
 	main = m
 	side = s
 	members = list
 	active = list[0]
+	rules = battle_rules
+	_full_charges()
 	for f in list:
 		f.party = self
 		if f != active:
 			f.bench()
 
 
+func _full_charges() -> void:
+	charges = mini(int(rules.start_charges), max_charges())
+	_recharge = rules.recharge
+
+
 # ---------------------------------------------------------------- what the others ask
+
+func max_charges() -> int:
+	return int(rules.max_charges)
+
 
 ## The Pokémon on bench slot "slot" (0 or 1): the other members, in their order.
 func slot_member(slot: int) -> Fighter:
@@ -96,7 +99,12 @@ func locked_for(f: Fighter) -> float:
 
 ## How far along the next charge is (0 to 1).
 func recharge_share() -> float:
-	return 1.0 if charges >= MAX_CHARGES else clampf(1.0 - _recharge / RECHARGE, 0.0, 1.0)
+	return 1.0 if charges >= max_charges() else clampf(1.0 - _recharge / float(rules.recharge), 0.0, 1.0)
+
+
+## How far along the switch in progress is (0 to 1).
+func recall_share() -> float:
+	return clampf(active._state_t / maxf(_recall_total, 0.01), 0.0, 1.0) if pending else 0.0
 
 
 func can_switch(slot: int) -> bool:
@@ -109,8 +117,8 @@ func can_switch(slot: int) -> bool:
 
 ## A hit of this side's landed.
 func on_landed_hit() -> void:
-	if charges < MAX_CHARGES:
-		_recharge -= HIT_BONUS
+	if charges < max_charges():
+		_recharge -= float(rules.hit_bonus)
 
 
 # ---------------------------------------------------------------- switching
@@ -123,7 +131,7 @@ func begin_recall(slot: int) -> void:
 	_ball_out = false
 	var t: Trainer = main.trainers[side]
 	var far: float = t.hand().distance_to(active.global_position)
-	_recall_total = RECALL + remap(clampf(far, FLIGHT_DIST.x, FLIGHT_DIST.y), FLIGHT_DIST.x, FLIGHT_DIST.y, FLIGHT.x, FLIGHT.y)
+	_recall_total = float(rules.recall) + remap(clampf(far, FLIGHT_DIST.x, FLIGHT_DIST.y), FLIGHT_DIST.x, FLIGHT_DIST.y, rules.ball_near, rules.ball_far)
 	active.start_recall()
 	main.hud.log_entry(tr("%s, come back!") % tr(active.data.display_name))
 	main.session.event("switch", {"team": side, "from": active.species, "to": pending.species, "charges": charges,
@@ -133,19 +141,20 @@ func begin_recall(slot: int) -> void:
 ## One step of the recall; true once it is over and "active" is someone else. It glows more
 ## and more, for the rival to see it coming.
 func step_recall(t: float) -> bool:
-	active.appear_glow = clampf(t / _recall_total, 0.0, 1.0) * 0.5
-	if not _threw and t >= RECALL - 0.25:
+	active.appear_glow = clampf(t / maxf(_recall_total, 0.01), 0.0, 1.0) * 0.5
+	if not _threw and t >= float(rules.recall) - 0.25:
 		_threw = true
 		main.trainers[side].throw()
-	if not _ball_out and t >= RECALL:
+	if not _ball_out and t >= float(rules.recall):
 		_ball_out = true
-		main.switch_ball(side, active.global_position + Vector3.UP * 0.7, _recall_total - RECALL)
+		main.switch_ball(side, active.global_position + Vector3.UP * 0.7, _recall_total - float(rules.recall))
 	if t < _recall_total:
 		return false
 	var out := active
 	var incoming := pending
 	pending = null
-	lockout[out] = LOCKOUT
+	if float(rules.lockout) > 0.0:
+		lockout[out] = rules.lockout
 	_swap(incoming, _entry_spot(out.global_position), out.face_yaw)
 	incoming.enter_field()
 	return true
@@ -186,7 +195,7 @@ func on_fainted(who: Fighter) -> void:
 		return
 	pending = null
 	replacing = true
-	replace_t = KO_CHOICE
+	replace_t = rules.ko_choice
 	_chosen = null
 	_faint_t = 0.0
 	_flight_t = 0.0
@@ -239,8 +248,8 @@ func _send_replacement() -> void:
 	var spot := _entry_spot(fainted.start_pos)
 	var to_foe: Vector3 = foe.global_position - spot
 	_swap(incoming, spot, atan2(to_foe.x, to_foe.z))
-	incoming.energy = minf(Fighter.ENERGY_MAX, incoming.energy + KO_ENERGY)
-	incoming.invulnerable = KO_INVULN
+	incoming.energy = minf(Fighter.ENERGY_MAX, incoming.energy + float(rules.ko_energy))
+	incoming.invulnerable = rules.ko_invuln
 	incoming.enter_field()
 	foe.clear_stages()
 	main.session.event("replacement", {"team": side, "to": incoming.species, "left": alive_count()})
@@ -284,11 +293,15 @@ func _physics_process(delta: float) -> void:
 		lockout[f] -= delta
 		if lockout[f] <= 0.0:
 			lockout.erase(f)
-	if charges < MAX_CHARGES:
+	if charges < max_charges():
 		_recharge -= delta
 		if _recharge <= 0.0:
 			charges += 1
-			_recharge += RECHARGE
+			_recharge += float(rules.recharge)
+	if float(rules.bench_heal) > 0.0:
+		for f in members:
+			if f != active and f.state != "ko":
+				f.heal(f.hp_max * float(rules.bench_heal) / 100.0 * delta)
 	if replacing:
 		_step_replacement(delta)
 
@@ -309,8 +322,7 @@ func restart() -> void:
 		if f != lead:
 			f.reset(f.start_pos, f.start_yaw)
 			f.bench()
-	charges = START_CHARGES
-	_recharge = RECHARGE
+	_full_charges()
 	lockout.clear()
 	switches = 0
 	cut = 0

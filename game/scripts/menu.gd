@@ -8,9 +8,11 @@ extends Node
 ##   waiting     host waiting: its IPs and whether the router opened the port
 ##   join        type the IP (keyboard, or digit by digit with the gamepad)
 ##   connecting  trying to join someone else's game
-##   selection   Pokémon grid on top, each side's pick below with its moves, and the
-##               battle's options (stage, difficulty, edit moves, fight). Online: each
+##   format      Battle and Training: 1 vs 1 or 3 vs 3, before anyone picks
+##   selection   Pokémon grid on top, each side's picks below with their moves, and the
+##               battle's options (stage, difficulty, rules, edit moves, fight). Online: each
 ##               picks their own and the host picks the stage
+##   rules       a 3 vs 3's rules for this battle (BattleRules), from the selection
 ##   moves       each Pokémon's four moves and ability, its stats sheet and each move's
 ##               details (also opened from the selection, for last-minute changes)
 ##   options     controls, sound, screen and language (Options)
@@ -36,6 +38,9 @@ const MAIN_MENU := [["combat", "Battle", "Against the AI. Pick your Pokémon, th
 const ONLINE := [["create", "Host game", "Your friend joins with your IP. Port 7777 (UDP)."],
 	["join", "Join", "Type the IP of whoever hosted the game."],
 	["back", "Back", ""]]
+const FORMATS := [["1v1", "1 vs 1", "One Pokémon each."],
+	["3v3", "3 vs 3", "Three Pokémon a side, one on the field at a time. Switch between them."],
+	["back", "Back", ""]]
 const IP_CHARS := "0123456789."
 ## The profile's name: up to NAME_MAX of these (with the pad, each letter goes round them).
 const NAME_MAX := 12
@@ -55,7 +60,14 @@ var main: Node
 var is_open := false
 var screen := "title"
 var cursor := 0
-var choice := {"p1": "pikachu", "p2": "snorlax", "diff": "normal", "mode": "combat", "stage": "night"}
+## The next battle. "format": 1v1 or 3v3; "team", "team2": each side's picks in a 3 vs 3, the
+## first one leads (it is "p1" or "p2" too); "rules": BattleRules. Not saved: it lasts until the
+## game closes.
+var choice := {"p1": "pikachu", "p2": "snorlax", "diff": "normal", "mode": "combat", "stage": "night",
+	"format": "1v1", "team": [], "team2": [], "rules": BattleRules.defaults()}
+var team_preview := ""           # a 3 vs 3's pick: who the cursor is on, shown in the next slot
+var rules_cursor := 1            # the Rules screen: highlighted row (0 is a heading)
+var rules_top := 0               # first row shown (it scrolls)
 var online := false
 var sel_phase := "p1"             # p1, p2 (the rival against the AI), setup (options and start)
 var setup_cursor := 0
@@ -159,6 +171,14 @@ func _go(p: String) -> void:
 			if rival_choice_id != "":
 				choice.p2 = rival_choice_id
 			_send_choice()
+		elif team_battle():
+			# Back from a battle both teams are still picked: straight to its options.
+			if choice.team.size() == Party.SIZE and choice.team2.size() == Party.SIZE:
+				_to_setup()
+			team_preview = pokemon_list()[cursor]
+	elif p == "format":
+		cursor = maxi(FORMATS.map(func(f): return f[0]).find(choice.format), 0)
+		_free_renders()
 	elif p == "profile":
 		name_edit = false
 		profile_cursor = TrainerData.ids().find(main.options.trainer)
@@ -245,7 +265,7 @@ func _menu_frame(delta: float) -> void:
 						online = false
 						choice.mode = MAIN_MENU[cursor][0]
 						main.mode = choice.mode
-						_go("selection")
+						_go("format")
 					"online":
 						message = ""
 						_go("online")
@@ -261,6 +281,20 @@ func _menu_frame(delta: float) -> void:
 			elif _pressed("menu_back"):
 				_sound("back")
 				_go("title")
+		"format":
+			_move_nav(ONLINE_NAV)
+			if _accept():
+				_sound("ok")
+				if FORMATS[cursor][0] == "back":
+					_go("main")
+				else:
+					choice.format = FORMATS[cursor][0]
+					choice.team = []
+					choice.team2 = []
+					_go("selection")
+			elif _pressed("menu_back"):
+				_sound("back")
+				_go("main")
 		"online":
 			_move_nav(ONLINE_NAV)
 			if _accept():
@@ -292,6 +326,8 @@ func _menu_frame(delta: float) -> void:
 			_edit_moves()
 		"options":
 			main.options.menu_input(self)
+		"rules":
+			_rules_input()
 		"profile":
 			_profile_input()
 
@@ -468,9 +504,10 @@ func _save_ip(text: String) -> void:
 func setup_items() -> Array:
 	if online:
 		return ["stage", "build", "ready"]
-	if choice.mode == "training":
-		return ["stage", "build", "fight"]
-	return ["stage", "diff", "build", "fight"]
+	var out: Array = ["stage"] if choice.mode == "training" else ["stage", "diff"]
+	if team_battle():
+		out.append("rules")
+	return out + ["build", "fight"]
 
 
 func _selection() -> void:
@@ -496,6 +533,9 @@ func _selection() -> void:
 		_pick_on_wall(to)
 	if _accept():
 		_sound("ok")
+		if team_battle():
+			_team_pick(list[cursor])
+			return
 		choice[sel_phase] = list[cursor]
 		if sel_phase == "p1" and not online:
 			sel_phase = "p2"
@@ -504,7 +544,9 @@ func _selection() -> void:
 			_to_setup()
 	elif _pressed("menu_back"):
 		_sound("back")
-		if online:
+		if team_battle():
+			_team_back()
+		elif online:
 			ask(tr("Leave the room? You will be disconnected."), func():
 				main.close_net()
 				online = false
@@ -560,6 +602,12 @@ func _setup_input(list: Array) -> void:
 				var i := DIFFICULTIES.find(choice.diff)
 				choice.diff = DIFFICULTIES[(i + 1) % 3]
 				_sound("move")
+			"rules":
+				_sound("ok")
+				screen = "rules"
+				enter_t = 0.0
+				rules_cursor = 1
+				rules_top = 0
 			"build":
 				_sound("ok")
 				_edit_return = "selection"
@@ -568,7 +616,8 @@ func _setup_input(list: Array) -> void:
 				edit_sp = choice.p1
 				cursor = maxi(list.find(edit_sp), 0)
 				edit_slot = 0
-				edit_phase = "slots"
+				# A 3 vs 3 has three to edit: from the list of Pokémon.
+				edit_phase = "pokemon" if team_battle() else "slots"
 				sel_phase = keep
 			"fight":
 				_sound("ok")
@@ -581,7 +630,141 @@ func _setup_input(list: Array) -> void:
 	elif _pressed("menu_back"):
 		_sound("back")
 		sel_phase = "p1" if online else "p2"
-		cursor = maxi(list.find(choice[sel_phase]), 0)
+		if team_battle():
+			_last_pick_back(list)
+		else:
+			cursor = maxi(list.find(choice[sel_phase]), 0)
+
+
+# ---------------------------------------------------------------- picking a team
+
+## This battle is a 3 vs 3 (online is always 1 vs 1).
+func team_battle() -> bool:
+	return choice.format == "3v3" and not online
+
+
+## A whole team for "side": its lead, the picks, then whoever comes next in the roster until it
+## is full. No species twice on a team.
+func team_ids(side: int, lead: String) -> Array:
+	var ids: Array = [lead]
+	for sp in choice["team" if side == 0 else "team2"] + pokemon_list():
+		if ids.size() < Party.SIZE and Roster.POKEMON.has(sp) and not sp in ids:
+			ids.append(sp)
+	return ids
+
+
+func _picks_key() -> String:
+	return "team" if sel_phase == "p1" else "team2"
+
+
+## Pressed on the wall: adds the Pokémon to the team, or takes it out if it was already in. The
+## third pick moves on: to the rival's team, then to the battle's options.
+func _team_pick(sp: String) -> void:
+	var picks: Array = choice[_picks_key()]
+	if sp in picks:
+		picks.erase(sp)
+		return
+	picks.append(sp)
+	if picks.size() < Party.SIZE:
+		return
+	choice[sel_phase] = picks[0]
+	if sel_phase == "p1":
+		sel_phase = "p2"
+		var list := pokemon_list()
+		cursor = maxi(list.find(choice.p2), 0)
+		team_preview = list[cursor]
+	else:
+		_to_setup()
+
+
+## Back while picking: out goes the last pick; with none, to the team before or the format.
+func _team_back() -> void:
+	var list := pokemon_list()
+	if not choice[_picks_key()].is_empty():
+		_last_pick_back(list)
+	elif sel_phase == "p2":
+		sel_phase = "p1"
+		_last_pick_back(list)
+	else:
+		_go("format")
+
+
+## The last pick of whoever is picking comes off the team, with the cursor on it.
+func _last_pick_back(list: Array) -> void:
+	var sp: String = choice[_picks_key()].pop_back()
+	cursor = maxi(list.find(sp), 0)
+	team_preview = sp
+
+
+## A click on a pick of the team being picked takes it out ("slot": its place on the team).
+func _remove_pick(side: int, slot: int) -> void:
+	if sel_phase != ("p1" if side == 0 else "p2"):
+		return
+	var picks: Array = choice[_picks_key()]
+	if slot < picks.size():
+		picks.remove_at(slot)
+		_sound("back")
+
+
+# ---------------------------------------------------------------- this battle's rules
+
+const RULES_ROWS := 12           # rows shown at once on the Rules screen (it scrolls)
+
+
+## Rows of the Rules screen: {id, kind (header, choice, action), label, value (translated),
+## help, changed}.
+func rules_items() -> Array:
+	var out: Array = []
+	var group := ""
+	for d in BattleRules.DEFS:
+		if d.group != group:
+			group = d.group
+			out.append({"id": "h_" + group, "kind": "header", "label": tr(group)})
+		var v: float = choice.rules[d.id]
+		out.append({"id": d.id, "kind": "choice", "label": tr(d.label), "value": BattleRules.text(d.id, v), "changed": v != d.default,
+			"help": tr(d.help) + "\n\n" + tr("Default: %s") % BattleRules.text(d.id, d.default)})
+	out.append({"id": "restore_rules", "kind": "action", "label": tr("Default rules"), "value": "", "changed": false,
+		"help": tr("Puts every rule back on its default.")})
+	return out
+
+
+func _rules_input() -> void:
+	var list := rules_items()
+	rules_cursor = mini(rules_cursor, list.size() - 1)
+	var step := 0
+	if _pressed("move_up"):
+		step = -1
+	elif _pressed("move_down"):
+		step = 1
+	if step != 0:
+		for k in list.size():
+			rules_cursor = (rules_cursor + step + list.size()) % list.size()
+			if list[rules_cursor].kind != "header":
+				break
+		_sound("move")
+		rules_top = clampi(rules_top, rules_cursor - RULES_ROWS + 1, rules_cursor)
+		if rules_cursor == 1:
+			rules_top = 0
+	var it: Dictionary = list[rules_cursor]
+	var change := 0
+	if _pressed("move_left"):
+		change = -1
+	elif _pressed("move_right"):
+		change = 1
+	if change != 0 and it.kind == "choice":
+		choice.rules[it.id] = BattleRules.stepped(it.id, choice.rules[it.id], change)
+		_sound("move")
+	if _accept():
+		_sound("move")
+		if it.kind == "action":
+			choice.rules = BattleRules.defaults()
+		else:
+			choice.rules[it.id] = BattleRules.stepped(it.id, choice.rules[it.id], 1)
+	elif _pressed("menu_back"):
+		_sound("back")
+		screen = "selection"
+		enter_t = 0.0
+		setup_cursor = setup_items().find("rules")
 
 
 # ---------------------------------------------------------------- profile
@@ -752,7 +935,7 @@ func _edit_moves() -> void:
 				edit_phase = "list"
 			elif _pressed("menu_back"):
 				_sound("back")
-				if _edit_return == "selection":
+				if _edit_return == "selection" and not team_battle():
 					_leave_moves()
 				else:
 					edit_phase = "pokemon"
@@ -1071,6 +1254,8 @@ func _mouse(ev: InputEvent) -> void:
 				_clicked = z.i >= 0
 			"restore":
 				ask_restore()
+			"tslot":
+				_remove_pick(z.i / Party.SIZE, z.i % Party.SIZE)
 			"mvp":
 				_click_moves_pokemon(z.i)
 			"slot":
@@ -1089,11 +1274,11 @@ func _mouse(ev: InputEvent) -> void:
 
 
 ## A click on a Pokémon of the Moves screen: picks it, or from its slots or options
-## changes to it (not when it came from the selection, which is for one Pokémon).
+## changes to it (not when it came from a 1 vs 1's selection, which is for one Pokémon).
 func _click_moves_pokemon(i: int) -> void:
 	if edit_phase == "pokemon":
 		_clicked = true
-	elif _edit_return != "selection" and pokemon_list()[i] != edit_sp:
+	elif (_edit_return != "selection" or team_battle()) and pokemon_list()[i] != edit_sp:
 		_sound("ok")
 		cursor = i
 		edit_sp = pokemon_list()[i]
@@ -1128,7 +1313,11 @@ func _hover(z: Dictionary) -> void:
 		"opt":
 			if edit_phase == "list":
 				edit_cursor = z.i
-		"main", "online":
+		"rule":
+			if rules_cursor != z.i:
+				rules_cursor = z.i
+				_sound("move")
+		"main", "online", "format":
 			if screen == z.kind:
 				cursor = z.i
 		"pf":
@@ -1154,7 +1343,10 @@ func _pick_on_wall(i: int) -> void:
 	var list := pokemon_list()
 	cursor = clampi(i, 0, list.size() - 1)
 	_sound("move")
-	choice[sel_phase] = list[cursor]
-	main.audio.cry(choice[sel_phase], main.camera.global_position, 1.0, -22.0)
+	if team_battle():
+		team_preview = list[cursor]
+	else:
+		choice[sel_phase] = list[cursor]
+	main.audio.cry(list[cursor], main.camera.global_position, 1.0, -22.0)
 	if online:
 		_send_choice()

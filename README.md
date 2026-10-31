@@ -49,6 +49,7 @@ godot --path game -- --p1=charizard --p2=pikachu --diff=hard --stage=league
 |---|---|
 | `--p1`, `--p2` | `pikachu`, `snorlax`, `charizard`, `blastoise`, `venusaur`, `lucario`, `gengar`, `garchomp`, `greninja`, `scizor` |
 | `--team`, `--team2` | a 3 vs 3 against the AI (prototype): `--team=charizard,lucario,venusaur`; the first one leads, a missing `--team2` is filled from the roster. See [3 vs 3](#3-vs-3-prototype) |
+| `--rules` | that battle's 3 vs 3 rules: `--rules=recall:0.4,lockout:5,bench_heal:0.5` (the ids and limits are in [battle_rules.gd](game/scripts/data/battle_rules.gd)) |
 | `--diff` | `easy`, `normal`, `hard` |
 | `--stage` | `night` (default), `floating`, `league` |
 | `--training` | still or active rival: **R** resets, **T** stops or frees the rival, **F3** shows the hitboxes |
@@ -126,9 +127,12 @@ mouse wheel scrolls.
 
 ### 3 vs 3 (prototype)
 
-Three Pokémon a side, one on the field at a time, launched with `--team` (offline only; there
-is no team selection in the menus yet). Every number is at the top of
-[party.gd](game/scripts/party.gd).
+Three Pokémon a side, one on the field at a time (offline only). **Battle** and **Training** ask
+for the format first. In a 3 vs 3 each side picks three on the wall, seeing each one's model, types,
+ability and moves; the first one leads, and picking one again (or clicking it on its card) takes
+it out. The **Rules** tab then sets that battle's rules: they hold for its rematches and stay in
+the menu until the game closes, but are never saved. Below are the defaults; every time can be
+changed, along with how many switches you get, and healing on the bench, off by default.
 
 - **A switch is a commitment.** The Pokémon stands there for about a second, glowing, while its
   trainer throws the ball, and can be hit all along: a hit that beats its poise cuts the switch.
@@ -143,6 +147,9 @@ is no team selection in the menus yet). Every number is at the top of
   on your side with 1 s of invulnerability, and your team gets 30 energy. The Pokémon that made
   the KO loses its stat stages, so one boost does not sweep all three.
 - **The League's field** closes 2.5 times slower.
+- **On screen:** under each frame, that side's bench and switches, the rival's too. Above your
+  energy, a chip per teammate with its button, HP, and the seconds until it can come back or its
+  status. A bar over a Pokémon going back to its ball shows how long it has left.
 
 ## The roster
 

@@ -631,7 +631,7 @@ func _physics_process(delta: float) -> void:
 				return
 		"enter":
 			_brake(delta, 14.0)
-			if _state_t >= Party.LANDING:
+			if _state_t >= float(party.rules.landing):
 				_to_free()
 	if flying and state in ["free", "action", "dodge"]:
 		_flight_control(delta)

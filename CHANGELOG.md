@@ -6,11 +6,17 @@ All notable changes to this project are documented here. The format follows
 ## [Unreleased]
 
 ### Added
-- 3 vs 3 with switching (prototype, offline, launched with `--team`): a switch takes about a
-  second, can be hit and cut, costs a scarce charge and refreshes nothing; the energy belongs to
-  the team and the bench waits as it was. After a KO you pick the next one. The AI switches too.
-  Shots left flying by a Pokémon that switched out spare its teammates. See the README. New
-  tests: `--test=team` and `--aivsai --test=team_battles`.
+- 3 vs 3 with switching (prototype, offline): a switch takes about a second, can be hit and cut,
+  costs a scarce charge and refreshes nothing; the energy belongs to the team and the bench waits
+  as it was. After a KO you pick the next one. The AI switches too. Shots left flying by a
+  Pokémon that switched out spare its teammates. See the README. New tests: `--test=team`,
+  `--test=menu_rules` and `--aivsai --test=team_battles`.
+- Battle and Training ask for the format, 1 vs 1 or 3 vs 3, before anyone picks. In a 3 vs 3 each
+  side picks three on the wall, with each one's model, types, ability and moves on its card.
+- Rules for each 3 vs 3: the selection's new Rules tab (or `--rules`) sets its times, switches and
+  KO rules. Healing on the bench is there too, off by default. They are never saved.
+- The 3 vs 3's HUD: both sides' bench and switches under their frames, chips for your teammates,
+  a bar over a Pokémon going back to its ball and a card for picking the next one after a KO.
 
 ## [Demo] - 2026-10-29
 

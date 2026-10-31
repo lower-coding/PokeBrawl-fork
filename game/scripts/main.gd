@@ -5,6 +5,7 @@ extends Node3D
 ## Launch: godot --path game -- [--p1=pikachu] [--p2=snorlax] [--diff=normal]
 ##         [--stage=night|floating] [--training] [--aivsai] [--test=name] [--lang=en|es]
 ## 3 vs 3:  --team=a,b,c [--team2=d,e,f]     teams (the first one leads; see Party). Offline.
+##          --rules=id:value,id:value         this battle's rules (BattleRules)
 ## Online:  --host [--p1=species]            hosts a game (port 7777)
 ##          --join=IP [--p1=species]         joins someone else's
 ##          --bot (the AI plays your own Pokémon), --lag=ms --jitter=ms --loss=%
@@ -29,9 +30,7 @@ var player_ai: AI               # only with --aivsai (tests)
 var net: Net                     # online only
 var fighters: Array = []          # the two out on the field
 var parties: Array = []           # each side's Party, same order; empty in a 1 vs 1
-## How much slower the League's field closes: it was timed for a single 1 vs 1.
-const PARTY_FIELD_PACE := 2.5
-var field_pace := 1.0
+var field_pace := 1.0             # how much slower the League's field closes (BattleRules)
 var trainers: Array = []          # Trainer of each fighter, same order (only for show)
 ## The opening: each trainer throws their Poké Ball and their Pokémon comes out; nobody
 ## moves until it ends. Tests skip it (unless --intro).
@@ -115,6 +114,13 @@ func _ready() -> void:
 	if _args.has("training"):
 		mode = "training"
 		menu.choice.mode = "training"
+	if _args.has("team"):
+		menu.choice.format = "3v3"
+		menu.choice.team = Array(str(_args.team).split(",", false))
+	if _args.has("team2"):
+		menu.choice.team2 = Array(str(_args.team2).split(",", false))
+	if _args.has("rules"):
+		menu.choice.rules = BattleRules.parsed(str(_args.rules))
 	# With --p1, --team, --test or --aivsai it goes straight into battle; otherwise, to the menu.
 	if _args.has("host") or _args.has("join"):
 		var err := start_net(_args.has("host"), _args.get("join", ""), _args.get("p1", "pikachu"))
@@ -208,10 +214,11 @@ func start_battle(p1: String, p2: String, diff: String, rival_loadout := {}, riv
 		_setup_net(a, b)
 	else:
 		_setup_ai(a, b, diff)
-		if _args.has("team"):
+		if menu.choice.format == "3v3":
 			_build_party(a)
 			_build_party(b)
-			field_pace = PARTY_FIELD_PACE
+			field_pace = menu.choice.rules.field_pace
+			session.event("rules", BattleRules.changed(menu.choice.rules))
 	combat.targets = fighters.duplicate()
 	camera.target = a
 	camera.yaw = -PI * 0.5 * -side
@@ -251,21 +258,10 @@ func _setup_ai(a: Fighter, b: Fighter, diff: String) -> void:
 
 # ---------------------------------------------------------------- teams (3 vs 3)
 
-## The species on "lead"'s team: it, then its side's --team list (no repeats, as a species
-## clause), then whoever comes next in the roster until the team is full.
-func _team_ids(lead: Fighter) -> Array:
-	var ids: Array = [lead.species]
-	var picks: Array = Array(str(_args.get("team" if lead.team == 0 else "team2", "")).split(",", false))
-	for sp in picks + Roster.POKEMON.keys():
-		if ids.size() < Party.SIZE and Roster.POKEMON.has(sp) and not sp in ids:
-			ids.append(sp)
-	return ids
-
-
 ## "lead"'s team: its teammates are built here and wait on the bench.
 func _build_party(lead: Fighter) -> void:
 	var list: Array = [lead]
-	for sp in _team_ids(lead).slice(1):
+	for sp in menu.team_ids(lead.team, lead.species).slice(1):
 		var l := _create(sp, lead.team, lead.start_pos, lead.start_yaw, my_loadout(sp) if lead.team == 0 else Loadout.default_for(sp))
 		fighters.pop_back()              # only those on the field are there
 		l.rival = lead.rival
@@ -273,7 +269,7 @@ func _build_party(lead: Fighter) -> void:
 	var p := Party.new()
 	p.process_physics_priority = -5      # after the input and the AI, before they clear it
 	add_child(p)
-	p.setup(self, lead.team, list)
+	p.setup(self, lead.team, list, menu.choice.rules.duplicate())
 	parties.append(p)
 
 

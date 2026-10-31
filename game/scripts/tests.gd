@@ -9,7 +9,8 @@ extends Node
 ##   mechanics   headless: concrete cases from the acceptance criteria (dodging a
 ##               projectile, jumping the wave, punishing a recovery, combo limit,
 ##               hitstop)
-##   team        headless: the rules of 3 vs 3 and switching (Party)
+##   team        headless: the rules of 3 vs 3 and switching (Party, BattleRules)
+##   menu_rules  with a window: the selection's Rules screen, on to a battle by those rules
 ##   team_battles --aivsai [--battles=N] [--speed=x] [--diff=...]: random teams, AI against
 ##               AI; how long they last, how often they switch, who wins
 ## Captures go to captures/ and a dated copy to captures/history/.
@@ -83,13 +84,23 @@ func _ready() -> void:
 			# then the options (stage to the floating one, difficulty up) and Fight: VS,
 			# battle, pause and back to the menu.
 			_plan = [[1.5, "", "menu_title"], [1.7, "menu_accept", ""], [2.3, "move_down", ""], [2.6, "", "menu_main"],
-				[2.8, "move_up", ""], [3.0, "menu_accept", ""], [3.8, "move_right", ""], [4.1, "move_down", ""],
+				[2.8, "move_up", ""], [3.0, "menu_accept", ""], [3.4, "menu_accept", ""], [3.8, "move_right", ""], [4.1, "move_down", ""],
 				[4.8, "", "menu_selection"], [5.0, "menu_accept", ""], [5.4, "move_down", ""], [5.9, "", "menu_rival"],
 				[6.1, "menu_accept", ""], [6.4, "move_left", ""], [6.5, "move_left", ""], [6.6, "move_left", ""], [6.7, "move_up", ""],
 				[6.8, "move_right", ""], [6.9, "move_up", ""], [7.0, "move_right", ""], [7.1, "move_right", ""],
 				[7.3, "", "menu_setup"], [7.5, "menu_accept", ""],
 				[7.8, "", "menu_vs"], [10.7, "", "menu_battle"], [10.9, "pause", ""], [11.3, "", "menu_pause"],
 				[11.5, "menu_back", ""], [12.2, "", "menu_back"]]
+		"menu_rules":
+			# Battle, 3 vs 3; your team with the mouse (a pick, one taken out, two more) and the rival's
+			# with the keys; the Rules tab, a rule by mouse and keys; back and Fight.
+			_plan = [[1.5, "menu_accept", ""], [2.0, "menu_accept", ""], [2.6, "move_right", ""], [2.9, "", "team_format"], [3.1, "menu_accept", ""],
+				[3.6, "", "team_empty"], [3.8, "menu_accept", ""], [4.1, "click:wall:4", ""], [4.5, "", "team_two"], [4.7, "click:tslot:1", ""],
+				[5.0, "click:wall:5", ""], [5.3, "click:wall:6", ""], [5.7, "", "team_rival"], [5.9, "menu_accept", ""], [6.1, "move_right", ""],
+				[6.3, "menu_accept", ""], [6.5, "move_right", ""], [6.7, "menu_accept", ""], [7.2, "", "team_setup"], [7.4, "move_left", ""],
+				[7.6, "move_left", ""], [7.8, "menu_accept", ""], [8.3, "", "rules_top"], [8.5, "click:rule:11", ""], [8.8, "move_right", ""],
+				[9.0, "move_right", ""], [9.3, "", "rules_heal"], [9.5, "menu_back", ""], [10.0, "", "rules_back"], [10.2, "move_right", ""],
+				[10.4, "move_right", ""], [10.6, "menu_accept", ""], [14.2, "", "rules_battle"]]
 		"menu_moves":
 			# Moves screen: Charizard's first move to Body Slam, then Air Slash into that slot
 			# (it was in the second: they swap). Its own save file, which starts empty.
@@ -186,7 +197,10 @@ func _next_step() -> void:
 	if _steps.is_empty():
 		return
 	var st: Array = _steps.pop_front()
-	if st[0] == "key":
+	if st[0] == "key" and st[1].begins_with("click:"):
+		_click_zone(st[1].get_slice(":", 1), int(st[1].get_slice(":", 2)))
+		_step_wait = 4
+	elif st[0] == "key":
 		var ev := InputEventAction.new()
 		ev.action = st[1]
 		ev.pressed = true
@@ -197,6 +211,21 @@ func _next_step() -> void:
 	else:
 		print("state: menu ", main.menu.is_open, " pause ", main.paused, " fighters ", main.fighters.size(), " choice ", main.menu.choice)
 		_capture(st[1])
+
+
+## A left click, as the real pointer would give, on what the menus drew as (kind, i).
+func _click_zone(kind: String, i: int) -> void:
+	for z in main.menu.draw.zones:
+		if z.kind == kind and z.i == i:
+			for pressed in [true, false]:
+				var ev := InputEventMouseButton.new()
+				ev.button_index = MOUSE_BUTTON_LEFT
+				ev.pressed = pressed
+				ev.position = z.rect.get_center()
+				ev.global_position = ev.position
+				Input.parse_input_event(ev)
+			return
+	print("FAIL   Nothing to click: %s %d" % [kind, i])
 
 
 func _release_later(action: String) -> void:
@@ -221,7 +250,7 @@ func _capture(n: String) -> void:
 func _physics_process(delta: float) -> void:
 	t += delta
 	match test_name:
-		"menu", "menu_moves", "menu_options", "menu_profile", "menu_wheel":
+		"menu", "menu_moves", "menu_options", "menu_profile", "menu_wheel", "menu_rules":
 			# Due steps go into a queue that _process plays one per few frames: after a slow
 			# frame several come due at once, and two presses in one frame lose one.
 			for p in _plan:
@@ -232,6 +261,9 @@ func _physics_process(delta: float) -> void:
 						_steps.append(["capture", p[2]])
 			_next_step()
 			if test_name == "menu" and t > 12.5:
+				get_tree().quit()
+			if test_name == "menu_rules" and t > 14.5:
+				_rules_outcome()
 				get_tree().quit()
 			if test_name == "menu_options" and t > 6.8:
 				get_tree().quit()
@@ -1785,8 +1817,9 @@ func _league_test() -> void:
 # ---------------------------------------------------------------- 3 vs 3
 
 func _team_battle(lead_a: String, team_a: String, lead_b: String, team_b: String, gap := 6.0) -> Array:
-	main._args.team = team_a
-	main._args.team2 = team_b
+	main.menu.choice.format = "3v3"
+	main.menu.choice.team = Array(team_a.split(","))
+	main.menu.choice.team2 = Array(team_b.split(","))
 	return await _setup(lead_a, lead_b, Vector3(-gap, 0, 0), Vector3(gap, 0, 0))
 
 
@@ -1837,6 +1870,7 @@ func _team_faint_and_wait(p: Party) -> Fighter:
 
 func _team_test() -> void:
 	await get_tree().physics_frame
+	var R: Dictionary = BattleRules.defaults()
 	var ab: Array = await _team_battle("charizard", "charizard,lucario,venusaur", "garchomp", "garchomp,gengar,blastoise")
 	var a: Fighter = ab[0]
 	var b: Fighter = ab[1]
@@ -1847,7 +1881,7 @@ func _team_test() -> void:
 		and main.parties[1].members[1].species == "gengar")
 	_ok("Only two are on the field", main.fighters == [a, b] and main.combat.targets.size() == 2)
 	_ok("The bench does not run or show", luc.process_mode == Node.PROCESS_MODE_DISABLED and not luc.visible)
-	_ok("Starts with one switch", pa.charges == Party.START_CHARGES)
+	_ok("Starts with one switch", pa.charges == int(R.start_charges))
 
 	# The switch itself.
 	a.energy = 37.0
@@ -1856,7 +1890,7 @@ func _team_test() -> void:
 	a.hp = 500.0
 	a.inflict("psn")
 	var took: float = await _team_switch(pa, 0)
-	_ok("A switch takes as long as designed", pa.active == luc and took >= Party.RECALL + Party.FLIGHT.x and took <= Party.RECALL + Party.FLIGHT.y + 0.1, "%.2f s" % took)
+	_ok("A switch takes as long as designed", pa.active == luc and took >= R.recall + R.ball_near and took <= R.recall + R.ball_far + 0.1, "%.2f s" % took)
 	_ok("Spends the charge", pa.charges == 0)
 	_ok("Everyone points at the new one", main.fighters[0] == luc and b.rival == luc and luc.rival == b and main.ai.rival == luc and main.camera.target == luc and main.trainers[0].fighter == luc)
 	_ok("Only the new one can be hit", luc in main.combat.targets and not a in main.combat.targets)
@@ -1880,9 +1914,9 @@ func _team_test() -> void:
 	_ok("Pressing without a charge does nothing", luc.state == "free" and pa.active == luc, luc.state)
 	pa._recharge = 0.1
 	await _wait(0.2)
-	_ok("Charges come back with time", pa.charges == 1 and pa._recharge > Party.RECHARGE - 1.0, "%d, %.1f" % [pa.charges, pa._recharge])
+	_ok("Charges come back with time", pa.charges == 1 and pa._recharge > R.recharge - 1.0, "%d, %.1f" % [pa.charges, pa._recharge])
 	var waited: float = pa._recharge
-	_ok("A landed hit shortens the wait", _team_hit(luc, b) == "hit" and pa._recharge <= waited - Party.HIT_BONUS + 0.001, "%.2f -> %.2f" % [waited, pa._recharge])
+	_ok("A landed hit shortens the wait", _team_hit(luc, b) == "hit" and pa._recharge <= waited - R.hit_bonus + 0.001, "%.2f -> %.2f" % [waited, pa._recharge])
 	_ok("The one that left is locked out", pa.slot_member(0) == a and pa.locked_for(a) > 0.0 and not pa.can_switch(0), "%.1f s" % pa.locked_for(a))
 	await _wait(0.5)
 	_ok("The other one can come", pa.can_switch(1))
@@ -1941,7 +1975,7 @@ func _team_test() -> void:
 	while pa.active == a and t - t0 < 6.0:
 		await get_tree().physics_frame
 	var next: Fighter = pa.active
-	_ok("Someone comes out by itself", next != a and next.state != "ko" and main.fighters[0] == next and t - t0 <= Party.KO_CHOICE + Party.KO_FLIGHT + 0.1, "%s in %.2f s" % [next.species, t - t0])
+	_ok("Someone comes out by itself", next != a and next.state != "ko" and main.fighters[0] == next and t - t0 <= R.ko_choice + Party.KO_FLIGHT + 0.1, "%s in %.2f s" % [next.species, t - t0])
 	_ok("Lands on its side, safe for a moment", next.global_position.distance_to(next.start_pos) < 0.5 and next.invulnerable > 0.5, "%.2f" % next.invulnerable)
 	_ok("The team gets energy", next.energy >= 50.0 and next.energy < 80.0, "%.1f" % next.energy)
 	_ok("It costs no switch", pa.charges == charges0)
@@ -1973,7 +2007,7 @@ func _team_test() -> void:
 	a._damage_direct(999999.0)
 	while pa.active == a and t - t0 < 6.0:
 		await get_tree().physics_frame
-	_ok("Out of time, the healthiest", pa.active.species == "venusaur" and t - t0 >= Party.KO_CHOICE, "%s in %.2f s" % [pa.active.species, t - t0])
+	_ok("Out of time, the healthiest", pa.active.species == "venusaur" and t - t0 >= R.ko_choice, "%s in %.2f s" % [pa.active.species, t - t0])
 	pa.active.is_player = false
 
 	# To the last one, then a rematch.
@@ -1989,7 +2023,7 @@ func _team_test() -> void:
 	_ok("All three down: the battle ends", main._end_t >= 0.0, "%.2f" % main._end_t)
 	main.rematch()
 	await _wait(0.2)
-	_ok("A rematch brings back the lead, everyone whole", main.fighters[0] == a and pa.active == a and pa.alive_count() == 3 and pa.members.all(func(f): return f.hp == f.hp_max) and a.process_mode == Node.PROCESS_MODE_INHERIT and a.visible and not pa.members[1].visible and pa.charges == Party.START_CHARGES and b.rival == a and main.combat.targets.has(a))
+	_ok("A rematch brings back the lead, everyone whole", main.fighters[0] == a and pa.active == a and pa.alive_count() == 3 and pa.members.all(func(f): return f.hp == f.hp_max) and a.process_mode == Node.PROCESS_MODE_INHERIT and a.visible and not pa.members[1].visible and pa.charges == int(R.start_charges) and b.rival == a and main.combat.targets.has(a))
 	var took3: float = await _team_switch(pa, 0)
 	_ok("And it can switch again", pa.active == pa.members[1], "%.2f s" % took3)
 
@@ -2011,9 +2045,9 @@ func _team_test() -> void:
 	st.zone_t = 0.0
 	await _wait(1.0)
 	if DisplayServer.get_name() == "headless":
-		_ok("The League's clock goes slower in 3 vs 3", main.field_pace == main.PARTY_FIELD_PACE)
+		_ok("The League's clock goes slower in 3 vs 3", main.field_pace == R.field_pace)
 	else:
-		_ok("The League's clock goes slower in 3 vs 3", main.field_pace == main.PARTY_FIELD_PACE and st.zone_t < 0.6, "%.2f" % st.zone_t)
+		_ok("The League's clock goes slower in 3 vs 3", main.field_pace == R.field_pace and st.zone_t < 0.6, "%.2f" % st.zone_t)
 	main.set_stage("night")
 
 	# The AI against a bad matchup.
@@ -2035,9 +2069,93 @@ func _team_test() -> void:
 	main.player_ai = null
 	rival_ai.queue_free()
 
+	# The rules are this battle's.
+	var parsed: Dictionary = BattleRules.parsed("recall:0.1,lockout:999,nonsense:3,landing:x")
+	_ok("--rules takes what it knows, within limits", parsed.recall == 0.1 and parsed.lockout == 30.0 and parsed.landing == R.landing and not parsed.has("nonsense"))
+	_ok("Steps stay within limits", BattleRules.stepped("bench_heal", 0.0, -1) == 0.0 and BattleRules.stepped("bench_heal", 0.0, 1) == 0.25 and is_equal_approx(BattleRules.stepped("recall", 0.5, 1), 0.55))
+	_ok("Values read well", BattleRules.text("bench_heal", 0.0) == "Off" and BattleRules.text("bench_heal", 0.5) == "0.5 %/s" and BattleRules.text("recall", 0.5) == "0.5 s" and BattleRules.text("max_charges", 2) == "2",
+		"%s, %s, %s, %s" % [BattleRules.text("bench_heal", 0.0), BattleRules.text("bench_heal", 0.5), BattleRules.text("recall", 0.5), BattleRules.text("max_charges", 2)])
+	_ok("Healing on the bench is off by default", R.bench_heal == 0.0)
+	main.menu.choice.rules = BattleRules.parsed("recall:0.2,ball_near:0.1,ball_far:0.1,landing:0.5,lockout:0,start_charges:3,max_charges:4,recharge:5,hit_bonus:0,ko_energy:0,ko_invuln:0,field_pace:4,bench_heal:2")
+	ab = await _team_battle("charizard", "charizard,lucario,venusaur", "garchomp", "garchomp,gengar,blastoise")
+	a = ab[0]
+	b = ab[1]
+	pa = main.parties[0]
+	_ok("A battle starts by its rules", pa.charges == 3 and pa.max_charges() == 4 and main.field_pace == 4.0)
+	var quick: float = await _team_switch(pa, 0)
+	_ok("The switch takes the time asked for", quick <= 0.35, "%.2f s" % quick)
+	_ok("So does the landing", pa.active.state == "enter", pa.active.state)
+	await _wait(0.35)
+	_ok("Still landing after the old time", pa.active.state == "enter", pa.active.state)
+	await _wait(0.25)
+	_ok("Then it is free", pa.active.state == "free", pa.active.state)
+	_ok("No lockout: the one that left can come back", pa.locked_for(a) == 0.0 and pa.can_switch(0))
+	var r0: float = pa._recharge
+	_team_hit(pa.active, b)
+	_ok("No time off per hit when set to none", pa._recharge <= r0 and pa._recharge > r0 - 0.1, "%.2f -> %.2f" % [r0, pa._recharge])
+	# Bench healing: 2% a second here. Not over the top, not the one out, not the fainted.
+	var ven2: Fighter = pa.members[2]
+	a.hp = 100.0
+	ven2.hp = ven2.hp_max - 1.0
+	var out_hp: float = pa.active.hp
+	var t2 := t
+	await _wait(2.0)
+	var healed: float = (a.hp - 100.0) / a.hp_max * 100.0 / (t - t2)
+	_ok("The bench heals at the rate asked for", healed > 1.8 and healed < 2.2, "%.2f %%/s" % healed)
+	_ok("Not past its max HP", ven2.hp == ven2.hp_max)
+	_ok("The one out does not heal", pa.active.hp <= out_hp)
+	ven2._damage_direct(999999.0)
+	await _wait(0.2)
+	_ok("Fainted on the bench: no replacement, no healing", ven2.hp == 0.0 and ven2.state == "ko" and not pa.replacing, "%.1f" % ven2.hp)
+	main.rematch()
+	await _wait(0.1)
+	_ok("A rematch keeps the rules", pa.charges == 3 and main.field_pace == 4.0 and pa.rules.bench_heal == 2.0)
+	# They belong to the battle that took them.
+	main.menu.choice.rules.recall = 1.0
+	_ok("The menu changing them does not touch a battle under way", pa.rules.recall == 0.2)
+	main.menu.choice.rules = BattleRules.defaults()
+	# Teams from the menu.
+	main.menu.choice.team = ["lucario", "lucario", "nobody", "venusaur"]
+	_ok("A team has no repeats and nobody unknown", main.menu.team_ids(0, "charizard") == ["charizard", "lucario", "venusaur"])
+	main.menu.choice.team = ["charizard"]
+	_ok("Picking the lead as a teammate does not repeat it", main.menu.team_ids(0, "charizard").count("charizard") == 1 and main.menu.team_ids(0, "charizard").size() == 3)
+	# Picking on the wall, as the selection does.
+	var mn: Menu = main.menu
+	mn.choice.format = "3v3"
+	mn.choice.team = []
+	mn.choice.team2 = []
+	mn.sel_phase = "p1"
+	mn._team_pick("charizard")
+	mn._team_pick("lucario")
+	mn._team_pick("lucario")
+	_ok("Pressing a pick again takes it out", mn.choice.team == ["charizard"] and mn.sel_phase == "p1", str(mn.choice.team))
+	mn._team_pick("lucario")
+	mn._team_pick("venusaur")
+	_ok("The third pick moves on to the rival, first pick leading", mn.sel_phase == "p2" and mn.choice.p1 == "charizard")
+	mn._team_pick("garchomp")
+	mn._team_back()
+	_ok("Back takes out the last pick", mn.choice.team2.is_empty() and mn.team_preview == "garchomp")
+	mn._team_back()
+	_ok("Back from an empty team, to the one before", mn.sel_phase == "p1" and mn.choice.team == ["charizard", "lucario"] and mn.team_preview == "venusaur")
+	mn._team_pick("venusaur")
+	for sp in ["garchomp", "gengar", "blastoise"]:
+		mn._team_pick(sp)
+	_ok("The rival's third pick goes to the battle's options", mn.sel_phase == "setup" and mn.choice.p2 == "garchomp")
+	_ok("A 3 vs 3 has its Rules tab", "rules" in mn.setup_items())
+	_ok("The Rules screen only has rules", not mn.rules_items().any(func(it): return it.id == "format" or it.id.begins_with("mate_")))
+	mn._remove_pick(0, 0)
+	_ok("A click only takes out a pick while that side is picking", mn.choice.team.size() == 3)
+	mn.sel_phase = "p1"
+	mn._go("selection")
+	_ok("Back from a battle both teams stay, on the battle's options", mn.sel_phase == "setup" and mn.choice.team.size() == 3)
+	mn.choice.format = "1v1"
+	_ok("A 1 vs 1 has no Rules tab", not "rules" in mn.setup_items())
+	mn.choice.team = []
+	mn.choice.team2 = []
+	mn.sel_phase = "p1"
+
 	# And a 1 vs 1 is as it was.
-	main._args.erase("team")
-	main._args.erase("team2")
+	main.menu.choice.format = "1v1"
 	ab = await _setup("charizard", "garchomp", Vector3(-6, 0, 0), Vector3(6, 0, 0))
 	a = ab[0]
 	a.ctrl.press("switch1")
@@ -2046,6 +2164,19 @@ func _team_test() -> void:
 	var fails := _results.filter(func(r): return not r[1]).size()
 	print("RESULT: %d of %d" % [_results.size() - fails, _results.size()])
 	get_tree().quit()
+
+
+## What the Rules screen's choices (the menu_rules test) gave the battle.
+func _rules_outcome() -> void:
+	var p: Party = main.parties[0] if not main.parties.is_empty() else null
+	print("%s  The menu started a 3 vs 3" % ("OK   " if p else "FAIL "))
+	if p:
+		var team: Array = p.members.map(func(f): return f.species)
+		var rival: Array = main.parties[1].members.map(func(f): return f.species)
+		print("%s  Your team by mouse, one taken out  %s" % ["OK   " if team == ["pikachu", "lucario", "gengar"] else "FAIL ", team])
+		print("%s  The rival's by keys  %s" % ["OK   " if rival == ["snorlax", "charizard", "blastoise"] else "FAIL ", rival])
+		print("%s  A rule by mouse and keys  %s" % ["OK   " if BattleRules.changed(p.rules) == {"bench_heal": 0.75} else "FAIL ", BattleRules.changed(p.rules)])
+		print("%s  The leads are the first picks" % ("OK   " if main.fighters[0].species == "pikachu" and main.fighters[1].species == "snorlax" else "FAIL "))
 
 
 ## With a window: the HUD of a 3 vs 3, a recall, the one coming in and the pick after a KO, and
@@ -2107,8 +2238,9 @@ func _team_battles() -> void:
 		seed(1000 + n)
 		var names: Array = Roster.POKEMON.keys()
 		names.shuffle()
-		main._args.team = ",".join(names.slice(0, 3))
-		main._args.team2 = ",".join(names.slice(3, 6))
+		main.menu.choice.format = "3v3"
+		main.menu.choice.team = names.slice(0, 3)
+		main.menu.choice.team2 = names.slice(3, 6)
 		main.start_battle(names[0], names[3], diff)
 		# More ticks a second, not longer ones: time_scale alone would stretch each physics step
 		# and the battle would no longer be the one played at 60 Hz.
