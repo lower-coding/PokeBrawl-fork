@@ -598,7 +598,6 @@ Yours,Yours,Tuyo
 Done,Done,Listo
 "Jumps and lands with all its weight, raising a cloud of dust that also hits. Only heavy hits stop it.","Jumps and lands with all its weight, raising a cloud of dust that also hits. Only heavy hits stop it.","Salta y cae con todo su peso, levantando una nube de polvo que también golpea. Solo lo frenan los golpes fuertes."
 Confused!,Confused!,¡Confuso!
-Flies into a rage and throws itself at the rival three times. Then it is confused: its movement turned around for a while.,Flies into a rage and throws itself at the rival three times. Then it is confused: its movement turned around for a while.,Monta en cólera y se lanza tres veces contra el rival. Después queda confuso: con el movimiento invertido un rato.
 "Each lunge is aimed anew: dodge each one, then punish while it is confused.","Each lunge is aimed anew: dodge each one, then punish while it is confused.",Cada embestida apunta de nuevo: esquiva cada una y castiga mientras está confuso.
 Rematch: waiting for the rival (%d/%d),Rematch: waiting for the rival (%d/%d),Revancha: esperando al rival (%d/%d)
 Your rival wants a rematch (%d/%d),Your rival wants a rematch (%d/%d),Tu rival quiere revancha (%d/%d)
@@ -745,3 +744,27 @@ Single,Single,Brusco
 Rapid,Rapid,Fluido
 "Urshifu's model: the Pokemans Pack team (CC BY-NC 4.0; converted, animations cut, one texture recolored)","Urshifu's model: the Pokemans Pack team (CC BY-NC 4.0; converted, animations cut, one texture recolored)","Modelo de Urshifu: el equipo de Pokemans Pack (CC BY-NC 4.0; convertido, animaciones recortadas, una textura recoloreada)"
 Always a critical hit,Always a critical hit,Siempre crítico
+Disabled!,Disabled!,¡Anulado!
+Disable,Disable,Anulación
+Confusion,Confusion,Confusión
+Teleport,Teleport,Teletransporte
+Psyshock,Psyshock,Psicocarga
+Calm Mind,Calm Mind,Paz Mental
+Agility,Agility,Agilidad
+Mewtwo,Mewtwo,Mewtwo
+Pressure,Pressure,Presión
+"A tiny spark from the eyes, at close range. Every move of the target not already cooling down has to wait 3 s.","A tiny spark from the eyes, at close range. Every move of the target not already cooling down has to wait 3 s.","Una chispa diminuta de los ojos, a corta distancia. Cada movimiento del objetivo que no esté ya en espera tiene que esperar 3 s."
+"A swipe sends a ripple of psychic energy forward, close and wide. It always confuses.","A swipe sends a ripple of psychic energy forward, close and wide. It always confuses.","Un gesto de la mano lanza una onda de energía psíquica hacia delante, corta y ancha. Siempre confunde."
+"Vanishes and reappears a fixed distance away, the way it last moved. It cannot be hit while gone.","Vanishes and reappears a fixed distance away, the way it last moved. It cannot be hit while gone.","Desaparece y reaparece a una distancia fija, hacia donde se movió por última vez. Mientras no está, no se le puede golpear."
+"A shard of psychic force. It is measured against the target's Defense, not its Sp. Def.","A shard of psychic force. It is measured against the target's Defense, not its Sp. Def.","Una esquirla de fuerza psíquica. Se mide contra la Defensa del objetivo, no contra su Def. Esp."
+"Calms its mind, open to hits: Sp. Atk and Sp. Def rise one stage. Twice per battle.","Calms its mind, open to hits: Sp. Atk and Sp. Def rise one stage. Twice per battle.","Calma su mente, expuesto a los golpes: el At. Esp. y la Def. Esp. suben un nivel. Dos veces por combate."
+Relaxes its body and moves much faster: Speed rises two stages. Once per battle.,Relaxes its body and moves much faster: Speed rises two stages. Once per battle.,Relaja el cuerpo y se mueve mucho más rápido: la Velocidad sube dos niveles. Una vez por combate.
+"The eyes flash first and it barely reaches: step back or dodge through it, then punish. If it lands, you can still move.","The eyes flash first and it barely reaches: step back or dodge through it, then punish. If it lands, you can still move.","Primero le brillan los ojos y apenas llega: retrocede o esquívalo y castiga. Si te da, aún puedes moverte."
+It only reaches a few meters: stay out of it. Once confused you are safe from another for a moment.,It only reaches a few meters: stay out of it. Once confused you are safe from another for a moment.,Solo llega a unos metros: mantente fuera. Tras una confusión estás a salvo de otra durante un momento.
+"It always goes the way it was moving: be there when it comes back, and punish.","It always goes the way it was moving: be there when it comes back, and punish.",Siempre va hacia donde se estaba moviendo: espéralo allí cuando vuelva y castígalo.
+It flies straight and does not turn: sidestep it or dodge through it.,It flies straight and does not turn: sidestep it or dodge through it.,Va recta y no gira: se esquiva moviéndose de lado o con la esquiva.
+It cannot defend itself while it concentrates: punish it.,It cannot defend itself while it concentrates: punish it.,No puede defenderse mientras se concentra: castígalo.
+"Hit it in that short moment. Afterwards, lower its Speed or cover ground with area moves.","Hit it in that short moment. Afterwards, lower its Speed or cover ground with area moves.","Golpéalo en ese breve momento. Después, bájale la Velocidad o cubre terreno con movimientos de área."
+"Overwhelming psychic power at any range. It takes away the rival's moves and its footing, and is gone before the answer comes.","Overwhelming psychic power at any range. It takes away the rival's moves and its footing, and is gone before the answer comes.","Un poder psíquico abrumador a cualquier distancia. Le quita al rival sus movimientos y su equilibrio, y ya no está cuando llega la respuesta."
+"While it is in play, the rival's moves take 10% longer to come back.","While it is in play, the rival's moves take 10% longer to come back.","Mientras está en combate, los movimientos del rival tardan un 10% más en volver."
+Flies into a rage and throws itself at the rival three times. Then it is confused: its attacks change buttons for a while.,Flies into a rage and throws itself at the rival three times. Then it is confused: its attacks change buttons for a while.,Monta en cólera y se lanza tres veces contra el rival. Después queda confuso: sus ataques cambian de botón un rato.

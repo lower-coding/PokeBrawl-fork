@@ -25,7 +25,8 @@ FPS = 30
 ANIMS = ["ground_idle", "ground_walk", "ground_run", "battle_idle", "faint", "air_idle", "air_fly", "air_glide",
          "physical", "physical_alt", "physical_kick", "physical_blunt", "special", "status", "recoil", "hurt",
          "air_physical", "air_special", "air_recoil", "blink", "cry", "battle_cry", "sleep", "sleep_intro",
-         "watershuriken_3hit", "volttackle", "battle_idle_aura_left", "battle_idle_aura_right"]
+         "watershuriken_3hit", "volttackle", "battle_idle_aura_left", "battle_idle_aura_right",
+         "shadowball", "confusion", "disable"]
 
 
 # ---------------------------------------------------------------- Molang
@@ -291,6 +292,11 @@ def convert(name_id, group=None):
         })
     bone_names = {h["name"] for h in bones}
     raw_anims = json.loads((folder / "anim.animation.json").read_text(encoding="utf-8"))["animations"]
+    # Clips of our own, kept apart so the source's file stays untouched (Mewtwo's attacks).
+    # One named like a source clip replaces it (Mewtwo's walk).
+    extra = folder / "moves.animation.json"
+    if extra.exists():
+        raw_anims.update(json.loads(extra.read_text(encoding="utf-8"))["animations"])
     anims = {}
     for short in ANIMS:
         key_name = f"animation.{group or name_id}.{short}"

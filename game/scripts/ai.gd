@@ -38,6 +38,7 @@ const PROFILE := {
 	"goodra": {"dist": [4.0, 8.0], "aggression": 0.45, "circle_around": 0.35},
 	"urshifu": {"dist": [1.5, 4.5], "aggression": 0.75, "circle_around": 0.5},
 	"urshifurapidstrike": {"dist": [2.0, 6.0], "aggression": 0.65, "circle_around": 0.6},
+	"mewtwo": {"dist": [4.0, 9.0], "aggression": 0.6, "circle_around": 0.7},
 }
 
 var main: Node
@@ -248,6 +249,7 @@ func _hold_button(a: String, dur: float) -> void:
 	_hold[a] = dur
 
 
+## Its usual button, even confused: it fires the wrong move, as a player who has not looked yet would.
 func _button_for(move: String) -> String:
 	var i: int = me.data.moves.find(move)
 	return "mov%d" % (i + 1) if i >= 0 else ""
@@ -366,6 +368,13 @@ func _dodge_toward(world_dir: Vector3, threat: String) -> void:
 			world_dir = -Vector3(me.global_position.x, 0.0, me.global_position.z).normalized()
 	for move in me.data.moves:
 		if Moves.DATA[move].get("ai", {}).get("kind", "") == "guard" and me.ready(move) and _guard_fits(move, threat) and randf() < 0.45:
+			# A guard that travels (Teleport) goes the way it last moved: make that the way out,
+			# and not off the stage, which it could reach: it goes further than a dodge.
+			if Moves.DATA[move].has("dist"):
+				if not _lands_inside(world_dir, float(Moves.DATA[move].dist)):
+					continue
+				me.ctrl.move_input = _to_local(world_dir)
+				me.last_move = world_dir.normalized()
 			_use(move)
 			state_text = "reads the hit"
 			return
@@ -524,13 +533,15 @@ func _attack(seen: Dictionary, dist: float, diff: Dictionary) -> void:
 
 
 ## A move for one moment only ("only_if"): Sucker Punch while the rival is seen attacking, Lash
-## Out while its power is doubled.
+## Out while its power is doubled, Disable while the rival has at least two moves to lose.
 func _only_if(ai: Dictionary, seen: Dictionary) -> bool:
 	match ai.get("only_if", ""):
 		"rival_attacking":
 			return seen.state == "action" and seen.phase in ["startup", "active"] and Moves.DATA.get(seen.action, {}).get("cat", "status") != "status"
 		"lowered":
 			return me.lowered_t > 0.0
+		"rival_ready":
+			return rival.data.moves.filter(func(m): return rival.cd(m) <= 0.0).size() >= 2
 	return true
 
 
@@ -575,7 +586,7 @@ func _use(move: String) -> void:
 	# Dashes and lunges carry it toward the rival: not if they would end off the edge
 	# (if the rival dodges, the dash goes all the way).
 	var travel: float = d.get("dist", d.get("advance", 0.0))
-	if travel > 0.0:
+	if travel > 0.0 and not d.get("off_edge", false):
 		var to_rival := rival.global_position - me.global_position
 		if not _lands_inside(Vector3(-sin(me.ctrl.yaw), 0.0, -cos(me.ctrl.yaw)), travel + 1.5) 				or not _lands_inside(Vector3(to_rival.x, 0.0, to_rival.z), travel + 1.5):
 			return

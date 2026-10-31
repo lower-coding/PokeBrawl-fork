@@ -13,7 +13,8 @@ extends RefCounted
 ## (Moves.DATA "split", "power_at"). The weather changes it too (Weather: sun, rain, sand,
 ## snow; Solar Power).
 ## A move with "crit" is always a critical hit, as in the games: ×1.5, ignoring the user's
-## lowered attack and the target's raised defense.
+## lowered attack and the target's raised defense. One with "hits_def" is special but measured
+## against the target's Defense, not its Sp. Def (Psyshock).
 
 const BATTLE_LENGTH := 4.2
 const STAB := 1.5
@@ -34,18 +35,19 @@ static func dealt(g: Hit, attacker: Fighter, target: Fighter, affinity: float) -
 	var physical := g.cat == "physical"
 	var crit: bool = d.get("crit", false)
 	var atk_stage: float = attacker.stage_mult("atk" if physical else "spa")
-	var def_stage: float = target.stage_mult("def" if physical else "spd")
+	var vs_def: bool = physical or d.get("hits_def", false)
+	var def_stage: float = target.stage_mult("def" if vs_def else "spd")
 	if crit:
 		atk_stage = maxf(atk_stage, 1.0)
 		def_stage = minf(def_stage, 1.0)
 	var atk: float = (attacker.data.stats.atk if physical else attacker.data.stats.spa) * atk_stage
-	var def: float = (target.data.stats.def if physical else target.data.stats.spd) * def_stage
+	var def: float = (target.data.stats.def if vs_def else target.data.stats.spd) * def_stage
 	# A burn halves physical moves (not Facade), as in the games.
 	if physical and attacker.status == "brn" and d.get("power_by", "") != "status":
 		atk *= 0.5
 	var w: Weather = attacker.main.weather
 	if w:
-		def *= w.defense_mult(target.types, physical)
+		def *= w.defense_mult(target.types, vs_def)
 		if not physical and w.is_on("sun") and attacker.data.passive.id == "solarpower":
 			atk *= 1.5
 	var base := (22.0 * power * atk / def) / 50.0 + 2.0

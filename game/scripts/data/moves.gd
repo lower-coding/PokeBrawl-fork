@@ -17,6 +17,12 @@ extends RefCounted
 ##   needs_attacking               only connects while the target winds up or runs a move that
 ##                                 deals damage; otherwise "But it failed!" (Sucker Punch)
 ##   protects                      a guard that contact moves with Unseen Fist go through
+##   hits_def                      special, but measured against the target's Defense (Psyshock)
+##   disables                      seconds every move of the target not already cooling down has
+##                                 to wait (Disable, Fighter._disable_all)
+##   boosts                        stat -> stages it gains at the end of a self boost (selfboost.gd)
+##   off_edge                      it can carry the user off a stage's edge (Teleport); no other
+##                                 move does (Fighter._edge_stop)
 ##   power_at                      the "damage" value that equals one use in the games (Aura
 ##                                 Sphere: uncharged below it, fully charged above)
 ##   startup / active / recovery   seconds of wind-up, active phase and recovery
@@ -159,7 +165,7 @@ const DATA := {
 	"psychic": {
 		"display_name": "Psychic", "script": "res://scripts/moves/psychic.gd", "type": "psychic", "cat": "special", "power": 90, "pp": 10, "accuracy": 100, "secondary": {"chance": 0.1, "boost": {"spd": -1}}, "priority": 0,
 		"cost": 22.0, "cd": 4.5, "startup": 0.5, "active": 0.08, "recovery": 0.4, "damage": 90.0, "lift": 8.0, "stun": 0.6,
-		"strength": 2, "contact": false, "reach": 13.0, "radius": 0.8, "lock": 0.18, "lift_share": 0.35, "hold": 0.36, "slam": 22.0,
+		"strength": 2, "contact": false, "reach": 13.0, "radius": 0.8, "lock": 0.18, "lift_share": 0.35, "lift_hold": 0.36, "slam": 22.0,
 		"desc": "Lifts the target with telekinesis and slams it into the ground. It can lower its Sp. Def.",
 		"ai": {"min": 3.0, "max": 12.0, "kind": "projectile", "value": 1.2},
 		"counterplay": "The ring at your feet turns white just before: dodge then, or step out of it."},
@@ -217,7 +223,7 @@ const DATA := {
 		"deflects": 1, "display_name": "Outrage", "script": "res://scripts/moves/outrage.gd", "type": "dragon", "cat": "physical", "power": 120, "pp": 10, "accuracy": 100, "priority": 0,
 		"cost": 34.0, "cd": 9.0, "startup": 0.35, "active": 1.5, "recovery": 0.6, "damage": 135.0, "stun": 0.45, "stun_last": 0.6, "lift": 4.0, "confuse": 3.5,
 		"strength": 2, "hitstop": 0.09, "lunges": 3, "dist": 3.2, "poise": 1,
-		"desc": "Flies into a rage and throws itself at the rival three times. Then it is confused: its movement turned around for a while.",
+		"desc": "Flies into a rage and throws itself at the rival three times. Then it is confused: its attacks change buttons for a while.",
 		"ai": {"min": 0.0, "max": 6.0, "kind": "engage", "value": 1.5},
 		"counterplay": "Each lunge is aimed anew: dodge each one, then punish while it is confused."},
 	"firepunch": {"fx_startup": [["firepunch_hand", "locator_hand_primary"]], "fx_hit": ["firepunch_target", "firepunch_targetburst"],
@@ -711,8 +717,8 @@ const DATA := {
 		"desc": "Braces for a physical hit: it takes the damage and pays it back double. Special moves break through.",
 		"ai": {"min": 0.0, "max": 3.0, "kind": "guard", "value": 1.0},
 		"counterplay": "Use a special move or attack from afar. If nothing comes, it is left open."},
-	"bulkup": {"display_name": "Bulk Up", "script": "res://scripts/moves/bulkup.gd", "type": "fighting", "cat": "status", "power": 0, "pp": 20, "accuracy": 0, "priority": 0,
-		"cost": 14.0, "cd": 12.0, "uses": 3, "startup": 0.2, "active": 0.7, "recovery": 0.3,
+	"bulkup": {"display_name": "Bulk Up", "script": "res://scripts/moves/selfboost.gd", "type": "fighting", "cat": "status", "power": 0, "pp": 20, "accuracy": 0, "priority": 0,
+		"boosts": {"atk": 1, "def": 1}, "cost": 14.0, "cd": 12.0, "uses": 3, "startup": 0.2, "active": 0.7, "recovery": 0.3,
 		"desc": "Tenses its muscles, open to hits: Attack and Defense rise one stage. Three times per battle.",
 		"ai": {"min": 6.0, "max": 99.0, "kind": "buff", "value": 1.0},
 		"counterplay": "It cannot defend itself while flexing: punish it."},
@@ -730,4 +736,45 @@ const DATA := {
 		"desc": "A burst of icy water. It always lowers the target's Attack.",
 		"ai": {"min": 3.0, "max": 15.0, "kind": "projectile", "value": 1.1},
 		"counterplay": "It flies straight: sidestep it or dodge through it."},
+
+	# ---------------------------------------------------------------- Mewtwo
+	"disable": {"fx_hit": ["confusion_impactdots"],
+		"display_name": "Disable", "script": "res://scripts/moves/disable.gd", "type": "normal", "cat": "status", "power": 0, "pp": 20, "accuracy": 100, "priority": 0,
+		"disables": 3.0, "cost": 16.0, "cd": 10.0, "startup": 0.24, "active": 0.1, "recovery": 0.55,
+		"speed": 16.0, "reach": 3.5, "radius": 0.3, "track": 0.0,
+		"desc": "A tiny spark from the eyes, at close range. Every move of the target not already cooling down has to wait 3 s.",
+		"ai": {"min": 0.0, "max": 3.5, "kind": "punish", "value": 1.2, "only_if": "rival_ready"},
+		"counterplay": "The eyes flash first and it barely reaches: step back or dodge through it, then punish. If it lands, you can still move."},
+	"confusion": {"fx_startup": [["confusion_actorglint", "foot"]], "fx_hit": ["confusion_impact", "confusion_impactdots"],
+		"display_name": "Confusion", "script": "res://scripts/moves/confusion.gd", "type": "psychic", "cat": "special", "power": 50, "pp": 25, "accuracy": 100, "secondary": {"chance": 1.0, "confuse": 2.5}, "priority": 0,
+		"cost": 14.0, "startup": 0.2, "active": 0.14, "recovery": 0.36, "damage": 50.0, "stun": 0.3,
+		"strength": 1, "contact": false, "reach": 1.8, "radius": 1.7,
+		"desc": "A swipe sends a ripple of psychic energy forward, close and wide. It always confuses.",
+		"ai": {"min": 0.0, "max": 3.2, "kind": "punish", "value": 1.2},
+		"counterplay": "It only reaches a few meters: stay out of it. Once confused you are safe from another for a moment."},
+	"teleport": {
+		"display_name": "Teleport", "script": "res://scripts/moves/teleport.gd", "type": "psychic", "cat": "status", "power": 0, "pp": 20, "accuracy": 0, "priority": 0,
+		"cost": 12.0, "cd": 4.0, "startup": 0.06, "active": 0.12, "recovery": 0.2, "dist": 8.0, "off_edge": true,
+		"desc": "Vanishes and reappears a fixed distance away, the way it last moved. It cannot be hit while gone.",
+		"ai": {"min": 0.0, "max": 6.0, "kind": "guard", "value": 1.0},
+		"counterplay": "It always goes the way it was moving: be there when it comes back, and punish."},
+	"psyshock": {"fx_startup": [["psybeam_charge", "locator_hand_primary"]], "fx_hit": ["psybeam_targetburst", "psybeam_targetsparkle"],
+		"display_name": "Psyshock", "script": "res://scripts/moves/psyshock.gd", "type": "psychic", "cat": "special", "power": 80, "pp": 10, "accuracy": 100, "priority": 0, "hits_def": true,
+		"cost": 20.0, "startup": 0.28, "active": 0.1, "recovery": 0.34, "damage": 80.0, "stun": 0.4,
+		"strength": 1, "contact": false, "speed": 30.0, "reach": 18.0, "radius": 0.45, "track": 0.0,
+		"desc": "A shard of psychic force. It is measured against the target's Defense, not its Sp. Def.",
+		"ai": {"min": 3.0, "max": 16.0, "kind": "projectile", "value": 1.1},
+		"counterplay": "It flies straight and does not turn: sidestep it or dodge through it."},
+	"calmmind": {"fx_startup": [["psychic_actordots", "foot"]],
+		"display_name": "Calm Mind", "script": "res://scripts/moves/selfboost.gd", "type": "psychic", "cat": "status", "power": 0, "pp": 20, "accuracy": 0, "priority": 0,
+		"boosts": {"spa": 1, "spd": 1}, "ring": true, "cost": 14.0, "cd": 12.0, "uses": 2, "startup": 0.2, "active": 0.7, "recovery": 0.3,
+		"desc": "Calms its mind, open to hits: Sp. Atk and Sp. Def rise one stage. Twice per battle.",
+		"ai": {"min": 6.0, "max": 99.0, "kind": "buff", "value": 1.0},
+		"counterplay": "It cannot defend itself while it concentrates: punish it."},
+	"agility": {"fx_active": [["quickattack_dashlines", "center"]],
+		"display_name": "Agility", "script": "res://scripts/moves/selfboost.gd", "type": "psychic", "cat": "status", "power": 0, "pp": 30, "accuracy": 0, "priority": 0,
+		"boosts": {"spe": 2}, "particles": "wind", "cost": 12.0, "cd": 10.0, "uses": 1, "startup": 0.1, "active": 0.25, "recovery": 0.15,
+		"desc": "Relaxes its body and moves much faster: Speed rises two stages. Once per battle.",
+		"ai": {"min": 6.0, "max": 99.0, "kind": "buff", "value": 0.8},
+		"counterplay": "Hit it in that short moment. Afterwards, lower its Speed or cover ground with area moves."},
 }

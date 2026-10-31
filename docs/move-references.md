@@ -299,3 +299,45 @@ double and is stunned. Ghost types take a quarter (softened immunity).
   and Detect countering, Bullet Punch → X-Scissor) **are not added**: the current battle style
   stays, at least for now. The other visual proposals (metallic tail, comet trail, aura jets,
   shadow and red eyes, Cobblemon's bolt for Thunder Shock) remain open.
+
+---
+
+## Mewtwo
+Smash comes from SmashWiki's [Mewtwo](https://www.ssbwiki.com/Mewtwo_(SSBU)),
+[Disable](https://www.ssbwiki.com/Disable), [Confusion](https://www.ssbwiki.com/Confusion),
+[Teleport](https://www.ssbwiki.com/Teleport) and [Shadow Ball](https://www.ssbwiki.com/Shadow_Ball). The
+anime is **not researched yet** for these six, and Psyshock's crystal shard is from memory of the games.
+Do that before tuning their look. In Pokkén ([Mewtwo](https://www.serebii.net/pokkendx/characters/mewtwo.shtml),
+[Shadow Mewtwo](https://www.serebii.net/pokkendx/characters/shadowmewtwo.shtml)) only Confusion and Teleport
+are on its lists; Disable, Psyshock, Calm Mind, Agility, Shadow Ball, Psychic and Ice Beam are not.
+
+**Disable** · *Now:* the eyes flash and a tiny pink spark flies a very short way. Every move of the target
+not already cooling down waits 3 s; no damage, no stun.
+- [Smash] A stun that needs the target grounded and facing Mewtwo; not taken.
+- [Games] Blocks only the last move used. Cobblemon: `confusion_actorglint`, `confusion_impactdots`.
+
+**Confusion** · *Now:* a hand sweeps forward and a purple ripple spreads, close and wide. Always confuses,
+with a 3 s lock after it wears off.
+- [Pokkén] A counter out of Barrier (A during Barrier) that consumes the Synergy Gauge.
+- [Smash] A command grab that also reflects projectiles; `"deflects": 2` would add the reflect.
+- [Games] 10% chance. Cobblemon: `confusion_` pieces, and our `psy_ring`.
+
+**Teleport** · *Now:* a dark-pink flash, gone for 0.12 s, a fixed 8 m the way it last moved. It cannot be
+hit while gone, walls stop it and it can leave a stage's edge.
+- [Pokkén] A damageless move aimed with the D-Pad. Mewtwo cancels Hyper Beam or Barrier into it and goes on to
+  midair attacks; Shadow Mewtwo's costs it HP.
+- [Smash] Aimed with the stick, its distance varies; the fixed distance is on purpose here.
+
+**Psyshock** · *Now:* a palm thrust and one straight shard (our own `psyshock_shard`). No homing. Special,
+measured against Defense.
+- [Games] The Defense rule. Cobblemon: `psybeam_charge`, `psybeam_targetburst`, `psybeam_targetsparkle`.
+
+**Calm Mind** · *Now:* arms lower, a slow pink ring closes in, +1 Sp. Atk and +1 Sp. Def at its end, twice a
+battle (no limit in the games: nothing resets stages in 1 vs 1). `selfboost.gd`, as Bulk Up.
+
+**Agility** · *Now:* short and sharp, dash lines and wind, +2 Speed once a battle. `selfboost.gd`.
+- [Games] The +2. Cobblemon: `quickattack_dashlines`.
+
+**Shadow Ball, on Mewtwo** · *Now:* the same move, with a clip named after it: both hands at the right hip by
+0.2 s, a thrust at 0.28 s. Every other Pokémon keeps `special`.
+- [Smash] Cupped hands at the hip; there it also charges and flies in a wavy path, not taken.

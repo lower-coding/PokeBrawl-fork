@@ -119,7 +119,8 @@ func on_end(_i: bool) -> void:
 func pose() -> Dictionary:
 	match phase:
 		"startup":
-			return {"tilt": -0.15, "stretch": 0.95, "anim": "special"}
+			# A model with a clip named after the move plays that (Mewtwo's hands at the hip).
+			return {"tilt": -0.15, "stretch": 0.95, "anim": id if l.model.has_anim(id) else "special", "reset": t < 0.02}
 		"active":
 			return {"tilt": 0.2, "stretch": 1.06}
 	return {}

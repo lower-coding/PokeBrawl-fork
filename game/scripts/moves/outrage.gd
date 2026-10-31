@@ -3,7 +3,7 @@ extends Action
 ## red, burning dragon aura with its eyes aglow, and throws itself at the rival "lunges"
 ## times in a row, each one aimed anew. Each lunge hits once; together they add up to the
 ## move's damage. Then, as in the games, the rage leaves it confused: a short recovery, then
-## "confuse" seconds with its movement turned around (Fighter.confused).
+## "confuse" seconds with its attack buttons shuffled (Fighter.confused).
 
 const RED := Color(1.0, 0.25, 0.15)
 const VIOLET := Color(0.5, 0.36, 1.0)
@@ -92,7 +92,7 @@ func on_recovery() -> void:
 	l.velocity.x *= 0.2
 	l.velocity.z *= 0.2
 	_turn_off()
-	# The rage wears off: it is left confused, its movement turned around for a while.
+	# The rage wears off: it is left confused, its attack buttons shuffled for a while.
 	l.confuse(float(d.confuse))
 
 

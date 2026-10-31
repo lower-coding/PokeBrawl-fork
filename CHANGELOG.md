@@ -3,6 +3,30 @@
 All notable changes to this project are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [demo-mewtwo] - 2026-10-31
+
+### Added
+- Mewtwo: a fast special attacker dangerous at any range, with the roster's highest stat total. It
+  takes away the rival's options and leaves with Teleport. Pressure: while it is in play, the rival's
+  cooldowns take 10% longer. Its attack clips are ours, since Cobblemon's model has none, and so is
+  its walk: it floats up and down, leaning forward in a guard with its tail swaying, where Cobblemon's
+  holds a still pose. `tools/mewtwo_walk.py` holds that walk's numbers.
+- Six moves, for everyone who learns them: Disable (every move not cooling down waits 3 s), Confusion
+  (close, wide, always confuses), Teleport (8 m the way it last moved, Mewtwo only), Psyshock (special,
+  measured against Defense), Calm Mind (twice a battle) and Agility (once a battle).
+- New test: `--test=mewtwo` (also part of `--test=mechanics`).
+
+### Changed
+- Confusion no longer turns your movement around: it shuffles which button fires which move, and
+  the move tiles change places to show the new order. It no longer refreshes while it lasts, and for
+  3 s after it wears off nothing confuses again. This also covers Water Pulse and Outrage. The
+  attacker now sees it online.
+- `bulkup.gd` is now `selfboost.gd`, shared by Bulk Up, Calm Mind and Agility.
+- A move with more cooldown left than its own no longer draws a negative line on the HUD.
+- Psychic's lift time is now `lift_hold`: as `hold` it made the AI fail every time it picked Psychic
+  and let a player stretch the move by holding its button.
+- The version is now `demo-mewtwo`: it cannot play online against `demo-urshifu`.
+
 ## [demo-urshifu] - 2026-10-31
 
 ### Added

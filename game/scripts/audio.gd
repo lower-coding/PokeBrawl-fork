@@ -60,6 +60,10 @@ const COBBLEMON := {
 	"wickedblow_hit": ["crunch", "crunch_target"], "protect": ["protect", "protect_actor"], "bulkup": ["nastyplot", "nastyplot_actor"],
 	"surgingstrikes": ["waterpulse", "waterpulse_actor"], "surgingstrikes_hit": ["watergun", "watergun_target"],
 	"chillingwater": ["watergun", "watergun_actor"], "chillingwater_hit": ["watergun", "watergun_target"],
+	"disable": ["kinesis", "kinesis_actor"], "disable_hit": ["kinesis", "kinesis_target"],
+	"confusion": ["confusion", "confusion_actor"], "confusion_hit": ["confusion", "confusion_target"],
+	"teleport": ["kinesis", "kinesis_actor"], "calmmind": ["kinesis", "kinesis_actor"], "agility": ["quickattack", "quickattack_actor"],
+	"psyshock": ["psychic", "psychic_actor"], "psyshock_hit": ["psychic", "psychic_target"],
 }
 
 var main: Node
