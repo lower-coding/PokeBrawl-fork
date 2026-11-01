@@ -5,6 +5,8 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+## [demo-whimsicott] - 2026-11-01
+
 ### Added
 - **Double jump** for every Pokémon that does not fly: jump again in the air, once before landing, for a
   sixth of the energy bar. The new **Double jump cost** rule changes that share, or makes it free. With too
