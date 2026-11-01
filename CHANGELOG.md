@@ -5,6 +5,8 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+## [demo-controls] - 2026-11-01
+
 ### Added
 - **Options > Controls**: the keys that move (WASD) can be changed. The arrow keys, the stick and the
   D-pad always move too, so the menus can always be used. On these rows a gamepad button cancels.
