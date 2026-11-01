@@ -20,9 +20,9 @@ func on_active() -> void:
 	decoy.setup(main, l, d.decoy_dur)
 	main.combat.targets.append(decoy)
 	l.translucent = d.dur
-	var r: Fighter = l.rival
-	if r and is_instance_valid(r):
-		r.fooled_by = decoy
+	for r in l.foes():
+		if r.rival == l:
+			r.fooled_by = decoy
 	main.vfx.burst("shadow", l.center(), Vector3.UP, Color(0, 0, 0, 0), 1.4)
 	main.vfx.burst("smoke", l.global_position, Vector3.UP, Color(0, 0, 0, 0), 1.0)
 	play_sound("substitute", -2.0)

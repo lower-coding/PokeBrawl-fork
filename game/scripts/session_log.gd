@@ -109,7 +109,7 @@ func _process(delta: float) -> void:
 	_sample_t += delta
 	if _sample_t >= SAMPLE_EVERY:
 		_sample_t = 0.0
-		var s := {"fps": fps, "hp": [int(main.fighters[0].hp), int(main.fighters[1].hp)]}
+		var s := {"fps": fps, "hp": main.fighters.map(func(f): return int(f.hp))}
 		if net:
 			s.ping_ms = net.ping_ms()
 			s.rival_states = net.states_applied

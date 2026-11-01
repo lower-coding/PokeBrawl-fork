@@ -1,7 +1,7 @@
 # PokeBrawl
 
 Real-time 3D Pokémon battles in the style of the anime, built in Godot with Cobblemon's models.
-Ten Pokémon, against the AI or online with a friend, 1 vs 1 or 3 vs 3.
+Ten Pokémon, against the AI or online with friends: 1 vs 1, 3 vs 3 or 2 vs 2.
 
 ![Charizard facing Lucario's Aura Sphere in the League Stadium](docs/images/battle.png)
 
@@ -49,7 +49,8 @@ godot --path game -- --p1=charizard --p2=pikachu --diff=hard --stage=league
 |---|---|
 | `--p1`, `--p2` | `pikachu`, `snorlax`, `charizard`, `blastoise`, `venusaur`, `lucario`, `gengar`, `garchomp`, `greninja`, `scizor`, `goodra`, `urshifu`, `urshifurapidstrike`, `mewtwo`, `sylveon` |
 | `--team`, `--team2` | a 3 vs 3 against the AI (prototype): `--team=charizard,lucario,venusaur`; the first one leads, a missing `--team2` is filled from the roster. See [3 vs 3](#3-vs-3-prototype) |
-| `--rules` | that battle's 3 vs 3 rules: `--rules=recall:0.4,lockout:5,bench_heal:0.5` (the ids and limits are in [battle_rules.gd](game/scripts/data/battle_rules.gd)) |
+| `--doubles` | a 2 vs 2 against the AI: you are `--p1`, your ally `--p3`, the foes `--p2` and `--p4`; teams with `--team`, `--team2`, `--team3`, `--team4` and `--rules=team_size:2` |
+| `--rules` | that battle's rules: `--rules=recall:0.4,lockout:5,bench_heal:0.5` (the ids and limits are in [battle_rules.gd](game/scripts/data/battle_rules.gd)) |
 | `--diff` | `easy`, `normal`, `hard` |
 | `--stage` | `night` (default), `floating`, `league` |
 | `--training` | still or active rival: **R** resets, **T** stops or frees the rival, **F3** shows the hitboxes |
@@ -57,9 +58,9 @@ godot --path game -- --p1=charizard --p2=pikachu --diff=hard --stage=league
 
 ## What is in
 
-- **Battle** against the AI (easy, normal, hard), **Online** and **Training**, 1 vs 1 or 3 vs 3.
+- **Battle** against the AI (easy, normal, hard) and **Training**, 1 vs 1, 3 vs 3 or 2 vs 2; **Online**, the same three.
 - **Moves:** each Pokémon's four moves and its ability, picked from the ones it learns in the
-  games (102 moves and 30 abilities so far). Every move has its details: power, cooldown, reach,
+  games (105 moves and 30 abilities so far). Every move has its details: power, cooldown, reach,
   timings and how to counter it. **Restore defaults** puts them back.
 - **Profile:** your trainer (nine, with the games' sprites) and your name. Your trainer stands
   by the field, throws the Poké Ball at the start and reacts to the battle; online, your rival
@@ -83,13 +84,13 @@ godot --path game -- --p1=charizard --p2=pikachu --diff=hard --stage=league
 | Dodge | B | ○ | Shift |
 | Lock on / release | RS (click the right stick) | R3 | Tab or middle click |
 | First person / back | none (set one in Options) | none (set one in Options) | C |
-| Switch target (locked on) | Flick the right stick | Flick the right stick | Sweep the mouse |
+| Switch target (locked on) | Flick the right stick | Flick the right stick | V, or sweep the mouse |
 | Move 1 | LB | L1 | Q |
 | Move 2 | RB | R1 | E |
 | Move 3 | LT | L2 | Right click |
 | Move 4 | RT | R2 | F |
 | Pause | Menu | Options | Esc |
-| Switch Pokémon (3 vs 3) | X, Y | □, △ | 1, 2 |
+| Switch Pokémon (with a team) | X, Y | □, △ | 1, 2 |
 | Fly (Charizard, Gengar) | A in the air to take off; hold A to climb | ✕ the same | Space the same |
 | Descend while flying | LS (click the left stick) | L3 | Ctrl |
 | Debug view | View | Share | F3 |
@@ -98,8 +99,9 @@ In the menus: A / ✕ / Space or left click picks, B / ○ / Backspace or right 
 Y / △ / X shows a move's details, and X / □ / R restores the defaults in the Moves screen. The
 mouse wheel scrolls. The Moves menu sets each Pokémon's moves and ability; **Edit Pokémon**, once
 the Pokémon are picked, does the same for just those picks, and it is saved too (the AI's picks
-have their own). Y / △ / X picks a random Pokémon on the selection, and RB / R1 / E rolls random
-moves before the battle, which last for that battle unless you then change one by hand.
+have their own, one set per AI). Y / △ / X picks a random Pokémon on the selection. Before the battle,
+RB / R1 / E rolls random moves for every pick and LB / L1 / Q for the AI's picks alone; they last for
+that battle unless you then change one by hand.
 
 ## How battles work
 
@@ -126,8 +128,9 @@ moves before the battle, which last for that battle unless you then change one b
 - **Streams are aimed by hand** (Flamethrower, Hydro Pump, Hyper Beam, Dragon Pulse, Solar Beam):
   hold the button and turn the stream with the stick; it hits several times and drains energy.
 - **Lock-on** locks what the camera looks at: the rival or one of its decoys (Substitute's doll,
-  Double Team's clones). Locked on, a flick of the right stick or a sweep of the mouse switches
-  target. With the camera free, moves go to the point at the center of the screen, up and down too,
+  Double Team's clones). Locked on, V goes through the targets in turn, and a flick of the right
+  stick or a sweep of the mouse switches to the next one that side (**Options > Mouse sweep changes
+  target** turns the sweep off). With the camera free, moves go to the point at the center of the screen, up and down too,
   and streams turn toward it; shots only follow a target they were aimed at. **Options > Crosshair**
   (off by default) marks that point and turns red on the foe; **Crosshair shape** makes it a cross
   or a circle. In the **Rules** tab, **No lock-on** keeps every player's camera free, **Aim assist**
@@ -163,6 +166,25 @@ changed, along with how many switches you get, and healing on the bench, off by 
   energy, a chip per teammate with its button, HP, and the seconds until it can come back or its
   status. A bar over a Pokémon going back to its ball shows how long it has left.
 
+### 2 vs 2
+
+You and an AI ally against two AI foes, offline for now. **Battle** and **Training** ask for the format
+first; the wall's **Rules** (X, R) set **Pokémon per trainer**, one to three, before anyone picks, and
+changing it keeps or trims the picks. Each trainer has their own team, switches, energy and lockouts.
+
+- **Locking on** goes through both foes and their decoys, never your ally. When a foe faints the lock jumps
+  to the other one, and a replacement does not pull it back.
+- **Winning:** a side loses when both its trainers have nobody left, so one trainer out leaves their partner
+  1 vs 2. Out of Pokémon, you watch your ally.
+- **Friendly fire**, off by default. On, your moves hurt your ally at full damage, and Earthquake and every
+  wave hit it by themselves; your own Pokémon are always spared. A hit on an ally charges nobody up.
+- **Moves for an ally:** **Ally Switch** swaps places with it, with shots on their way swapping targets too. It
+  works only in free aim with the ally under the crosshair, which turns blue while the move is ready. **Helping
+  Hand** makes its next attack within 3 s hit ×1.5, from close by. **Tailwind** gives Speed ×2 for 12 s, to you
+  and to an ally within 7 m. A move that needs an ally and has none is refused at no cost.
+- **Telling them apart:** a blue outline on your ally and a red one on your foes, decoys included, and with
+  nothing locked on, arrows the same colors. Both can be turned off in the options.
+
 ## The roster
 
 Default moves and ability, and the abilities each one can pick. The Moves screen has the rest.
@@ -195,14 +217,20 @@ are in [docs/move-references.md](docs/move-references.md); the plan to grow the 
 
 ## Online
 
-- Main menu → **Online**: one player picks **Host game** and the format, 1 vs 1 or 3 vs 3, the other
-  **Join** and types the host's IP.
+- Main menu → **Online**: one player picks **Host game** and the format, 1 vs 1, 3 vs 3 or 2 vs 2, the
+  others **Join** and type the host's IP. A 2 vs 2 takes up to three guests, and they can come in until
+  the battle starts.
 - The waiting screen shows the host's IPs: local, VPN if any, and public if the router opened the
   port by itself (UPnP). Otherwise, open port **7777 UDP** on the router or use a LAN VPN such as
   Radmin VPN or ZeroTier.
 - Both pick and get ready; then VS and battle. The host picks the stadium and, in a 3 vs 3, the
   rules, and the ping is shown at the top. A 3 vs 3's teams stay hidden from the rival until both
   are ready: only how many have been picked shows.
+- In a 2 vs 2 guests fill the seats in turn, so the first is your rival. AIs play the empty seats, at the
+  difficulty the host sets and with the Pokémon the host picks, and the host can swap any two seats on the
+  **Seats** screen, which also shows the IPs. Partners see each other's picks as they come; the other side's
+  stay hidden until the start. Someone leaving the room gives the seat back to the AI; someone leaving a
+  battle ends it for everyone. Guests' states go through the host, so they see each other at twice the path.
 - After a KO, a rematch starts once every player has asked for it; "pick others" goes back to
   the selection without disconnecting. With nobody choosing, the game goes back to the
   selection by itself after 15 s. There is no pause or KO slow motion online.
@@ -230,6 +258,10 @@ godot --headless --path game -- --test=status             # also: status_moves, 
 godot --headless --path game -- --test=deflect            # also: clash, lockon, league, trainers
 godot --headless --path game -- --test=team               # the rules of 3 vs 3 and switching
 godot --headless --path game -- --aivsai --test=team_battles --battles=20 --speed=4   # random teams: length, switches, wins
+godot --headless --path game -- --test=doubles            # the rules of 2 vs 2: sides, lock, friendly fire, its moves, the AI
+godot --headless --path game -- --test=menu_doubles       # its picks, and Rules and Options from the wall
+godot --headless --path game -- --aivsai --doubles --test=double_battles --battles=20 --speed=4   # random picks: length, wins
+godot --path game -- --test=outline                       # the outline, with captures and what it costs a frame
 godot --path game -- --test=menu                          # the menus with simulated input
 godot --path game -- --test=menu_moves                    # also: menu_options, menu_profile, menu_wheel, menu_forms, menu_forms_team
 godot --path game -- --test=moves --p1=charizard          # every move, with captures
@@ -238,7 +270,9 @@ godot --path game -- --aivsai --test=combat               # an on-screen battle,
 
 Online tests run two copies: `--host --bot --test=net` and `--join=127.0.0.1 --bot --test=net`
 (add `--lag=ms --jitter=ms --loss=%` to simulate a bad connection), or `--test=menu_net
---role=host|guest --bot` to go through the menus. Captures go to `captures/`.
+--role=host|guest --bot` to go through the menus. A 2 vs 2 takes two to four copies: `--doubles` on all and
+`--guests=N` on the host for `--test=net`, `--format=2v2` on all for `--test=menu_net`; `--press=N` has `--test=net`
+press move N every few seconds, for what the AI seldom plays. Captures go to `captures/`.
 
 ## Project layout
 

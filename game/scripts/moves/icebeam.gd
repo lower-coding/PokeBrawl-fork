@@ -78,7 +78,7 @@ func _stripe(from_pos: Vector3, to_pos: Vector3) -> void:
 	main.vfx.add_child(zone)
 	main.vfx.live(zone, d.ice_dur, func(_k: float):
 		for o in main.fighters:
-			if o == user or not is_instance_valid(o) or not o.on_floor():
+			if main.combat.spares(user, o) or not is_instance_valid(o) or not o.on_floor():
 				continue
 			var pos: Vector3 = o.global_position
 			var p := Geometry3D.get_closest_point_to_segment(Vector3(pos.x, ground, pos.z), a, b)

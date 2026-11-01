@@ -68,6 +68,7 @@ const COBBLEMON := {
 	"drainingkiss": ["megadrain", "megadrain_actor"], "drainingkiss_hit": ["megadrain", "megadrain_target"],
 	"moonblast": ["shadowball", "shadowball_actor"], "moonblast_hit": ["psychic", "psychic_target"],
 	"swift": ["magicalleaf", "magicalleaf_actor"], "swift_hit": ["magicalleaf", "magicalleaf_target"],
+	"allyswitch": ["kinesis", "kinesis_actor"], "helpinghand": ["nastyplot", "nastyplot_actor"], "tailwind": ["quickattack", "quickattack_actor"],
 	"dazzlinggleam": ["lightscreen", "lightscreen_actor"], "dazzlinggleam_hit": ["psychic", "psychic_target"],
 	"hypervoice": ["sing", "sing_actor"], "hypervoice_hit": ["kinesis", "kinesis_target"],
 }

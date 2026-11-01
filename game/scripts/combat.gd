@@ -17,6 +17,7 @@ var clock := 0.0
 
 func add_hit(g: Hit) -> Hit:
 	_retype(g)
+	_helped(g)
 	g.born = clock
 	hits.append(g)
 	return g
@@ -28,6 +29,15 @@ func _retype(g: Hit) -> void:
 	if g.type == "normal" and g.user is Fighter and is_instance_valid(g.user) and g.user.data.passive.id == "pixilate":
 		g.type = "fairy"
 		g.pink = true
+
+
+## Helping Hand: the use it went on carries it, on every hit and shot. The other place every hit
+## passes, with _retype.
+func _helped(g: Hit) -> void:
+	var a = g.user.action if g.user is Fighter and is_instance_valid(g.user) else null
+	if a and a.id == g.move_id and a.help > 1.0 and g.help == 1.0:
+		g.help = a.help
+		g.bonus *= a.help
 
 
 func remove(g: Hit) -> void:
@@ -50,17 +60,68 @@ func remove_from(user: Node) -> void:
 			g.active = false
 
 
-## Whether what "user" threw must pass through "o": itself, or a teammate that came out after
-## it switched (its shots keep flying once it has left).
+## Allies of "a" and "b" (a shot left flying by one that switched out counts).
+func same_side(a, b) -> bool:
+	return is_instance_valid(a) and is_instance_valid(b) and a is Fighter and b is Fighter and a.team == b.team
+
+
+## Whether what "user" threw passes through "o": itself, its own team (a teammate that came out
+## after it switched: its shots keep flying once it has left), and with friendly fire off its ally
+## and the ally's decoys.
 func spares(user, o) -> bool:
-	return o == user or (is_instance_valid(user) and is_instance_valid(o) and user is Fighter and o is Fighter and user.team == o.team)
+	if o == user:
+		return true
+	var who = o.user if o is Decoy else o
+	if who == user or not same_side(user, who):
+		return false
+	return not main.friendly_fire or user.slot == who.slot
 
 
-## Whether projectile "p" was thrown by "f" or a teammate (each team numbers its shots: online
-## the events about one say which by its number).
-func shot_by(p: Dictionary, f: Fighter) -> bool:
+const ALLY_SWITCH_COLOR := Color(0.7, 0.35, 0.85)
+
+
+## The shot number "seq" of whoever is in "slot", or null (each trainer numbers their shots: online
+## the events about one say which by its number, with its shooter's seat).
+func shot_of(slot: int, seq: int):
+	for p in projectiles:
+		var shooter = p.get("shooter")
+		if is_instance_valid(shooter) and shooter.slot == slot and p.get("seq", -2) == seq:
+			return p
+	return null
+
+
+## Who threw this shot, for what travels.
+func _shot_seat(p: Dictionary) -> int:
 	var shooter = p.get("shooter")
-	return is_instance_valid(shooter) and is_instance_valid(f) and shooter.team == f.team
+	return main.net.seat_of(shooter.slot) if is_instance_valid(shooter) else -1
+
+
+## "a" and "b", partners, trade places (Ally Switch): each lands on its spot with no speed, and
+## shots flying at either now fly at the other.
+func swap_allies(a: Fighter, b: Fighter, a_to: Vector3, b_to: Vector3) -> void:
+	_ally_flash(a.center())
+	_ally_flash(b.center())
+	var n := int(a.center().distance_to(b.center()) / 1.5)
+	for i in n:
+		main.vfx.burst("stars", a.center().lerp(b.center(), (i + 0.5) / n), Vector3.UP, ALLY_SWITCH_COLOR, 0.3)
+	for f in [[a, a_to], [b, b_to]]:
+		f[0].global_position = f[1]
+		f[0].velocity.x = 0.0
+		f[0].velocity.z = 0.0
+		f[0].reset_physics_interpolation()
+		# What its owner said before the swap would pull a copy back.
+		f[0].net_state = {}
+	for p in projectiles:
+		if p.target == a:
+			p.target = b
+		elif p.target == b:
+			p.target = a
+	main.audio.play_sound("allyswitch", a.global_position, -2.0)
+
+
+func _ally_flash(at: Vector3) -> void:
+	main.vfx.burst("shadow", at, Vector3.UP, ALLY_SWITCH_COLOR, 1.2)
+	main.vfx.light(at, ALLY_SWITCH_COLOR, 3.0, 4.0, 0.15)
 
 
 # ---------------------------------------------------------------- projectiles
@@ -87,6 +148,7 @@ func projectile(p: Dictionary) -> Dictionary:
 		if p.target is Fighter and p.target.data.passive.id == "sandveil" and main.weather and main.weather.is_on("sand"):
 			p.track *= 0.8
 	_retype(p.hit)
+	_helped(p.hit)
 	p.hit.local = false
 	p.hit.shape = "sphere"
 	p.hit.radius = p.radius
@@ -117,16 +179,14 @@ func _clashes(delta: float) -> void:
 		var a: Dictionary = projectiles[i]
 		for j in range(i + 1, projectiles.size()):
 			var b: Dictionary = projectiles[j]
-			if not a.alive or not b.alive or a.get("clashed", false) or b.get("clashed", false) or spares(a.user, b.user):
+			if not a.alive or not b.alive or a.get("clashed", false) or b.get("clashed", false) or a.user == b.user or same_side(a.user, b.user):
 				continue
 			var a0: Vector3 = a.pos - a.velocity * delta
 			var b0: Vector3 = b.pos - b.velocity * delta
 			if dist_seg_seg(a0, a.pos, b0, b.pos) >= a.radius + b.radius:
 				continue
 			if main.net:
-				var mine: Dictionary = a if shot_by(a, main.net.local) else b
-				var theirs: Dictionary = b if mine == a else a
-				main.net.send_event({"t": "clash", "h": mine.get("seq", -1), "g": theirs.get("seq", -1)})
+				main.net.send_event({"t": "clash", "sa": _shot_seat(a), "a": a.get("seq", -1), "sb": _shot_seat(b), "b": b.get("seq", -1)})
 			clash(a, b)
 
 
@@ -141,11 +201,11 @@ func _streams() -> void:
 	for g in hits:
 		if g.active and g.interval > 0.0 and g.user is Fighter and is_instance_valid(g.user) and g.shape in ["capsule", "cone"]:
 			g.cut = 0.0
-			g.bonus = 1.0
+			g.bonus = g.help
 			list.append(g)
 	for g in list:
 		for p in projectiles:
-			if not p.alive or p.user == g.user or p.get("cut_by") == g or not _touches_point(g, p.pos, p.radius):
+			if not p.alive or p.user == g.user or same_side(p.user, g.user) or p.get("cut_by") == g or not _touches_point(g, p.pos, p.radius):
 				continue
 			var sg := _power(g.move_id, g.hit_share()) * Roster.affinity(g.type, [p.hit.type])
 			var sp := clash_strength(p, {"hit": g})
@@ -161,7 +221,7 @@ func _streams() -> void:
 		for j in range(i + 1, list.size()):
 			var a: Hit = list[i]
 			var b: Hit = list[j]
-			if a.user == b.user:
+			if a.user == b.user or same_side(a.user, b.user):
 				continue
 			var at = _stream_contact(a, b)
 			if at == null:
@@ -175,7 +235,7 @@ func _streams() -> void:
 				_cut(b, at)
 			if not even:
 				var win: Hit = a if sa > sb else b
-				win.bonus = 1.0 - minf(sa, sb) / maxf(sa, sb)
+				win.bonus = win.help * (1.0 - minf(sa, sb) / maxf(sa, sb))
 			_contact_fx(at, a.type, b.type)
 
 
@@ -299,7 +359,7 @@ const DEFLECT_GUARD := 1.4
 ## "step": where it goes this frame; the whole stretch is checked, not just where it is.
 func _try_deflect(p: Dictionary, step: Vector3) -> bool:
 	for g in hits:
-		if not g.active or not (g.user is Fighter) or not is_instance_valid(g.user) or g.user == p.user or g.user.is_remote:
+		if not g.active or not (g.user is Fighter) or not is_instance_valid(g.user) or g.user == p.user or same_side(g.user, p.user) or g.user.is_remote:
 			continue
 		var level: int = int(Moves.DATA.get(g.move_id, {}).get("deflects", 0))
 		if level <= 0 or clock - g.born > DEFLECT_WINDOW:
@@ -319,11 +379,11 @@ func _try_deflect(p: Dictionary, step: Vector3) -> bool:
 			continue
 		deflect(p, g.user, level)
 		if main.net:
-			main.net.send_event({"t": "deflect", "seq": p.get("seq", -1), "level": level})
+			main.net.send_event({"t": "deflect", "s": _shot_seat(p), "seq": p.get("seq", -1), "by": main.net.seat_of(g.user.slot), "level": level})
 		return true
 	# The wind-up's end.
 	for f in targets:
-		if not (f is Fighter) or not is_instance_valid(f) or f == p.user or f.is_remote:
+		if not (f is Fighter) or not is_instance_valid(f) or f == p.user or same_side(f, p.user) or f.is_remote:
 			continue
 		var a: Action = f.action
 		if a == null or a.phase != "startup" or a.t < a.startup_len() - DEFLECT_EARLY:
@@ -347,7 +407,7 @@ func _try_deflect(p: Dictionary, step: Vector3) -> bool:
 			continue
 		deflect(p, f, level)
 		if main.net:
-			main.net.send_event({"t": "deflect", "seq": p.get("seq", -1), "level": level})
+			main.net.send_event({"t": "deflect", "s": _shot_seat(p), "seq": p.get("seq", -1), "by": main.net.seat_of(f.slot), "level": level})
 		return true
 	return false
 
@@ -576,7 +636,7 @@ func apply(g: Hit, o: Node, point: Vector3) -> String:
 	var res: String = o.receive(info)
 	# Online, if the attacker is the rival's copy, the hit is confirmed to it.
 	if attacker is Fighter and attacker.is_remote and res != "" and main.net:
-		main.net.send_event({"t": "hit", "res": res, "damage": hp_before - (o.hp if o is Fighter else 0.0),
+		main.net.send_event({"t": "hit", "by": main.net.seat_of(attacker.slot), "res": res, "damage": hp_before - (o.hp if o is Fighter else 0.0),
 			"affinity": mult, "point": point, "move": g.move_id})
 	if res == "":
 		return ""
@@ -622,13 +682,16 @@ func apply(g: Hit, o: Node, point: Vector3) -> String:
 
 
 ## Own hit on the rival's copy online: effects, hitstop, landing (for combos) and
-## energy right away. No damage: the rival confirms that.
+## energy right away. No damage: the rival confirms that. Between two copies, on a third player's
+## screen, only the look: the attacker's owner and the target's settle the rest, and an effect sent
+## from here as well would land twice.
 func _predicted_hit(g: Hit, o: Fighter, point: Vector3, mult: float, flow: bool) -> String:
 	if o.invulnerable > 0.0 or o.state == "ko":
 		return ""
+	var mine: bool = not (g.user is Fighter and is_instance_valid(g.user) and g.user.is_remote)
 	if g.cat == "status":
 		# The rival decides whether it takes (Fighter._status_move); nothing to predict.
-		if g.on_strike.is_valid():
+		if g.on_strike.is_valid() and mine:
 			Vfx.pink_if(g.pink, g.on_strike.bind(o, "status"))
 		return "status"
 	if Moves.DATA.get(g.move_id, {}).get("needs_attacking", false) and not o.is_attacking():
@@ -636,13 +699,14 @@ func _predicted_hit(g: Hit, o: Fighter, point: Vector3, mult: float, flow: bool)
 		return "failed"
 	var attacker: Node = g.user
 	var strength := g.strength
-	if attacker is Fighter and is_instance_valid(attacker):
+	if mine and attacker is Fighter and is_instance_valid(attacker):
 		attacker.on_strike(o, g, "hit")
 		# Its team's energy, even with a shot left flying when it switched out.
 		var credit: Fighter = attacker.party.active if attacker.party else attacker
-		credit.energy = minf(Fighter.ENERGY_MAX, credit.energy + 3.0)
-		if attacker.party and not flow:
-			attacker.party.on_landed_hit()
+		if not same_side(attacker, o):
+			credit.energy = minf(Fighter.ENERGY_MAX, credit.energy + 3.0)
+			if attacker.party and not flow:
+				attacker.party.on_landed_hit()
 		if attacker.boosted_hits > 0 and g.cat == "physical":
 			attacker.boosted_hits -= 1
 		if not flow:
@@ -652,9 +716,9 @@ func _predicted_hit(g: Hit, o: Fighter, point: Vector3, mult: float, flow: bool)
 		Vfx.pink_if(g.pink, main.vfx.impact.bind(point, g.type, strength, g.contact))
 		main.audio.impact(g.type, strength, point)
 		main.shake_camera(0.08 + 0.12 * strength, point)
-		if attacker is Fighter and attacker.has_method("rumble_pad"):
+		if mine and attacker is Fighter and attacker.has_method("rumble_pad"):
 			attacker.rumble_pad(0.2 + 0.25 * strength, 0.35 + 0.3 * strength, 0.08 + 0.06 * strength)
-	if g.on_strike.is_valid():
+	if g.on_strike.is_valid() and mine:
 		Vfx.pink_if(g.pink, g.on_strike.bind(o, "hit"))
 	return "hit"
 

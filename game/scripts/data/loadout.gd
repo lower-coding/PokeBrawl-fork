@@ -2,8 +2,8 @@ class_name Loadout
 extends RefCounted
 ## Each Pokémon's four moves and its ability, as the player sets them in the Moves menu or
 ## before a battle. Saved in user://loadouts.json, so they last between sessions; online, each
-## side sends its own with its choice. What is set for the AI's picks (side 1) is saved apart,
-## so giving the AI's Charizard a set does not change yours. Only moves the Pokémon learns in the games (level, egg, TM or
+## side sends its own with its choice. What is set for the AI's picks is saved apart, one set for
+## each AI's slot, so giving the AI's Charizard a set does not change yours, nor a 2 vs 2's other AI's. Only moves the Pokémon learns in the games (level, egg, TM or
 ## tutor) and whose script is done are allowed, and only abilities it has; anything else
 ## falls back to the roster's defaults.
 
@@ -16,6 +16,7 @@ const AI_KEY := "ai"
 
 static var _saved := {}
 static var _saved_ai := {}       # side 1's, under "ai" in the same file
+static var _saved_more := {}     # slot -> a 2 vs 2's other AIs' (2 and 3), under "ai2" and "ai3"
 static var _loaded := false
 static var _learners := {}       # move -> how many Pokémon can use it
 static var _groups := {}         # species and language -> its move_groups
@@ -68,10 +69,35 @@ static func _listed_before(a: String, b: String) -> bool:
 	return na.naturalnocasecmp_to(nb) < 0
 
 
+## The moves that help an ally, by how much the AI wants them (ai_doubles).
+const ALLY_MOVES := ["allyswitch", "tailwind", "helpinghand"]
+
+
+## In a 2 vs 2, an AI Pokémon with nothing saved: half the time its least valued move gives way to
+## an ally move it can learn.
+static func ai_doubles(sp: String) -> Dictionary:
+	var out := default_for(sp)
+	if randf() >= 0.5:
+		return out
+	var can := moves_for(sp)
+	for m in ALLY_MOVES:
+		if m in can and not m in out.moves:
+			var worst := 0
+			for i in out.moves.size():
+				if float(Moves.DATA[out.moves[i]].get("ai", {}).get("value", 0.0)) < float(Moves.DATA[out.moves[worst]].get("ai", {}).get("value", 0.0)):
+					worst = i
+			out.moves[worst] = m
+			break
+	return out
+
+
 ## Four different random moves it can use, at least one an attack of its own type (STAB), or just
-## an attack if it has none of those: with none it could not fight.
-static func random_moves(sp: String) -> Array:
+## an attack if it has none of those: with none it could not fight. Outside a 2 vs 2, none of those
+## that do nothing without an ally ("doubles").
+static func random_moves(sp: String, doubles := false) -> Array:
 	var pool := moves_for(sp)
+	if not doubles:
+		pool = pool.filter(func(m): return not Moves.DATA[m].get("needs_ally", false))
 	pool.shuffle()
 	var four := pool.slice(0, 4)
 	var attacks := pool.filter(func(m): return Moves.DATA[m].get("power", 0) > 0)
@@ -160,9 +186,16 @@ static func is_default(sp: String, side := 0) -> bool:
 	return saved(sp, side) == default_for(sp)
 
 
+## Whether anything is saved for it on that side, even its default set put back by hand.
+static func has_set(sp: String, side := 0) -> bool:
+	return _of_side(side).has(sp)
+
+
 static func _of_side(side: int) -> Dictionary:
 	_load()
-	return _saved_ai if side == 1 else _saved
+	if side == 0:
+		return _saved
+	return _saved_ai if side == 1 else _saved_more.get_or_add(side, {})
 
 
 static func _write() -> void:
@@ -170,6 +203,8 @@ static func _write() -> void:
 	if f:
 		var all := _saved.duplicate()
 		all[AI_KEY] = _saved_ai
+		for slot in _saved_more:
+			all[AI_KEY + str(slot)] = _saved_more[slot]
 		f.store_string(JSON.stringify(all, "\t"))
 
 
@@ -177,10 +212,15 @@ static func _load() -> void:
 	if _loaded:
 		return
 	_loaded = true
+	_saved_more = {}
 	if FileAccess.file_exists(path):
 		var d: Variant = JSON.parse_string(FileAccess.get_file_as_string(path))
 		if d is Dictionary:
 			var ai: Variant = d.get(AI_KEY, {})
 			_saved_ai = ai if ai is Dictionary else {}
 			d.erase(AI_KEY)
+			for slot in [2, 3]:
+				var more: Variant = d.get(AI_KEY + str(slot), {})
+				_saved_more[slot] = more if more is Dictionary else {}
+				d.erase(AI_KEY + str(slot))
 			_saved = d

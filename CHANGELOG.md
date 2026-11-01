@@ -5,6 +5,40 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+### Added
+- **2 vs 2**: you and an AI ally against two AI foes, or online with two to four players and AIs in the
+  empty seats. Each trainer brings one to three Pokémon (the **Pokémon per trainer** rule, 1 by default),
+  with their own switches, energy and lockouts. A side loses when both its trainers have nobody left; out of
+  Pokémon, you watch your ally.
+- **Online 2 vs 2 room**: the host picks for the AIs and sets how hard they are, and swaps anyone on the new
+  **Seats** screen, at any point of the picks (Tab, R3, or its button on the wall). Partners see each other's
+  picks as they come; the other side's stay hidden until the start. Someone leaving the room gives the seat
+  back to the AI; during a battle it ends for everyone.
+- **Change my team** (F, RT, R2) in a 2 vs 2 where you pick for the AIs: back to your team without undoing
+  theirs. A click on any team's pick does the same for that team.
+- **Friendly fire** rule, off by default. On, your moves hurt your ally at full damage, with no energy, no
+  time off the next switch and no cheer for it. Your own Pokémon are always spared.
+- Three moves for an ally: **Ally Switch** (Gengar, Mewtwo), aimed with the crosshair: it swaps both places,
+  and shots on their way swap targets; **Helping Hand** (13 Pokémon): the ally's next attack within 3 s hits
+  ×1.5; and **Tailwind** (Scizor): Speed ×2 for 12 s, for the caster and an ally within 7 m.
+- **Options > Ally and foe outline** and **Ally and foe arrows**, on by default: in a 2 vs 2, blue on your
+  ally and red on your foes, decoys included.
+- **Rules** (X, R) and **Options** (Menu, Esc) can be opened from the Pokémon wall, before picking, and Options
+  from the battle's options too. Both come back with the picks in place.
+- The AI picks which foe to go after, keeps away from its ally, holds a shot its ally is in the way of with
+  friendly fire on, and uses the moves for an ally. With nothing set for it, it sometimes brings one of them,
+  and the battle's options and Edit Pokémon show it.
+- **Change target** (V, it can be changed in Options): locked on, goes through the targets in turn.
+  **Options > Mouse sweep changes target**, on by default, turns the mouse's sweep off.
+- **Random moves for the AI's picks alone** in the battle's options (LB, L1, Q). In a 2 vs 2, each AI has
+  its own saved sets on Edit Pokémon, so two AIs with the same Pokémon can differ.
+
+### Changed
+- The version is now `demo-doubles`: it cannot play online against `demo-sylveon`.
+- Effects volume starts at 50%, like the music. Options already saved keep their values.
+- A shot left flying by a teammate that switched out no longer clashes with, or is cut or deflected by, a
+  stream or deflecting move of the same team.
+
 ## [demo-sylveon] - 2026-11-01
 
 ### Added

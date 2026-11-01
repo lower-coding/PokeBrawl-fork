@@ -17,6 +17,10 @@ uniform float flash = 0.0;   // destello blanco al recibir un golpe
 uniform float glow = 0.0;    // brillo de la textura emisiva (mejillas)
 uniform float fade = 1.0;    // 1 = entero, 0 = desaparecido (tramado)
 uniform vec3 tint = vec3(0.0); // tinte aditivo (aviso de ataque)
+// A 2 vs 2's outline (TeamOutline): its color, drawn flat when the mask's camera is looking. That
+// camera sees that layer alone; every other camera sees more, or does not include it.
+uniform vec3 mark : source_color = vec3(0.0);
+const uint OUTLINE_LAYER = 262144u;
 
 void fragment() {
 	vec4 c = texture(tex, UV);
@@ -43,4 +47,9 @@ void fragment() {
 	}
 	ROUGHNESS = 0.95;
 	SPECULAR = 0.2;
+	if (CAMERA_VISIBLE_LAYERS == OUTLINE_LAYER) {
+		ALBEDO = vec3(0.0);
+		SPECULAR = 0.0;
+		EMISSION = mark;
+	}
 }

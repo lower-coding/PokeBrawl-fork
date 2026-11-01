@@ -14,6 +14,9 @@ extends Node
 ## With a team (Party) it also looks every so often at whether a teammate would do clearly
 ## better ("switch_margin", in Party.score's units) and sends it out when the rival is not on
 ## top of it.
+## In a 2 vs 2 it chooses which foe to go after (_choose_rival), keeps its distance from its ally
+## and uses the moves that help it (_help); with friendly fire on it holds a shot its ally is in
+## the way of.
 
 const DIFFICULTY := {
 	"easy": {"reaction": 0.42, "aim_lead": 0.3, "aim_error": 1.6, "error": 0.32, "doubt": 0.5, "punish": 0.4, "defense": 0.45, "deflect": 0.05, "deflect_error": 0.12, "switch_every": 8.0, "switch_margin": 0.9},
@@ -51,6 +54,7 @@ var mode := "active"           # active, still (training)
 var state_text := ""         # for the debug view
 
 var _history: Array = []     # snapshots of the rival: {t, pos, vel, state, action, phase, on_ground}
+var _sight := {}             # foe -> what it saw of it (_watch): recorded all the time, so a change of rival has fresh sight
 var _t := 0.0
 var _decision_t := 0.0
 var _circling := 1.0
@@ -60,14 +64,26 @@ var _cooldown_def := 0.0
 var _rival_dodges: Array = []
 var _rival_last_dodge := -10.0
 var _plan := ""
-var _decoy_seen: Object = null    # the last rival decoy it has seen
-var _fooled := false               # whether it fell for it
 const DODGE_REACH := 6.0      # about how far a dodge carries it, with some to spare (m)
 const BELIEVES_DECOY := {"easy": 0.9, "normal": 0.65, "hard": 0.35}
 const RANGED := ["projectile", "stream", "charge", "engage"]   # what reaches another height (dashes go diagonally)
 var _flight_pending := -1.0              # pending second jump to take off
 var _aim_phase := Vector2(randf() * TAU, randf() * TAU)   # so each AI wobbles its own way
 var _switch_t := 3.0                     # seconds until it thinks about switching again
+var _rival_t := 0.0                      # seconds until it looks again at which foe to go after
+var _help_t := 0.0                       # seconds until it looks again at helping its ally
+var _aid_t := 0.0                        # how long it has been turning to its ally for Ally Switch
+const RIVAL_EVERY := 1.5
+const RIVAL_NEAR := 5.0                  # a foe this close and attacking takes over at once
+const RIVAL_STICKY := 0.35               # how much better another foe has to look (in _foe_score's units)
+const ALLY_KEEP := 3.0                   # how far it keeps from its ally, so one area hit does not catch both
+const AID_TURN := 0.5                    # it gives up on turning to its ally after this long
+const HELP_EVERY := 0.25
+const SHOT_SOON := 0.5                   # Ally Switch: a shot arriving on the ally within this long
+const ALLY_LOW := 0.3                    # Ally Switch: the ally is this low on health with a foe on it
+const WALK_TO_ALLY_FOE := 4.0            # Helping Hand: it walks to the ally only with no foe this close
+const WIND_FOE := 6.0                    # Tailwind: no foe this close
+const BIG_MOVE := 80                     # the power of a move worth helping
 
 
 ## Its Pokémon or the rival's changed: what it saw of the old one no longer counts.
@@ -77,10 +93,7 @@ func on_swap(out: Fighter, incoming: Fighter) -> void:
 		_hold.clear()
 	if rival == out:
 		rival = incoming
-		_history.clear()
-		_rival_dodges.clear()
-		_decoy_seen = null
-		_fooled = false
+	_sight.erase(out)
 
 
 func _physics_process(delta: float) -> void:
@@ -92,6 +105,9 @@ func _physics_process(delta: float) -> void:
 		return
 	_t += delta
 	_cooldown_def -= delta
+	# The fighter's is the one that counts: a KO, a swap or a lock may have moved it.
+	if me.rival and is_instance_valid(me.rival):
+		rival = me.rival
 	_record()
 	var c := me.ctrl
 	for k in _hold.keys():
@@ -101,6 +117,7 @@ func _physics_process(delta: float) -> void:
 			c.release(k)
 	if mode == "still":
 		return   # still: does not touch the controls (training and tests use them)
+	_choose_rival(delta)
 	if me.state == "ko" or rival.state == "ko" or main.paused:
 		c.move_input = Vector2.ZERO
 		return
@@ -125,6 +142,9 @@ func _physics_process(delta: float) -> void:
 		_edge_guard()
 		return
 	if _consider_switch(seen, dist, diff, delta):
+		return
+	if _help(diff, delta):
+		_edge_guard()
 		return
 	# 2 and 3. Decide every so often, not every step (with doubt depending on difficulty).
 	_decision_t -= delta
@@ -178,19 +198,19 @@ func _consider_switch(seen: Dictionary, dist: float, diff: Dictionary, delta: fl
 	_switch_t -= delta
 	if _switch_t > 0.0:
 		return false
-	if dist < SWITCH_MIN_DIST or seen.state == "action" or main.combat.projectiles.any(func(p): return p.user != me):
+	if dist < SWITCH_MIN_DIST or seen.state == "action" or main.combat.projectiles.any(func(p): return p.user != me and not main.combat.same_side(p.user, me)):
 		_switch_t = SWITCH_RETRY
 		return false
 	_switch_t = float(diff.switch_every) * randf_range(0.8, 1.2)
 	var stages := 0
 	for k in me.stages:
 		stages += int(me.stages[k])
-	var here: float = Party.score(me, rival) + 0.15 * stages - (SWITCH_CHARMED if me.charmed_by != "" else 0.0)
+	var here: float = _worst_score(me) + 0.15 * stages - (SWITCH_CHARMED if me.charmed_by != "" else 0.0)
 	var best := -1
 	var best_score: float = here + float(diff.switch_margin)
 	for slot in 2:
 		if me.party.can_switch(slot):
-			var s: float = Party.score(me.party.slot_member(slot), rival)
+			var s: float = _worst_score(me.party.slot_member(slot))
 			if s > best_score:
 				best_score = s
 				best = slot
@@ -201,34 +221,105 @@ func _consider_switch(seen: Dictionary, dist: float, diff: Dictionary, delta: fl
 	return true
 
 
+## How good "f" looks against whichever foe suits it worst (one foe: that one).
+func _worst_score(f: Fighter) -> float:
+	var worst: float = Party.score(f, rival)
+	if main.doubles:
+		for o in me.foes():
+			worst = minf(worst, Party.score(f, o))
+	return worst
+
+
+# ---------------------------------------------------------------- which foe
+
+## In a 2 vs 2, every so often and with some stickiness: the foe closest, with the least health
+## left and that it does best against. One within RIVAL_NEAR and attacking takes over at once.
+func _choose_rival(delta: float) -> void:
+	if not main.doubles or me.state == "ko":
+		return
+	_rival_t -= delta
+	var foes := me.foes()
+	if foes.is_empty():
+		return
+	var best: Fighter = null
+	for f in foes:
+		if f != rival and me.global_position.distance_to(f.global_position) < RIVAL_NEAR and f.is_attacking():
+			best = f
+	if best == null and (rival.state == "ko" or _rival_t <= 0.0):
+		_rival_t = RIVAL_EVERY
+		var top := -INF
+		for f in foes:
+			var s := _foe_score(f) + (RIVAL_STICKY if f == rival else 0.0)
+			if s > top:
+				top = s
+				best = f
+	if best != null and best != rival:
+		rival = best
+		me.rival = best
+		_look_at_rival()
+
+
+func _foe_score(f: Fighter) -> float:
+	var dist: float = me.global_position.distance_to(f.global_position)
+	return -dist * 0.1 + (1.0 - f.hp / f.hp_max) + Party.score(me, f) * 0.25
+
+
 # ---------------------------------------------------------------- perception
 
+## What it knows of a foe. "last_dodge" and the rest are this foe's alone.
+func _watch(foe: Fighter) -> Dictionary:
+	if not _sight.has(foe):
+		_sight[foe] = {"history": [], "dodges": [], "last_dodge": -10.0, "decoy": null, "fooled": false}
+	return _sight[foe]
+
+
 func _record() -> void:
+	var watched: Array = me.foes() if main.doubles else [rival]
+	if not rival in watched:
+		watched.append(rival)
+	for foe in watched:
+		_record_foe(foe)
+	_look_at_rival()
+
+
+## What it goes by is what it knows of its rival.
+func _look_at_rival() -> void:
+	var s := _watch(rival)
+	_history = s.history
+	_rival_dodges = s.dodges
+	_rival_last_dodge = s.last_dodge
+	me.fooled_by = s.decoy if s.fooled and is_instance_valid(s.decoy) else null
+
+
+func _record_foe(foe: Fighter) -> void:
+	var s := _watch(foe)
 	# Substitute: if it falls for the decoy, what it sees is the still decoy.
 	var decoy: Object = null
 	for o in main.combat.targets:
-		if o is Decoy and o.user == rival and is_instance_valid(o):
+		if o is Decoy and o.user == foe and is_instance_valid(o):
 			decoy = o
-	if decoy != _decoy_seen:
-		_decoy_seen = decoy
+	if decoy == null:
+		s.decoy = null
+		s.fooled = false
+	elif decoy != s.decoy:
+		s.decoy = decoy
 		# Substitute's doll always fools it (Gengar is invisible); Double Team's clones,
 		# depending on the difficulty.
-		_fooled = decoy != null and (decoy.kind == "substitute" or randf() < BELIEVES_DECOY[difficulty])
-	me.fooled_by = decoy if _fooled else null
-	if decoy != null and _fooled:
-		_history.append({"t": _t, "pos": decoy.global_position, "speed": Vector3.ZERO, "state": "free",
-			"action": "", "phase": "", "charge": 0.0, "on_ground": true, "hp": rival.hp})
+		s.fooled = decoy.kind == "substitute" or randf() < BELIEVES_DECOY[difficulty]
+	if decoy != null and s.fooled:
+		s.history.append({"t": _t, "pos": decoy.global_position, "speed": Vector3.ZERO, "state": "free",
+			"action": "", "phase": "", "charge": 0.0, "on_ground": true, "hp": foe.hp})
 	else:
-		_history.append({"t": _t, "pos": rival.global_position, "speed": rival.velocity, "state": rival.state,
-			"action": rival.action.id if rival.action else "", "phase": rival.action.phase if rival.action else "",
-			"charge": rival.action.charge if rival.action else 0.0, "on_ground": rival.is_on_floor(), "hp": rival.hp})
-	while _history.size() > 90:
-		_history.pop_front()
-	if rival.state == "dodge" and _t - _rival_last_dodge > 0.5:
-		_rival_last_dodge = _t
-		_rival_dodges.append(_t)
-	while not _rival_dodges.is_empty() and _t - _rival_dodges[0] > 12.0:
-		_rival_dodges.pop_front()
+		s.history.append({"t": _t, "pos": foe.global_position, "speed": foe.velocity, "state": foe.state,
+			"action": foe.action.id if foe.action else "", "phase": foe.action.phase if foe.action else "",
+			"charge": foe.action.charge if foe.action else 0.0, "on_ground": foe.is_on_floor(), "hp": foe.hp})
+	while s.history.size() > 90:
+		s.history.pop_front()
+	if foe.state == "dodge" and _t - s.last_dodge > 0.5:
+		s.last_dodge = _t
+		s.dodges.append(_t)
+	while not s.dodges.is_empty() and _t - s.dodges[0] > 12.0:
+		s.dodges.pop_front()
 
 
 ## What it sees: the rival as it was "delay" seconds ago (plus a bit of noise).
@@ -264,7 +355,7 @@ func _defend(seen: Dictionary, dist: float, diff: Dictionary) -> bool:
 		return false
 	# Projectiles coming at me (seen with the same delay: age > reaction).
 	for p in main.combat.projectiles:
-		if p.user == me or p.age_t < diff.reaction:
+		if main.combat.spares(p.user, me) or p.age_t < diff.reaction:
 			continue
 		var rel: Vector3 = me.center() - p.pos
 		var v: Vector3 = p.velocity
@@ -426,7 +517,7 @@ func _punish(seen: Dictionary, dist: float, diff: Dictionary) -> bool:
 		if not me.ready(move):
 			continue
 		var ai: Dictionary = Moves.DATA[move].get("ai", {})
-		if ai.is_empty() or ai.kind in ["heal", "guard", "decoy"] or not _only_if(ai, seen):
+		if ai.is_empty() or ai.kind in ["heal", "guard", "decoy", "ally"] or not _only_if(ai, seen):
 			continue
 		# A weather that is already on is not called again.
 		if Moves.DATA[move].has("weather") and main.weather.is_on(Moves.DATA[move].weather):
@@ -435,6 +526,8 @@ func _punish(seen: Dictionary, dist: float, diff: Dictionary) -> bool:
 		if _status_useless(move):
 			continue
 		if _other_height(seen) and not ai.kind in RANGED:
+			continue
+		if _hits_ally(ai, seen):
 			continue
 		if dist >= ai.min and dist <= ai.max + me.radius():
 			var v: float = ai.value * (1.4 if ai.kind in ["punish", "engage"] else 1.0)
@@ -472,6 +565,12 @@ func _move_ai(seen: Dictionary, dist: float, delta: float) -> void:
 		var to_center := _to_local(-Vector3(p.x, 0, p.z).normalized())
 		m = (m * 0.4 + to_center * 1.2).limit_length(1.0)
 		_circling = -_circling if randf() < 0.02 else _circling
+	# Apart from its ally, so one area hit does not catch both.
+	var mate := me.ally()
+	if mate:
+		var off := Vector3(p.x - mate.global_position.x, 0.0, p.z - mate.global_position.z)
+		if off.length() < ALLY_KEEP and off.length() > 0.01:
+			m += _to_local(off.normalized()) * (1.0 - off.length() / ALLY_KEEP) * 1.5
 	me.ctrl.move_input = m.limit_length(1.0)
 
 
@@ -509,7 +608,7 @@ func _attack(seen: Dictionary, dist: float, diff: Dictionary) -> void:
 		if not me.ready(move):
 			continue
 		var ai: Dictionary = Moves.DATA[move].get("ai", {})
-		if ai.is_empty() or ai.kind in ["heal", "guard", "decoy"] or not _only_if(ai, seen):
+		if ai.is_empty() or ai.kind in ["heal", "guard", "decoy", "ally"] or not _only_if(ai, seen):
 			continue
 		# A weather that is already on is not called again.
 		if Moves.DATA[move].has("weather") and main.weather.is_on(Moves.DATA[move].weather):
@@ -518,6 +617,8 @@ func _attack(seen: Dictionary, dist: float, diff: Dictionary) -> void:
 		if _status_useless(move):
 			continue
 		if _other_height(seen) and not ai.kind in RANGED:
+			continue
+		if _hits_ally(ai, seen):
 			continue
 		if dist < ai.min or dist > ai.max + me.radius():
 			continue
@@ -547,10 +648,141 @@ func _only_if(ai: Dictionary, seen: Dictionary) -> bool:
 	return true
 
 
+## With friendly fire on: this move would catch its ally, who stands in its line to the rival or
+## within reach of an area move.
+func _hits_ally(ai: Dictionary, seen: Dictionary) -> bool:
+	if not main.friendly_fire:
+		return false
+	var mate := me.ally()
+	if mate == null:
+		return false
+	var to_mate := Vector3(mate.global_position.x - me.global_position.x, 0.0, mate.global_position.z - me.global_position.z)
+	if ai.kind == "area":
+		return to_mate.length() <= float(ai.max) + mate.radius()
+	var to_rival := Vector3(seen.pos.x - me.global_position.x, 0.0, seen.pos.z - me.global_position.z)
+	if to_rival.length() < 0.1 or to_mate.length() > to_rival.length():
+		return false
+	var along := to_mate.dot(to_rival.normalized())
+	return along > 0.0 and (to_mate - to_rival.normalized() * along).length() < mate.radius() + 0.6
+
+
 ## The rival (or me) at another height: flying or on top of something. Melee hits and
 ## ground waves do not reach.
 func _other_height(seen: Dictionary) -> bool:
 	return absf(seen.pos.y - me.global_position.y) > 2.0
+
+
+# ---------------------------------------------------------------- its ally
+
+## Between defending and attacking: a move that helps its ally, when it is worth it. True while it
+## is busy with that, so nothing else takes the button or the stick. "aiding" points it at the ally
+## just for Ally Switch's startup; a player never has one.
+func _help(diff: Dictionary, delta: float) -> bool:
+	if me.aiding and not _turning_to_ally(delta):
+		me.aiding = null
+		me.ctrl.aim_ally = false
+	if me.aiding:
+		return true
+	_help_t -= delta
+	if me.state != "free" or _help_t > 0.0:
+		return false
+	_help_t = HELP_EVERY
+	var mate := me.ally()
+	if _wants_ally_switch(mate, diff):
+		me.aiding = mate
+		_aid_t = 0.0
+		state_text = "turns to its ally"
+		return true
+	if _wants_helping_hand(mate, diff):
+		if me.ctrl.ally_near:
+			_use("helpinghand")
+			state_text = "helps its ally"
+			return true
+		# Far off, with a big move on its ally's side and nobody on it: over there first.
+		if me.global_position.distance_to(rival.global_position) >= WALK_TO_ALLY_FOE and _ally_has_big_move(mate):
+			me.ctrl.move_input = _to_local(mate.global_position - me.global_position)
+			state_text = "walks to its ally"
+			_help_t = 0.0
+			return true
+	if _wants_tailwind(mate):
+		_use("tailwind")
+		state_text = "calls the wind"
+		return true
+	return false
+
+
+## Faces its ally; once it does, it says so and presses. False once it is over.
+func _turning_to_ally(delta: float) -> bool:
+	if me.action and me.action.id == "allyswitch" and me.action.phase == "startup":
+		return true
+	_aid_t += delta
+	var mate := me.ally()
+	if mate == null or me.state != "free" or _aid_t > AID_TURN or not me.ready("allyswitch"):
+		return false
+	me.ctrl.move_input = Vector2.ZERO
+	var to: Vector3 = mate.global_position - me.global_position
+	to.y = 0.0
+	if me.forward().dot(to.normalized()) > 0.85:
+		me.ctrl.aim_ally = true
+		_use("allyswitch")
+	return true
+
+
+func _wants_ally_switch(mate: Fighter, diff: Dictionary) -> bool:
+	if mate == null or not "allyswitch" in me.data.moves or not me.ready("allyswitch") or not _clear_line(mate.global_position):
+		return false
+	if not _swap_is_worth_it(mate):
+		return false
+	return randf() < diff.defense
+
+
+## A shot about to land on the ally that it would rather take itself, or the ally low on health
+## with a foe on it.
+func _swap_is_worth_it(mate: Fighter) -> bool:
+	if mate.hp / mate.hp_max < ALLY_LOW:
+		for f in mate.foes():
+			if f.rival == mate and f.global_position.distance_to(mate.global_position) < RIVAL_NEAR:
+				return true
+	for p in main.combat.projectiles:
+		if main.combat.same_side(p.user, me) or p.target != mate:
+			continue
+		var v: Vector3 = p.velocity
+		if v.length_squared() < 1.0:
+			continue
+		var soon: float = (mate.center() - p.pos).dot(v) / v.length_squared()
+		if soon < 0.0 or soon > SHOT_SOON:
+			continue
+		if me.hp / me.hp_max > mate.hp / mate.hp_max or Roster.affinity(p.hit.type, me.types) < Roster.affinity(p.hit.type, mate.types):
+			return true
+	return false
+
+
+func _wants_helping_hand(mate: Fighter, diff: Dictionary) -> bool:
+	if mate == null or not "helpinghand" in me.data.moves or not me.ready("helpinghand") or mate.help_t > 0.0:
+		return false
+	# A player's next press cannot be known: only a windup it can see.
+	var winding_up: bool = mate.action != null and mate.action.phase == "startup" and mate.action.d.get("cat", "status") != "status"
+	var about_to: bool = not mate.is_player and mate.state == "free" and _ally_has_big_move(mate)
+	return (winding_up or about_to) and randf() < diff.punish
+
+
+func _ally_has_big_move(mate: Fighter) -> bool:
+	for m in mate.data.moves:
+		if float(Moves.DATA[m].get("power", 0)) >= BIG_MOVE and mate.ready(m):
+			return true
+	return false
+
+
+## Nobody has it, nobody is close, and the ally is in reach or out of the battle.
+func _wants_tailwind(mate: Fighter) -> bool:
+	if not "tailwind" in me.data.moves or not me.ready("tailwind") or _decision_t > 0.0 or me.tailwind_t > 0.0:
+		return false
+	for f in me.foes():
+		if f.global_position.distance_to(me.global_position) < WIND_FOE:
+			return false
+	if mate == null:
+		return true
+	return mate.tailwind_t <= 0.0 and mate.global_position.distance_to(me.global_position) <= float(Moves.DATA.tailwind.pulse_radius)
 
 
 # ---------------------------------------------------------------- flight

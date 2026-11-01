@@ -99,7 +99,7 @@ Mud Sport (2, past), Electric Terrain (1), Grassy Terrain (1), Trick Room (1), W
 
 ## Side effects (screens, hazards, Tailwind) (9)
 
-Light Screen (2), Safeguard (2), Spikes (2), Toxic Spikes (2), Lucky Chant (1, past), Mist (1), Reflect (1), Stealth Rock (1), Tailwind (1)
+Light Screen (2), Safeguard (2), Spikes (2), Toxic Spikes (2), Lucky Chant (1, past), Mist (1), Reflect (1), Stealth Rock (1), **Tailwind** (1)
 
 ## Self utility (15)
 
@@ -111,7 +111,7 @@ Block (4), Roar (4), Haze (3), Role Play (3), Bestow (2, past), Mind Reader (2, 
 
 ## Doubles-only in the games (11)
 
-Helping Hand (9), Dragon Cheer (2), Life Dew (2), Quick Guard (2), After You (1), Ally Switch (1), Beat Up (1), Coaching (1), Follow Me (1), Howl (1), Mat Block (1, past)
+**Helping Hand** (9), Dragon Cheer (2), Life Dew (2), Quick Guard (2), After You (1), **Ally Switch** (1), Beat Up (1), Coaching (1), Follow Me (1), Howl (1), Mat Block (1, past)
 
 ## Abilities of the 10 (21)
 

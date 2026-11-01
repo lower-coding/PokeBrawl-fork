@@ -111,7 +111,7 @@ func _puddle(pos: Vector3) -> void:
 			var off := Vector3(randf_range(-1, 1), 0, randf_range(-1, 1)).limit_length(1.0) * radius * 0.8
 			vfx.burst("shadow", pos + off, Vector3.UP, Color(0, 0, 0, 0), 0.25)
 		for o in main.fighters:
-			if o == user or not is_instance_valid(o) or not o.on_floor():
+			if main.combat.spares(user, o) or not is_instance_valid(o) or not o.on_floor():
 				continue
 			var h := Vector2(o.global_position.x - pos.x, o.global_position.z - pos.z).length()
 			if h < radius + o.radius() * 0.4:

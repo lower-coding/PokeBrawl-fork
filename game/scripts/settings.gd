@@ -3,14 +3,14 @@ extends Node
 ## The player's options, saved in user://settings.cfg and applied when loaded and on every
 ## change: the battle controls (each action on keyboard and on gamepad), music and effects
 ## volume, the sound of landing a hit, window mode, vertical sync and frame cap, camera shake, rumble, crosshair and its shape,
-## and language.
+## the mouse's sweep changing target, a 2 vs 2's outlines and arrows, and language.
 ## The Options screen (Menu, drawn by MenuDraw) works through items(), menu_input() and
 ## menu_event(). Tests start from the defaults and never save, so a player's settings
 ## never change what a test sees.
 
 const PATH := "user://settings.cfg"
 const ROWS := 12                     # rows shown at once on the screen (it scrolls)
-const BINDABLE := ["move_up", "move_down", "move_left", "move_right", "jump", "dodge", "lock_on", "mov1", "mov2", "mov3", "mov4", "descend", "switch1", "switch2", "first_person", "pause"]
+const BINDABLE := ["move_up", "move_down", "move_left", "move_right", "jump", "dodge", "lock_on", "cycle_target", "mov1", "mov2", "mov3", "mov4", "descend", "switch1", "switch2", "first_person", "pause"]
 const FPS_CAPS := [0, 60, 120, 144, 240]
 const LANGUAGES := ["", "en", "es"]
 const CROSSHAIR_SHAPES := ["cross", "circle"]
@@ -18,10 +18,13 @@ const CROSSHAIR_SHAPES := ["cross", "circle"]
 var main: Node
 var rumble := true
 var shake := 1.0
-var crosshair := false
+var crosshair := true
 var crosshair_shape := "cross"
+var mouse_flick := false
+var team_outline := true
+var team_arrows := true
 var music := 0.5
-var sfx := 1.0
+var sfx := 0.5
 var hit_ping := false
 var fullscreen := true
 var vsync := true
@@ -43,8 +46,12 @@ func load_saved() -> void:
 		Audio.set_bus_volume("SFX", sfx)
 		Audio.set_bus_volume("Music", music)
 		return
+	load_from(PATH)
+
+
+func load_from(file: String) -> void:
 	var cf := ConfigFile.new()
-	if cf.load(PATH) != OK:
+	if cf.load(file) != OK:
 		# No saved options yet: the defaults, volumes included, still go into effect.
 		Audio.set_bus_volume("SFX", sfx)
 		Audio.set_bus_volume("Music", music)
@@ -54,6 +61,9 @@ func load_saved() -> void:
 	crosshair = cf.get_value("game", "crosshair", crosshair)
 	var shape = cf.get_value("game", "crosshair_shape", crosshair_shape)
 	crosshair_shape = shape if shape in CROSSHAIR_SHAPES else CROSSHAIR_SHAPES[0]
+	mouse_flick = cf.get_value("game", "mouse_flick", mouse_flick)
+	team_outline = cf.get_value("game", "team_outline", team_outline)
+	team_arrows = cf.get_value("game", "team_arrows", team_arrows)
 	language = cf.get_value("game", "language", language)
 	trainer = TrainerData.valid(cf.get_value("profile", "trainer", trainer))
 	player_name = str(cf.get_value("profile", "name", player_name)).substr(0, Menu.NAME_MAX)
@@ -68,13 +78,19 @@ func load_saved() -> void:
 
 
 func save() -> void:
-	if not _saving:
-		return
+	if _saving:
+		save_to(PATH)
+
+
+func save_to(file: String) -> void:
 	var cf := ConfigFile.new()
 	cf.set_value("game", "rumble", rumble)
 	cf.set_value("game", "shake", shake)
 	cf.set_value("game", "crosshair", crosshair)
 	cf.set_value("game", "crosshair_shape", crosshair_shape)
+	cf.set_value("game", "mouse_flick", mouse_flick)
+	cf.set_value("game", "team_outline", team_outline)
+	cf.set_value("game", "team_arrows", team_arrows)
 	cf.set_value("game", "language", language)
 	cf.set_value("profile", "trainer", trainer)
 	cf.set_value("profile", "name", player_name)
@@ -85,7 +101,7 @@ func save() -> void:
 	cf.set_value("screen", "vsync", vsync)
 	cf.set_value("screen", "fps_cap", fps_cap)
 	cf.set_value("controls", "bindings", bindings)
-	cf.save(PATH)
+	cf.save(file)
 
 
 ## Puts everything into effect. "screen" also sets the window (only when loading or when
@@ -168,6 +184,12 @@ func items() -> Array:
 		"value": tr("On") if crosshair else tr("Off"), "help": tr("With nothing locked on, marks where your moves go.")})
 	out.append({"id": "crosshair_shape", "kind": "choice", "label": tr("Crosshair shape"),
 		"value": tr("Circle") if crosshair_shape == "circle" else tr("Cross"), "help": tr("A dot with four ticks round it, or a dot in a ring.")})
+	out.append({"id": "mouse_flick", "kind": "toggle", "label": tr("Mouse sweep changes target"),
+		"value": tr("On") if mouse_flick else tr("Off"), "help": tr("Locked on, a quick sweep of the mouse moves the lock to the next target. Off, only the Change target key does.")})
+	out.append({"id": "team_outline", "kind": "toggle", "label": tr("Ally and foe outline"),
+		"value": tr("On") if team_outline else tr("Off"), "help": tr("In a 2 vs 2, a blue outline on your ally and a red one on your foes.")})
+	out.append({"id": "team_arrows", "kind": "toggle", "label": tr("Ally and foe arrows"),
+		"value": tr("On") if team_arrows else tr("Off"), "help": tr("In a 2 vs 2 with nothing locked on, a blue arrow over your ally and a red one over your foes.")})
 	out.append({"id": "language", "kind": "choice", "label": tr("Language"),
 		"value": {"": tr("System"), "en": "English", "es": "Español"}[language], "help": tr("The game's language.")})
 	return out
@@ -191,6 +213,7 @@ func _action_name(a: String) -> String:
 		"jump": return tr("Jump")
 		"dodge": return tr("Dodge")
 		"lock_on": return tr("Lock on")
+		"cycle_target": return tr("Change target")
 		"mov1": return tr("Move 1")
 		"mov2": return tr("Move 2")
 		"mov3": return tr("Move 3")
@@ -244,7 +267,13 @@ func menu_input(menu: Menu) -> void:
 	elif menu._pressed("menu_back"):
 		menu._sound("back")
 		save()
-		menu._go("main")
+		if menu.options_return:
+			# From the selection: back the way the Rules screen goes, so the picks and the room stay.
+			menu.options_return = false
+			menu.screen = "selection"
+			menu.enter_t = 0.0
+		else:
+			menu._go("main")
 	if n == 0:
 		return
 
@@ -277,6 +306,12 @@ func _change(id: String, step: int) -> void:
 			crosshair = not crosshair
 		"crosshair_shape":
 			crosshair_shape = CROSSHAIR_SHAPES[(CROSSHAIR_SHAPES.find(crosshair_shape) + step + CROSSHAIR_SHAPES.size()) % CROSSHAIR_SHAPES.size()]
+		"mouse_flick":
+			mouse_flick = not mouse_flick
+		"team_outline":
+			team_outline = not team_outline
+		"team_arrows":
+			team_arrows = not team_arrows
 		"fullscreen":
 			fullscreen = not fullscreen
 			apply(true)

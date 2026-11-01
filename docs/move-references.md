@@ -365,3 +365,12 @@ turning. Purple, not the type's pink.
 
 **Hyper Voice** · *Now:* three arches of sound roll across the field with the same curve, hitting harder from
 a longer wind-up.
+
+**Ally Switch** · *Now:* aimed, with the ally under the crosshair (it is refused otherwise, at no cost): both flash and swap places, and shots on their way swap targets. An 8 s cooldown takes the place of the games' falling repeat chance.
+- [Games] Priority +2, no aim; a repeat has a 1/3, then 1/9 chance. Redirected attacks follow the swap, the reason to use it.
+
+**Helping Hand** · *Now:* a clap with a yellow spark, for an ally within 5 m body to body: its next damaging move within 3 s hits ×1.5, on all its hits and shots.
+- [Games] Priority +5: ×1.5 to the ally's attack that turn, adjacent allies only, and ×1.5 again per extra use. Here it cannot stack: its cooldown is longer than the boost.
+
+**Tailwind** · *Now:* a pulse of wind 7 m around the caster: it and an ally inside move faster for 12 s (4 turns at 3 s a turn). Speed ×2 through the Speed formula, so about ×1.3 to ×1.5 of movement.
+- [Games] The whole side, 4 turns, Speed ×2.

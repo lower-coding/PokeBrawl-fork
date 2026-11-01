@@ -119,6 +119,12 @@ func crosshair_point() -> Vector3:
 	var wall: Dictionary = get_world_3d().direct_space_state.intersect_ray(q)
 	if wall:
 		to = wall.position
+	# The ally, for Ally Switch: its own check, since it is left out below with friendly fire off.
+	var mate: Fighter = target.ally()
+	if mate:
+		var seg: Array = mate.body()
+		var near := Geometry3D.get_closest_points_between_segments(from, to, seg[0], seg[1])
+		target.ctrl.aim_ally = near[0].distance_to(near[1]) < mate.radius() + 0.3
 	var at := to
 	_over = null
 	for o in main.combat.targets:
@@ -129,18 +135,27 @@ func crosshair_point() -> Vector3:
 		if near[0].distance_to(near[1]) < o.radius():
 			to = near[0]
 			at = near[1]
-			_over = o
+			# With friendly fire on it can land on the ally: aim assist must not stick to it.
+			var who = o.user if o is Decoy else o
+			_over = o if who == target or not main.combat.same_side(target, who) else null
 			_over_at = near[0]
 	return at
 
 
+## The mouse moved "dx" sideways: enough of it, locked on, is a flick. Watching an ally (out of
+## Pokémon), it must not change the ally's target.
+func _sweep(dx: float) -> void:
+	if not main.options.mouse_flick or target == null or not is_instance_valid(target) or not target.locked or target != main.player:
+		return
+	_mouse_sweep += dx
+	if absf(_mouse_sweep) > MOUSE_FLICK:
+		target.switch_target(1 if _mouse_sweep > 0.0 else -1)
+		_mouse_sweep = 0.0
+
+
 func _unhandled_input(ev: InputEvent) -> void:
 	if ev is InputEventMouseMotion and Input.mouse_mode == Input.MOUSE_MODE_CAPTURED:
-		if target and is_instance_valid(target) and target.locked:
-			_mouse_sweep += ev.relative.x
-			if absf(_mouse_sweep) > MOUSE_FLICK:
-				target.switch_target(1 if _mouse_sweep > 0.0 else -1)
-				_mouse_sweep = 0.0
+		_sweep(ev.relative.x)
 		var drag := _drag()
 		yaw -= ev.relative.x * MOUSE_SENS * drag
 		pitch = clampf(pitch - ev.relative.y * MOUSE_SENS * drag, -1.1, _pitch_top())
@@ -158,7 +173,8 @@ func _physics_process(delta: float) -> void:
 		# A flick switches target; the stick has to come back before the next one.
 		if absf(st.x) > FLICK and _flick_ready:
 			_flick_ready = false
-			target.switch_target(1 if st.x > 0.0 else -1)
+			if target == main.player:
+				target.switch_target(1 if st.x > 0.0 else -1)
 		elif absf(st.x) < 0.3:
 			_flick_ready = true
 		st.x = 0.0
@@ -169,7 +185,8 @@ func _physics_process(delta: float) -> void:
 		_manual = 0.0
 	var me := target
 	var height: float = me.data.height
-	var eyes: bool = first_person and me.state != "ko" and main._end_t < 0.0
+	var watching: bool = main.doubles and me != main.player    # its ally, once out of Pokémon
+	var eyes: bool = first_person and me.state != "ko" and main._end_t < 0.0 and not watching
 	var eye := me.global_position + Vector3.UP * height * EYE_HEIGHT
 	eye.y = maxf(eye.y, main.ground_y + 0.2)
 	var pivot := eye if eyes else me.global_position + Vector3.UP * (height * 0.85 + 0.45)

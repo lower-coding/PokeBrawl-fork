@@ -27,9 +27,9 @@ func on_active() -> void:
 		main.vfx.burst("wind", copy.center(), side * s, Color(0, 0, 0, 0), 0.8)
 	l.invulnerable = maxf(l.invulnerable, 0.2)
 	# A player who had it locked on loses the lock.
-	var r: Fighter = l.rival
-	if r and is_instance_valid(r) and r.is_player and r.locked:
-		r.locked = false
+	for r in l.foes():
+		if r.rival == l and r.is_player and r.locked:
+			r.locked = false
 	play_sound("doubleteam", -2.0)
 
 

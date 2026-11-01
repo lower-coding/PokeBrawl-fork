@@ -82,12 +82,15 @@ func _process(delta: float) -> void:
 	_t += delta
 	_battle_t += delta
 	_move_spots()
-	if main and main.fighters.size() == 2:
-		var hp := [1.0, 1.0]
+	if main and main.fighters.size() >= 2:
+		# Per side: in a 2 vs 2, the average of its two. The board shows slots 0 and 1.
+		var hp := [0.0, 0.0]
+		var on_side := [0, 0]
 		for f in main.fighters:
 			if is_instance_valid(f):
-				hp[_side(f)] = clampf(f.hp / f.hp_max, 0.0, 1.0)
-		crowd.set_hp(hp[0], hp[1])
+				hp[_side(f)] += clampf(f.hp / f.hp_max, 0.0, 1.0)
+				on_side[_side(f)] += 1
+		crowd.set_hp(hp[0] / maxi(on_side[0], 1), hp[1] / maxi(on_side[1], 1))
 		if board and not _board_set:
 			_board_set = true
 			for k in 2:
@@ -533,8 +536,8 @@ func _night_field() -> void:
 
 
 ## In their side's trainer area, behind the invisible wall: out of the fighters' reach.
-func trainer_spot(side: float) -> Vector3:
-	return Vector3(side * (LENGTH * 0.5 + 2.6), 0.0, 0.0)
+func trainer_spot(side: float, z := 0.0) -> Vector3:
+	return Vector3(side * (LENGTH * 0.5 + 2.6), 0.0, z)
 
 
 ## The battle limit: an invisible wall (layer 3, fighters only) on the cyan neon line, and

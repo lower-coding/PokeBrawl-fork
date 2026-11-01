@@ -9,7 +9,7 @@ extends RefCounted
 
 const ITEM_COLOR := {"combat": UiKit.RED, "online": UiKit.GREEN, "training": UiKit.ORANGE, "moves": UiKit.BLUE,
 	"options": UiKit.GREY, "quit": Color("3a3a42"), "profile": Color("6a4bb8"), "create": UiKit.GREEN, "join": UiKit.BLUE, "back": UiKit.GREY,
-	"1v1": UiKit.RED, "3v3": UiKit.BLUE}
+	"1v1": UiKit.RED, "3v3": UiKit.BLUE, "2v2": UiKit.ORANGE}
 ## Tiles of the main menu and the online menu: [x, y, w, h] in the 1920 × 1080 space.
 ## Tiles of the main menu and the online menu: [x, y, w, h] in the 1920 × 1080 space, x
 ## measured on the wall's base line (TILE_BASE). All their sides lean on that same line, so
@@ -18,6 +18,7 @@ const TILE_BASE := 840.0
 const MAIN_TILES := [[70, 150, 760, 690], [870, 150, 520, 330], [1430, 150, 300, 330],
 	[870, 510, 520, 330], [1430, 510, 300, 150], [1430, 690, 300, 150]]
 const ONLINE_TILES := [[70, 150, 760, 690], [870, 150, 860, 500], [870, 690, 860, 150]]
+const FORMAT_TILES := [[70, 150, 760, 690], [870, 150, 860, 250], [870, 420, 860, 250], [870, 690, 860, 150]]
 ## Credits at the bottom of the main menu, small. Cobblemon's assets are CC BY-NC 3.0:
 ## the team, the license and the non-profit nature are named.
 const CREDITS := ["Created by xjoje6. Made with Godot Engine.",
@@ -96,8 +97,9 @@ func draw(h: Hud) -> void:
 			_tiles(Menu.ONLINE, ONLINE_TILES)
 			u.hints([[Controls.glyph("jump"), tr("Select")], [Controls.glyph("menu_back"), tr("Back")]])
 		"format":
-			_header(tr("Format"), ITEM_COLOR.get(Menu.FORMATS[m.cursor][0], UiKit.RED))
-			_tiles(Menu.FORMATS, ONLINE_TILES)
+			var formats := m.format_items()
+			_header(tr("Format"), ITEM_COLOR.get(formats[m.cursor][0], UiKit.RED))
+			_tiles(formats, FORMAT_TILES if formats.size() == FORMAT_TILES.size() else ONLINE_TILES)
 			u.hints([[Controls.glyph("jump"), tr("Select")], [Controls.glyph("menu_back"), tr("Back")]])
 		"waiting":
 			_waiting()
@@ -115,6 +117,8 @@ func draw(h: Hud) -> void:
 			_options()
 		"rules":
 			_rules()
+		"seats":
+			_seats()
 		"profile":
 			_profile()
 		"vs":
@@ -196,7 +200,7 @@ func _tile_x(x: float, at_y: float) -> float:
 
 
 ## What each tile shows besides its name.
-func _tile_art(id: String, x: float, y: float, w: float, _hgt: float, o: float) -> void:
+func _tile_art(id: String, x: float, y: float, w: float, hgt: float, o: float) -> void:
 	match id:
 		"combat":
 			u.tex(m.render("menu_b", m.choice.p2, Vector2i(300, 340), -0.5), _tile_x(x, y + 230.0) + 10.0, y + 60.0, 300.0, 340.0, Color(1, 1, 1, 0.35 + 0.65 * o))
@@ -212,9 +216,16 @@ func _tile_art(id: String, x: float, y: float, w: float, _hgt: float, o: float) 
 		"1v1":
 			u.tex(m.render("format_a", m.choice.p1, Vector2i(420, 470), 0.5), _tile_x(x, y + 300.0) + w - 430.0, y + 10.0, 420.0, 470.0)
 		"3v3":
-			var trio := m.team_ids(0, m.choice.p1)
+			# Short when 2 vs 2 sits under it (offline), tall when it does not (hosting).
+			var side := minf(hgt * 0.8, 320.0)
+			var trio := m.team_ids(0, m.choice.p1, 3)
 			for n in trio.size():
-				u.tex(m.render("format_b%d" % n, trio[n], Vector2i(280, 320), 0.5), _tile_x(x, y + 260.0) + 20.0 + n * 270.0, y + 16.0, 280.0, 320.0, Color(1, 1, 1, 0.5 + 0.5 * o))
+				u.tex(m.render("format_b%d" % n, trio[n], Vector2i(int(side * 0.875), int(side)), 0.5), _tile_x(x, y + side * 0.8) + w - (3 - n) * side * 0.85 - 10.0, y + 8.0, side * 0.875, side, Color(1, 1, 1, 0.5 + 0.5 * o))
+		"2v2":
+			var pair := [m.choice.p1, m.choice.p3, m.choice.p2, m.choice.p4]
+			var side := minf(hgt * 0.8, 320.0)
+			for n in pair.size():
+				u.tex(m.render("format_c%d" % n, pair[n], Vector2i(int(side * 0.75), int(side)), 0.5 if n < 2 else -0.5), _tile_x(x, y + side * 0.8) + w - (4 - n) * side * 0.65 - 10.0 + (20.0 if n >= 2 else 0.0), y + 8.0, side * 0.75, side, Color(1, 1, 1, 0.5 + 0.5 * o))
 		"create":
 			u.title(_tile_x(x, y + 150.0) + w - 50.0, y + 30.0, "7777", 120.0, Color(1, 1, 1, 0.12), 1)
 		"join":
@@ -247,7 +258,15 @@ func _card(x: float, y: float, w: float, lines: Array, col: Color) -> void:
 
 func _waiting() -> void:
 	_header(tr("Waiting for rival"), UiKit.GREEN)
-	var lines: Array = [tr("Format: %s") % tr("3 vs 3" if m.team_battle() else "1 vs 1"), tr("Give your friend one of these IPs:")]
+	var lines: Array = [tr("Format: %s") % tr({"1v1": "1 vs 1", "3v3": "3 vs 3", "2v2": "2 vs 2"}[m.choice.format]), tr("Give your friend one of these IPs:")]
+	lines.append_array(_address_lines())
+	_card(160.0, 200.0, 1200.0, lines, UiKit.GREEN)
+	u.hints([[Controls.glyph("menu_back"), tr("Back")]])
+
+
+## Where to find this game, and whether the router lets anyone in.
+func _address_lines() -> Array:
+	var lines: Array = []
 	var net: Net = m.main.net
 	if net and net.public_ip != "":
 		lines.append(tr("Over the internet: %s") % net.public_ip)
@@ -259,8 +278,32 @@ func _waiting() -> void:
 		lines.append(tr("Port 7777 open on the router."))
 	else:
 		lines.append("!" + tr("The router did not open the port: open it (UDP 7777) or use Radmin VPN or ZeroTier."))
-	_card(160.0, 200.0, 1200.0, lines, UiKit.GREEN)
-	u.hints([[Controls.glyph("menu_back"), tr("Back")]])
+	return lines
+
+
+## A 2 vs 2's four seats, one side on each half: A on one and A on another swaps them.
+func _seats() -> void:
+	_header(tr("Seats"), UiKit.BLUE)
+	if not m.has_seats():
+		return
+	for s in 4:
+		var seat: Dictionary = m.seats[s]
+		var x := 90.0 + (s % 2) * 880.0
+		var y := 180.0 + (s / 2) * 200.0
+		if s < 2:
+			u.text(x + 30.0, 138.0, tr("Your side") if s % 2 == m.main.net.seat % 2 else tr("The other side"), 26.0, UiKit.SOFT, u.bold)
+		var o := on("seat%d" % s, s == m.seats_cursor)
+		var held: bool = s == m.seats_held
+		u.slant(x, y, 800.0, 170.0, UiKit.PANEL.lerp(UiKit.YELLOW if held else UiKit.BLUE if s % 2 == m.main.net.seat % 2 else UiKit.RED, maxf(o, 1.0 if held else 0.0)))
+		zone("seat", s, x, y, 800.0 + 170.0 * UiKit.SLANT, 170.0, UiKit.SLANT)
+		var ink := UiKit.DARK if held else UiKit.INK
+		var who: String = tr("AI") if seat.peer == Menu.SEAT_AI else (seat.name if seat.name != "" else tr("Player"))
+		u.title(u.edge(x, y, 170.0, y + 90.0) + 40.0, y + 34.0, who.to_upper(), 58.0, ink, -1, 660.0)
+		var line: String = tr("You") if s == m.main.net.seat else (tr("Empty seat") if seat.peer == Menu.SEAT_AI else tr("Connected"))
+		u.text(u.edge(x, y, 170.0, y + 130.0) + 40.0, y + 108.0, line, 28.0, Color(ink, 0.75), u.bold)
+	_card(90.0, 600.0, 1680.0, _address_lines(), UiKit.GREEN)
+	var pick := tr("Swap with this one") if m.seats_held >= 0 else tr("Pick a seat")
+	u.hints([[Controls.glyph("jump"), pick], [Controls.glyph("menu_back"), tr("Back")]])
 
 
 func _join() -> void:
@@ -298,7 +341,24 @@ func _join() -> void:
 func _side_color(side: int) -> Color:
 	if side == 0:
 		return UiKit.RED
+	if side == 2:
+		return UiKit.BLUE
 	return UiKit.BLUE if m.online else UiKit.GREY
+
+
+## Whose card it is, in a word.
+func _side_tag(side: int) -> String:
+	if side == 0:
+		return "1P"
+	if m.has_seats():
+		var seat: Dictionary = m.seat_at(side)
+		if seat.peer == Menu.SEAT_AI:
+			return "CPU"
+		if seat.name != "":
+			return seat.name
+	if side == 2:
+		return tr("Ally")
+	return "2P" if m.online else "CPU"
 
 
 func _selection() -> void:
@@ -309,9 +369,10 @@ func _selection() -> void:
 	elif m.sel_phase == "setup":
 		title = tr("Get ready")
 	if m.team_battle() and m.sel_phase != "setup":
-		var count: int = m.choice["team" if m.sel_phase == "p1" else "team2"].size()
-		title = (tr("Your team: %d of %d") if m.sel_phase == "p1" else tr("Rival's team: %d of %d")) % [count, Party.SIZE]
-	_header(title, _side_color(1 if m.sel_phase == "p2" else 0))
+		var count: int = m.choice[m._picks_key()].size()
+		var line: String = {"p1": tr("Your team: %d of %d"), "p2": tr("Rival's team: %d of %d"), "p3": tr("Your ally's team: %d of %d"), "p4": tr("Second rival's team: %d of %d")}[m.sel_phase]
+		title = line % [count, m.team_size()]
+	_header(title, _side_color(Menu.phase_side(m.sel_phase)))
 	# The stage, always at hand: its picture and name, top right.
 	var st: String = m.choice.stage
 	u.slant(1500.0, 30.0, 360.0, 92.0, UiKit.DARK)
@@ -323,18 +384,42 @@ func _selection() -> void:
 		_wall(list, setup)
 	if setup > 0.001:
 		_setup_bar(setup)
-	for side in 2:
-		_player_card(side)
+	if m.choice.format == "2v2":
+		for side in 4:
+			_doubles_card(side)
+	else:
+		for side in 2:
+			_player_card(side)
 	var items: Array = []
 	if m.sel_phase == "setup":
 		if m.online and m.me_ready:
 			items = [[Controls.glyph("menu_back"), tr("Change")]]
 		else:
 			items = [[Controls.glyph("jump"), tr("Choose")], [Controls.glyph("mov2"), tr("Random moves")], [Controls.glyph("menu_back"), tr("Back")]]
-			_top_button("rand", 880.0, 560.0, 1.0, UiKit.YELLOW, "mov2", tr("Random moves"), tr("Every pick"))
+			if m.can_repick_mine():
+				items.insert(2, [Controls.glyph("mov4"), tr("Change my team")])
+			if m.online:
+				_top_button("rand", 880.0, 560.0, 1.0, UiKit.YELLOW, "mov2", tr("Random moves"), tr("Every pick"))
+			else:
+				items.insert(2, [Controls.glyph("mov1"), tr("Random AI moves")])
+				_top_button("rand", 780.0, 340.0, 1.0, UiKit.YELLOW, "mov2", tr("Random moves"), tr("Every pick"))
+				_top_button("rand_ai", 1140.0, 340.0, 1.0, UiKit.YELLOW, "mov1", tr("Random moves"), tr("The AI's picks"))
 	else:
-		items = [[Controls.glyph("jump"), tr("Pick or take out") if m.team_battle() else tr("Pick")], [Controls.glyph("menu_info"), tr("Random")], [Controls.glyph("menu_back"), tr("Leave") if m.online else tr("Back")]]
-		_top_button("rand", 880.0, 560.0, 1.0, UiKit.YELLOW, "menu_info", tr("Random Pokémon"), tr("The rival's pick") if m.sel_phase == "p2" else tr("Your pick"))
+		items = [[Controls.glyph("jump"), tr("Pick or take out") if m.team_battle() else tr("Pick")], [Controls.glyph("menu_info"), tr("Random")],
+			[Controls.glyph("menu_extra"), tr("Rules")], [Controls.glyph("pause"), tr("Options")], [Controls.glyph("menu_back"), tr("Leave") if m.online else tr("Back")]]
+		var whose: String = {"p1": tr("Your pick"), "p2": tr("The rival's pick"), "p3": tr("Your ally's pick"), "p4": tr("The rival's pick")}[m.sel_phase]
+		var rules_line := tr("Default rules") if _rules_changed() == 0 else tr("%d changed") % _rules_changed()
+		if m.has_seats() and m.main.net.host:
+			# The host's Seats, before everyone has picked: Random gives up the room.
+			_top_button("rand", 780.0, 168.0, 1.0, UiKit.YELLOW, "menu_info", tr("Random"), whose)
+			_top_button("open_seats", 960.0, 160.0, 1.0, UiKit.BLUE, "lock_on", tr("Seats"), "")
+			_top_button("open_rules", 1132.0, 150.0, 1.0, UiKit.RED, "menu_extra", tr("Rules"), rules_line)
+		else:
+			_top_button("rand", 780.0, 310.0, 1.0, UiKit.YELLOW, "menu_info", tr("Random Pokémon"), whose)
+			_top_button("open_rules", 1102.0, 180.0, 1.0, UiKit.RED, "menu_extra", tr("Rules"), rules_line)
+		_top_button("open_options", 1294.0, 180.0, 1.0, UiKit.GREY, "pause", tr("Options"), "")
+		if m.can_repick_mine():
+			items.insert(items.size() - 1, [Controls.glyph("mov4"), tr("Change my team")])
 		if m.online and m.main.net and m.main.net.host:
 			items.push_front([Controls.glyph("mov2"), tr("Stage")])
 		if m.forms_of(list[m.cursor]).size() > 1:
@@ -348,6 +433,10 @@ func _selection() -> void:
 		u.slant(70.0, 960.0, ww + 60.0, 48.0, UiKit.RED)
 		u.text_fit(100.0, 970.0, warn, 1300.0, 26.0, UiKit.INK, u.bold)
 	u.hints(items)
+
+
+func _rules_changed() -> int:
+	return m.rules_items().filter(func(r): return r.get("changed", false)).size()
 
 
 ## The rows and cell size that make "n" cells as big as they can be in the roster's area:
@@ -384,7 +473,7 @@ static func wall_cell(shape: Dictionary, n: int, i: int) -> Vector2:
 func _wall(list: Array, setup: float) -> void:
 	var shape := wall_shape(list.size())
 	var lift := -600.0 * UiKit.ease(setup)
-	var picker := _side_color(1 if m.sel_phase == "p2" else 0)
+	var picker := _side_color(Menu.phase_side(m.sel_phase))
 	for i in list.size():
 		var at := wall_cell(shape, list.size(), i)
 		_wall_cell(i, list[i], at.x, at.y + lift, shape.w, shape.h, picker, setup)
@@ -428,10 +517,9 @@ func _wall_cell(i: int, sp: String, x: float, y: float, w: float, h: float, pick
 func _wall_tokens(sp: String, x: float, y: float, size: float) -> void:
 	var tx := x
 	if m.team_battle():
-		if m.on_team(sp, m.choice.team):
-			tx = _token(tx, y, "1P", UiKit.RED, size)
-		if m.on_team(sp, m.choice.team2):
-			_token(tx, y, "2P" if m.online else "CPU", UiKit.BLUE if m.online else UiKit.GREY, size)
+		for side in (4 if m.choice.format == "2v2" else 2):
+			if m.on_team(sp, m.choice[Menu.team_key(side)]):
+				tx = _token(tx, y, _side_tag(side), _side_color(side), size)
 		return
 	if Roster.base_of(sp) == Roster.base_of(m.choice.p1) and (m.sel_phase != "p1" or m.me_ready):
 		tx = _token(tx, y, "1P", UiKit.RED, size)
@@ -500,15 +588,21 @@ func _setup_bar(setup: float) -> void:
 				sub = tr("Difficulty")
 				label = tr(Menu.DIFFICULTY_NAME[m.choice.diff])
 			"rules":
-				sub = tr("3 vs 3") if m.team_battle() else tr("1 vs 1")
+				sub = tr({"1v1": "1 vs 1", "3v3": "3 vs 3", "2v2": "2 vs 2"}[m.choice.format])
 				label = tr("Rules")
+			"options":
+				sub = tr("Controls, sound, screen")
+				label = tr("Options")
+			"seats":
+				sub = tr("Who plays where")
+				label = tr("Seats")
 			"build":
 				sub = tr("Moves and ability")
 				label = tr("Edit Pokémon")
 			"fight":
 				label = tr("Fight!")
 			"ready":
-				label = tr("Waiting for the rival") if m.me_ready else tr("Ready!")
+				label = (tr("Waiting for the others") if m.has_seats() else tr("Waiting for the rival")) if m.me_ready else tr("Ready!")
 		if sub != "":
 			u.text_fit(u.edge(bx, y, hgt, mid - 56.0) + 24.0, mid - 66.0, sub.to_upper(), tw - 50.0, 20.0, Color(ink, 0.7), u.bold)
 		if go:
@@ -518,7 +612,7 @@ func _setup_bar(setup: float) -> void:
 		else:
 			u.title(u.edge(bx, y, hgt, mid + 10.0) + 20.0, mid - 36.0, label.to_upper(), 46.0, ink, -1, tw - 44.0)
 		if it == "rules":
-			var custom: int = m.rules_items().filter(func(r): return r.get("changed", false)).size()
+			var custom := _rules_changed()
 			var line := tr("Default rules") if custom == 0 else tr("%d changed") % custom
 			u.text_fit(u.edge(bx, y, hgt, mid + 40.0) + 22.0, mid + 26.0, line, tw - 50.0, 19.0, Color(ink, 0.75), u.bold)
 		if it in ["stage", "diff"] and (host or it == "diff") and o > 0.01:
@@ -599,8 +693,8 @@ func _team_card(side: int) -> void:
 	u.stripes(x + 30.0, y + 16.0, w - 60.0, hgt - 32.0, Color(1, 1, 1, 0.035), 44.0)
 	var picks: Array = m.choice["team" if left else "team2"]
 	var picking: bool = m.sel_phase == ("p1" if left else "p2")
-	var cw := (w - 44.0) / Party.SIZE
-	for i in Party.SIZE:
+	var cw := (w - 44.0) / m.team_size()
+	for i in m.team_size():
 		var sp: String = picks[i] if i < picks.size() else ""
 		var preview := false
 		if sp == "" and picking and i == picks.size() and not m.on_team(m.team_preview, picks):
@@ -611,7 +705,7 @@ func _team_card(side: int) -> void:
 	# Online the rival's team stays hidden until both are ready: only how far along it is.
 	if not left and m.online:
 		var ready: bool = m.rival_ready
-		var line: String = tr("Ready") if ready else tr("Picking: %d of %d") % [m.rival_count, Party.SIZE]
+		var line: String = tr("Ready") if ready else tr("Picking: %d of %d") % [m.rival_count, m.team_size()]
 		u.slant(x + w - 340.0, y + 26.0, 300.0, 48.0, UiKit.YELLOW if ready else UiKit.DARK)
 		u.title(x + w - 316.0, y + 30.0, line.to_upper(), 34.0, UiKit.DARK if ready else UiKit.INK, -1, 250.0)
 
@@ -625,7 +719,7 @@ func _team_slot(side: int, i: int, sp: String, preview: bool, picking: bool, cx:
 		u.title(edge.call(y + 210.0) + cw * 0.5, y + 140.0, "?", 110.0, Color(UiKit.INK, 0.25), 0)
 		return
 	if not preview and picking:
-		zone("tslot", side * Party.SIZE + i, edge.call(y + hgt - 22.0), y + 22.0, cw + (hgt - 44.0) * UiKit.SLANT, hgt - 44.0, UiKit.SLANT)
+		zone("tslot", side * m.team_size() + i, edge.call(y + hgt - 22.0), y + 22.0, cw + (hgt - 44.0) * UiKit.SLANT, hgt - 44.0, UiKit.SLANT)
 	var data: Dictionary = Roster.POKEMON[sp]
 	var fade := 0.7 if preview else 1.0
 	u.tex(m.render("team%d_%d" % [side, i], sp, Vector2i(230, 190), 0.5 if side == 0 else -0.5), edge.call(y + 120.0) + 6.0, y + 2.0, 230.0, 190.0, Color(1, 1, 1, fade))
@@ -651,7 +745,94 @@ func _team_slot(side: int, i: int, sp: String, preview: bool, picking: bool, cx:
 		u.text_fit(rx + 40.0, my + 6.0, tr(d.display_name), cw - 68.0, 20.0, Color(UiKit.INK, fade), u.bold)
 
 
+## A 2 vs 2's trainer: four narrower cards, your side's on the left, up to 12 picks in all. One
+## Pokémon each gets its 3D model and its moves by name; with more, a row each: its face, name,
+## types and moves' types. While this trainer is picking, the cursor's shows in the next free row.
+func _doubles_card(side: int) -> void:
+	var at := [0, 2, 1, 3].find(side)
+	var k := UiKit.ease((m.enter_t - 0.06 * at) / 0.4)
+	var col := _side_color(side)
+	var w := 410.0
+	var x: float = (50.0 + at * 430.0 if at < 2 else 960.0 + (at - 2) * 430.0) + (1.0 - k) * (-900.0 if at < 2 else 900.0)
+	var y := CARD_Y
+	var hgt := CARD_H
+	u.slant(x, y, w, hgt, col)
+	u.slant(x + 12.0, y + 12.0, w - 24.0, hgt - 24.0, col.darkened(0.3))
+	var picks: Array = m.choice[Menu.team_key(side)]
+	var picking: bool = m.sel_phase == "p%d" % (side + 1)
+	var n := m.team_size()
+	var top := y + 70.0
+	var row := (hgt - 88.0) / n
+	var tag := _side_tag(side)
+	var tag_x := u.edge(x, y, hgt, y + 62.0) + 18.0
+	u.slant(tag_x, y + 18.0, u.width(tag, 32.0, u.heavy) + 28.0, 42.0, UiKit.DARK)
+	u.title(tag_x + 14.0, y + 21.0, tag, 32.0, UiKit.INK)
+	# Online how far along another player is, the only thing known of the other side's.
+	if side != 0 and m.has_seats() and m.seat_at(side).peer != Menu.SEAT_AI:
+		var seat: Dictionary = m.seat_at(side)
+		var line: String = tr("Ready") if seat.ready else tr("Picking: %d of %d") % [maxi(seat.count, picks.size()), n]
+		u.slant(x + w - 200.0, y + 18.0, 170.0, 42.0, UiKit.YELLOW if seat.ready else UiKit.DARK)
+		u.text_fit(x + w - 186.0, y + 26.0, line, 145.0, 22.0, UiKit.DARK if seat.ready else UiKit.INK, u.bold)
+	for i in n:
+		var sp: String = picks[i] if i < picks.size() else ""
+		var preview := false
+		if sp == "" and picking and i == picks.size() and not m.on_team(m.team_preview, picks):
+			sp = m.team_preview
+			preview = sp != ""
+		var ry := top + i * row
+		var rx := u.edge(x, y, hgt, ry + row) + 16.0
+		u.slant(rx, ry, w - 44.0, row - 6.0, Color(0, 0, 0, 0.3 if preview else 0.2))
+		if sp == "":
+			u.title(rx + (w - 44.0) * 0.5, ry + row * 0.5 - 30.0, "?", 56.0, Color(UiKit.INK, 0.25), 0)
+			continue
+		if not preview and m.can_remove_pick(side):
+			zone("tslot", side * n + i, rx, ry, w - 44.0 + row * UiKit.SLANT, row - 6.0, UiKit.SLANT)
+		if n == 1:
+			_doubles_single(side, sp, preview, rx, ry, w - 44.0, row - 6.0)
+		else:
+			_doubles_row(side, sp, preview, rx, ry, w - 44.0, row - 6.0)
+
+
+## The only Pokémon of a trainer: its model, name, types and moves.
+func _doubles_single(side: int, sp: String, preview: bool, x: float, y: float, w: float, hgt: float) -> void:
+	var data: Dictionary = Roster.POKEMON[sp]
+	var fade := 0.7 if preview else 1.0
+	u.tex(m.render("double%d" % side, sp, Vector2i(190, 220), 0.5 if side % 2 == 0 else -0.5), x - 6.0, y + 4.0, 190.0, 220.0, Color(1, 1, 1, fade))
+	var rx := x + 180.0
+	u.title(rx, y + 8.0, tr(data.display_name).to_upper(), 30.0, Color(UiKit.INK, fade), -1, w - 190.0)
+	var lo := _loadout_of(side, sp)
+	for i in lo.moves.size():
+		var my: float = y + 50.0 + i * 40.0
+		u.type_icon(Moves.type_for(lo.moves[i], lo.ability), rx, my, 26.0)
+		u.text_fit(rx + 32.0, my + 2.0, tr(Moves.DATA[lo.moves[i]].display_name), w - 225.0, 21.0, Color(UiKit.INK, fade), u.bold)
+	for t in data.types.size():
+		u.type_icon(data.types[t], x + 8.0 + t * 30.0, y + hgt - 34.0, 26.0)
+
+
+## One of a trainer's team: its face from the wall, not a model: up to 12 of them render at once.
+func _doubles_row(side: int, sp: String, preview: bool, x: float, y: float, w: float, hgt: float) -> void:
+	var data: Dictionary = Roster.POKEMON[sp]
+	var fade := 0.7 if preview else 1.0
+	var face := minf(hgt - 8.0, 90.0)
+	if m.portraits.has(sp):
+		var cut := Menu.PORTRAIT_SIZE.y
+		u.tex_region(m.portraits[sp], x + 14.0, y + 4.0, face, face, Rect2((Menu.PORTRAIT_SIZE.x - cut) * 0.5, 0, cut, cut), Color(1, 1, 1, fade))
+	var rx := x + face + 24.0
+	u.title(rx, y + 4.0, tr(data.display_name).to_upper(), 24.0, Color(UiKit.INK, fade), -1, w - face - 40.0)
+	var lo := _loadout_of(side, sp)
+	var ix := rx
+	for t in data.types:
+		u.type_icon(t, ix, y + 36.0, 20.0)
+		ix += 23.0
+	ix += 10.0
+	for mv in lo.moves:
+		u.type_icon(Moves.type_for(mv, lo.ability), ix, y + 36.0, 20.0, 0.75)
+		ix += 23.0
+
+
 func _loadout_of(side: int, sp: String) -> Dictionary:
+	if m.has_seats():
+		return m.battle_loadout(side, sp) if side == 0 or m.ai_pick(side) else m.seat_loadout(side, sp)
 	if side == 1 and m.online:
 		return Loadout.valid(sp, m.rival_loadouts.get(sp, {}))
 	return m.battle_loadout(side, sp)
@@ -696,7 +877,7 @@ func _moves() -> void:
 		if form != "":
 			u.text_fit(156.0 + 18.0 * o, y + strip - 24.0, tr(form), name_w, 18.0, Color(UiKit.INK, 0.8), u.heavy)
 		if prep:
-			_token(296.0 + 18.0 * o, y + (strip - 34.0) * 0.5, "1P" if side == 0 else ("2P" if m.online else "CPU"), UiKit.DARK)
+			_token(296.0 + 18.0 * o, y + (strip - 34.0) * 0.5, _side_tag(side), UiKit.DARK)
 	# Middle: the Pokémon and its sheet.
 	var data: Dictionary = Roster.POKEMON[sp]
 	u.slant(430.0, 150.0, 460.0, 840.0, UiKit.PANEL, UiKit.TALL)
@@ -981,7 +1162,9 @@ func _vs() -> void:
 	u.full(UiKit.DARK)
 	u.slant(lerpf(-1700.0, -560.0, k), 0.0, 1560.0, 1080.0, UiKit.RED, 0.25)
 	u.slant(lerpf(2400.0, 980.0, k), 0.0, 1500.0, 1080.0, _side_color(1), 0.25)
-	for i in 2:
+	if m.choice.format == "2v2":
+		_vs_doubles(k)
+	for i in (0 if m.choice.format == "2v2" else 2):
 		var sp: String = pair[i]
 		var x := 470.0 if i == 0 else 1460.0
 		var slide := (1.0 - k) * (-700.0 if i == 0 else 700.0)
@@ -991,6 +1174,24 @@ func _vs() -> void:
 		u.text(x + slide, 880.0, who, 34.0, Color(UiKit.INK, 0.85), u.bold, 0)
 	var vk := UiKit.ease((t - 0.25) / 0.3)
 	u.title(980.0, 400.0 - 30.0 * (1.0 - vk), "VS", 220.0 * (0.6 + 0.4 * vk), Color(UiKit.YELLOW, vk), 0)
+
+
+## The VS screen's four, two to a side: you and your ally against the two AIs.
+func _vs_doubles(k: float) -> void:
+	var at := [[0, 240.0], [2, 660.0], [1, 1300.0], [3, 1720.0]]
+	for e in at:
+		var side: int = e[0]
+		var x: float = e[1]
+		var left := side % 2 == 0
+		var sp: String = m.choice["p%d" % (side + 1)]
+		var slide := (1.0 - k) * (-700.0 if left else 700.0)
+		u.tex(m.render("vs%d" % side, sp, Vector2i(420, 460), 0.45 if left else -0.45), x - 210.0 + slide, 230.0, 420.0, 460.0)
+		u.title(x + slide, 700.0, tr(Roster.POKEMON[sp].display_name).to_upper(), 58.0, UiKit.INK, 0, 400.0)
+		var who := tr("You") if side == 0 else (tr("Ally") if side == 2 else tr("AI, %s") % tr(Menu.DIFFICULTY_NAME[m.choice.diff]).to_lower())
+		if side == 1 or side == 3:
+			if m.has_seats() and m.seat_at(side).peer != Menu.SEAT_AI:
+				who = tr("Rival")
+		u.text(x + slide, 776.0, who, 28.0, Color(UiKit.INK, 0.85), u.bold, 0)
 
 
 # ---------------------------------------------------------------- confirm

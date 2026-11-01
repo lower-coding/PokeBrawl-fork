@@ -9,10 +9,16 @@ extends RefCounted
 ##   unit             how the value reads: "s", "%", "%/s", "x" or nothing
 ##   zero             the word for 0, where 0 turns it off
 ##   one              the word for 1, where the rule is just off or on: any step flips it
-##   any_format       it counts in a 1 vs 1 too (the others only show in a 3 vs 3)
+##   any_format       it counts in every format
+##   only             it counts in this format alone
+##                    (the others count wherever a trainer has more than one Pokémon: Menu.team_size)
 ## Player-facing text (group, label, help, zero) is in English and goes through tr() when drawn.
 
 const DEFS := [
+	{"id": "team_size", "group": "Doubles", "label": "Pokémon per trainer", "default": 1, "min": 1, "max": 3, "step": 1, "unit": "", "only": "2v2",
+		"help": "How many Pokémon each of the four trainers brings."},
+	{"id": "friendly_fire", "group": "Doubles", "label": "Friendly fire", "default": 0.0, "min": 0.0, "max": 1.0, "step": 1.0, "unit": "", "zero": "Off", "one": "On", "only": "2v2",
+		"help": "On, your moves can hurt your ally. Your own Pokémon are always spared."},
 	{"id": "recall", "group": "Switching", "label": "Recall", "default": 0.5, "min": 0.1, "max": 1.5, "step": 0.05, "unit": "s",
 		"help": "How long the Pokémon stands there, open to hits, before the ball leaves its trainer's hand."},
 	{"id": "ball_near", "group": "Switching", "label": "Ball flight, near the trainer", "default": 0.3, "min": 0.0, "max": 1.5, "step": 0.05, "unit": "s",

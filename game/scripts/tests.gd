@@ -11,6 +11,12 @@ extends Node
 ##               projectile, jumping the wave, punishing a recovery, combo limit,
 ##               hitstop)
 ##   team        headless: the rules of 3 vs 3 and switching (Party, BattleRules)
+##   doubles     headless: the rules of 2 vs 2: sides, lock, friendly fire, winning, the moves for
+##               an ally, the AI
+##   double_battles --aivsai --doubles [--battles=N] [--speed=x] [--diff=...] [--rules=team_size:2]:
+##               random picks, AI against AI; how long they last, who wins
+##   menu_doubles headless: the 2 vs 2 format's picks, and the Rules and Options from the wall
+##   outline     with a window: a 2 vs 2's outline, with captures and what it costs a frame
 ##   menu_rules  with a window: the selection's Rules screen, on to a battle by those rules
 ##   menu_wall   with a window: the roster's rows at any size, its keys and mouse, when the
 ##               cries play, with captures
@@ -96,8 +102,8 @@ func _ready() -> void:
 			_plan = [[1.5, "", "menu_title"], [1.7, "menu_accept", ""], [2.3, "move_down", ""], [2.6, "", "menu_main"],
 				[2.8, "move_up", ""], [3.0, "menu_accept", ""], [3.4, "menu_accept", ""], [3.8, "move_right", ""], [4.1, "move_down", ""],
 				[4.8, "", "menu_selection"], [5.0, "menu_accept", ""], [5.4, "move_down", ""], [5.9, "", "menu_rival"],
-				[6.1, "menu_accept", ""], [6.3, "move_left", ""], [6.4, "move_left", ""], [6.5, "move_left", ""], [6.6, "move_left", ""], [6.7, "move_up", ""],
-				[6.8, "move_right", ""], [6.9, "move_up", ""], [7.0, "move_right", ""], [7.1, "move_right", ""], [7.2, "move_right", ""],
+				[6.1, "menu_accept", ""], [6.2, "move_left", ""], [6.3, "move_left", ""], [6.4, "move_left", ""], [6.5, "move_left", ""], [6.6, "move_left", ""], [6.7, "move_up", ""],
+				[6.8, "move_right", ""], [6.9, "move_up", ""], [6.95, "move_right", ""], [7.0, "move_right", ""], [7.1, "move_right", ""], [7.2, "move_right", ""],
 				[7.35, "", "menu_setup"], [7.5, "menu_accept", ""],
 				[7.8, "", "menu_vs"], [10.7, "", "menu_battle"], [10.9, "pause", ""], [11.3, "", "menu_pause"],
 				[11.5, "menu_back", ""], [12.2, "", "menu_back"]]
@@ -225,6 +231,14 @@ func _ready() -> void:
 			_team_test()
 		"team_battles":
 			_team_battles()
+		"doubles":
+			_doubles_test()
+		"double_battles":
+			_double_battles()
+		"menu_doubles":
+			_menu_doubles()
+		"outline":
+			_outline_test()
 		"team_shots":
 			_team_shots()
 		"hud":
@@ -817,7 +831,7 @@ func _prep_test() -> void:
 	m.choice.team = []
 	m.choice.team2 = []
 	m.sel_phase = "p1"
-	for i in Party.SIZE * 2:
+	for i in 6:
 		m._random_pick()
 	var bases: Array = m.choice.team.map(func(sp): return Roster.base_of(sp))
 	_ok("Random pick: fills both teams with no one twice", m.sel_phase == "setup" and m.choice.team.size() == 3 and m.choice.team2.size() == 3 \
@@ -875,6 +889,49 @@ func _prep_test() -> void:
 	_ok("Changed by hand, a roll is saved like anything else", Loadout.saved("snorlax", 1).moves == rolled.moves and not m.choice.loadouts[1].has("snorlax"))
 	m._restore_pick(1, "snorlax")
 	_ok("Restored: back to its default", Loadout.is_default("snorlax", 1) and m.battle_loadout(1, "snorlax") == Loadout.default_for("snorlax"))
+
+	# A 2 vs 2: each AI has its own set, and plays what the screen shows.
+	m.choice.format = "2v2"
+	var by_slot: Array = ["pikachu", "snorlax", "lucario", "snorlax"]
+	for s in 4:
+		m.choice["p%d" % (s + 1)] = by_slot[s]
+		m.choice[Menu.team_key(s)] = [by_slot[s]]
+	var swapped := false
+	for roll in 16:
+		m.choice.loadouts = [{}, {}, {}, {}]
+		m._to_setup()
+		swapped = swapped or m.battle_loadout(1, "snorlax") != Loadout.default_for("snorlax")
+	_ok("2 vs 2: an AI with nothing set may bring an ally move, and it shows", swapped)
+	main.start_battle("pikachu", "snorlax", "normal")
+	var plays_shown := true
+	for s in 4:
+		plays_shown = plays_shown and main.fighters[s].data.moves == m.battle_loadout(s, by_slot[s]).moves
+	_ok("2 vs 2: every Pokémon plays what the screen shows", plays_shown)
+	m.choice.loadouts = [{}, {}, {}, {}]
+	var slot3_moves: Array = Loadout.default_for("snorlax").moves.duplicate()
+	slot3_moves.reverse()
+	m._edit_pick(3)
+	m._store_edit({"moves": slot3_moves, "ability": Roster.POKEMON["snorlax"].passive.id})
+	_ok("2 vs 2: a set for one foe is not the other's", m.battle_loadout(3, "snorlax").moves == slot3_moves and m.battle_loadout(1, "snorlax").moves != slot3_moves)
+	Loadout._loaded = false
+	Loadout._saved_ai = {}
+	_ok("2 vs 2: read back from the file, it is still that foe's", Loadout.saved("snorlax", 3).moves == slot3_moves and Loadout.is_default("snorlax", 1))
+	m._store_edit(Loadout.default_for("snorlax"))
+	var stays_default := true
+	for roll in 16:
+		m._to_setup()
+		stays_default = stays_default and not m.choice.loadouts[3].has("snorlax")
+	_ok("2 vs 2: the default put back by hand stays", stays_default)
+	var mine: Dictionary = m.battle_loadout(0, "pikachu")
+	m._random_ai_moves()
+	_ok("Random AI moves: for each AI", m.choice.loadouts[1].has("snorlax") and m.choice.loadouts[2].has("lucario") and m.choice.loadouts[3].has("snorlax"))
+	_ok("Random AI moves: mine stay", m.battle_loadout(0, "pikachu") == mine and m.choice.loadouts[0].is_empty())
+	_ok("Random AI moves: nothing saved is overwritten", Loadout.is_default("snorlax", 1) and Loadout.is_default("lucario", 2) and Loadout.is_default("snorlax", 3))
+	Loadout.restore("snorlax", 3)
+	m.choice.loadouts = [{}, {}, {}, {}]
+	m.choice.format = "1v1"
+	for s in 4:
+		m.choice[Menu.team_key(s)] = []
 
 	# Options: the keys that move, and the hit sound.
 	var keys := func(action: String) -> Array:
@@ -4209,6 +4266,1277 @@ func _team_battles() -> void:
 	print("WINS: ", ", ".join(by.map(func(sp): return "%s %d/%d" % [sp, wins_by_species[sp], games_by_species[sp]])))
 	Engine.time_scale = 1.0
 	Engine.physics_ticks_per_second = 60
+	get_tree().quit()
+
+
+# ---------------------------------------------------------------- 2 vs 2
+
+const DOUBLES_SPOTS := [Vector3(-4, 0, -3), Vector3(4, 0, -3), Vector3(-4, 0, 3), Vector3(4, 0, 3)]
+
+
+## A 2 vs 2 at DOUBLES_SPOTS, the AIs still and nobody's input coming in. "ids": by slot, a species
+## or a team. "rules": over the defaults. "moves": slot -> species' four moves.
+func _doubles(ids: Array, rules := {}, moves := {}) -> Array:
+	var m: Menu = main.menu
+	m.choice.format = "2v2"
+	m.choice.rules = BattleRules.defaults()
+	m.choice.rules.merge(rules, true)
+	m.choice.loadouts = [{}, {}, {}, {}]
+	for s in 4:
+		var team: Array = ids[s] if ids[s] is Array else [ids[s]]
+		m.choice["p%d" % (s + 1)] = team[0]
+		m.choice[Menu.team_key(s)] = team
+		if moves.has(s):
+			m.choice.loadouts[s][team[0]] = {"moves": moves[s], "ability": Roster.POKEMON[team[0]].passive.id}
+	Engine.time_scale = 1.0
+	main.start_battle(m.choice.p1, m.choice.p2, "normal")
+	await get_tree().physics_frame
+	for x in main.ais:
+		x.mode = "still"
+	var f: Array = main.fighters.duplicate()
+	f[0].is_player = false
+	for i in 4:
+		f[i].ctrl.move_input = Vector2.ZERO
+		f[i].reset(DOUBLES_SPOTS[i], PI * 0.5 if i % 2 == 0 else -PI * 0.5)
+		f[i].locked = true
+	await _wait(0.3)
+	return f
+
+
+## Presses "button" on "f" and lets it go, as a quick tap.
+func _tap_move(f: Fighter, button: String) -> void:
+	f.ctrl.press(button)
+	await get_tree().physics_frame
+	f.ctrl.release(button)
+
+
+## "f" turns its camera on "to", as a player would to put it under the crosshair.
+func _look_at_body(f: Fighter, to: Fighter) -> void:
+	var cam: BattleCamera = main.camera
+	cam.target = f
+	# Letting go of a lock puts the crosshair on the rival first.
+	await _wait(0.1)
+	var line: Vector3 = to.center() - (f.global_position + Vector3.UP * (f.data.height * 0.85 + 0.45))
+	cam.yaw = atan2(-line.x, -line.z)
+	cam.pitch = atan2(line.y, Vector2(line.x, line.z).length()) + clampf(f.data.height - 1.0, 0.0, 1.5) * 0.12
+	cam._manual = 0.0
+	await _wait(0.8)
+
+
+func _doubles_test() -> void:
+	await get_tree().physics_frame
+	await _doubles_sides()
+	await _doubles_lock()
+	await _doubles_friendly_fire()
+	await _doubles_winning()
+	await _doubles_ally_switch()
+	await _doubles_helping_hand()
+	await _doubles_tailwind()
+	await _doubles_ai()
+	await _doubles_hiding()
+	await _doubles_stages()
+	await _doubles_singles()
+	var fails := _results.filter(func(r): return not r[1]).size()
+	print("RESULT: %d of %d" % [_results.size() - fails, _results.size()])
+	get_tree().quit()
+
+
+func _doubles_sides() -> void:
+	var f: Array = await _doubles(["pikachu", "snorlax", "charizard", "lucario"])
+	var a: Fighter = f[0]
+	var b: Fighter = f[1]
+	var c: Fighter = f[2]
+	var d: Fighter = f[3]
+	_ok("Sides: four, by slot", main.fighters == f and [a.slot, b.slot, c.slot, d.slot] == [0, 1, 2, 3] and [a.team, b.team, c.team, d.team] == [0, 1, 0, 1])
+	_ok("Sides: three AIs, one each", main.ais.size() == 3 and main.ais[0].me == b and main.ai == main.ais[0] and main.ais.all(func(x): return x.me != a))
+	_ok("Sides: each one's ally", a.ally() == c and c.ally() == a and b.ally() == d and d.ally() == b)
+	_ok("Sides: each one's foes", a.foes() == [b, d] and c.foes() == [b, d] and b.foes() == [a, c] and d.foes() == [a, c])
+	_ok("Sides: each starts after whoever is across", a.rival == b and b.rival == a and c.rival == d and d.rival == c)
+	_ok("Sides: each trainer's", main.trainers.size() == 4 and main.trainers[2].fighter == c and main.parties.size() == 4 and main.parties[3].side == 3)
+	var names: Array = main.trainers.map(func(tn): return tn.id)
+	_ok("Sides: four different trainers", names.all(func(n): return names.count(n) == 1), str(names))
+	_ok("Sides: two trainers fit on a side", main.trainers[0].global_position.distance_to(main.trainers[2].global_position) > 2.0)
+	_ok("Sides: the League's field and the results look at the battle", main.fighters.size() >= 2)
+	b._damage_direct(999999.0)
+	_ok("After a KO: no ally, one foe", d.ally() == null and a.foes() == [d] and c.foes() == [d], "%s" % [a.foes()])
+	# Nobody walks through anybody.
+	f = await _doubles(["pikachu", "snorlax", "charizard", "lucario"])
+	f[2].global_position = f[0].global_position + Vector3(0.1, 0, 0)
+	f[1].global_position = f[0].global_position + Vector3(-0.1, 0, 0)
+	await _wait(0.3)
+	_ok("Allies and the second foe do not walk through each other", f[0].global_position.distance_to(f[2].global_position) > 0.3 and f[0].global_position.distance_to(f[1].global_position) > 0.3,
+		"%.2f %.2f" % [f[0].global_position.distance_to(f[2].global_position), f[0].global_position.distance_to(f[1].global_position)])
+
+
+func _doubles_lock() -> void:
+	for ff in [0.0, 1.0]:
+		var f: Array = await _doubles(["pikachu", "snorlax", "charizard", "lucario"], {"friendly_fire": ff})
+		_ok("Lock: never the ally (friendly fire %d)" % int(ff), f[0].lock_candidates() == [f[1], f[3]] and f[2].lock_candidates() == [f[1], f[3]])
+	var f: Array = await _doubles(["pikachu", "snorlax", "charizard", "gengar"])
+	var a: Fighter = f[0]
+	var b: Fighter = f[1]
+	var d: Fighter = f[3]
+	var doll := Decoy.new()
+	main.add_child(doll)
+	doll.setup(main, d, 8.0)
+	doll.global_position = Vector3(4, 0, 0)
+	main.combat.targets.append(doll)
+	_ok("Lock: a foe's decoys too, not the ally's", doll in a.lock_candidates() and not doll in d.lock_candidates())
+	a.ctrl.yaw = -PI * 0.5
+	var seen := {}
+	for side in [1, 1, 1, -1, -1, -1, 1]:
+		a.switch_target(side)
+		seen[a.aim_target()] = true
+		if a.aim_target() is Decoy:
+			_ok("Lock: on a decoy, its user is the rival", a.rival == d and a.fooled_by == doll)
+	_ok("Lock: a flick goes through both foes and the decoy", seen.has(b) and seen.has(d) and seen.has(doll) and not seen.has(f[2]), str(seen.keys()))
+	# The key: every target in turn and back to the first, wherever the camera turns.
+	a._lock_choice(b)
+	var turn: Array = []
+	for i in 3:
+		a.cycle_target()
+		turn.append(a.aim_target())
+		a.ctrl.yaw += 2.0
+	_ok("Lock: the key goes through every target and back to the first", turn[2] == b and turn.has(d) and turn.has(doll), str(turn))
+	var v_key := InputEventKey.new()
+	v_key.physical_keycode = KEY_V
+	v_key.pressed = true
+	a.is_player = true
+	a.locked = false
+	a._lock_choice(b)
+	main._unhandled_input(v_key)
+	_ok("Lock: the key does nothing with nothing locked on", a.aim_target() == b)
+	a.locked = true
+	main._unhandled_input(v_key)
+	_ok("Lock: the key is V and changes the target", a.aim_target() != b, str(a.aim_target()))
+	# The mouse's sweep, and the setting that turns it off.
+	a._lock_choice(b)
+	var cam: BattleCamera = main.camera
+	cam.target = a
+	main.options.mouse_flick = false
+	for side in [1.0, -1.0]:
+		cam._sweep(side * (cam.MOUSE_FLICK + 1.0))
+	_ok("Lock: the mouse's sweep does nothing with its setting off", a.aim_target() == b, str(a.aim_target()))
+	main.options.mouse_flick = true
+	var swept := false
+	for side in [1.0, -1.0]:
+		cam._sweep(side * (cam.MOUSE_FLICK + 1.0))
+		swept = swept or a.aim_target() != b
+	_ok("Lock: on by default, it changes the target", swept)
+	a.is_player = false
+	a.locked = false
+	# Choosing by looking.
+	var to_d: Vector3 = d.global_position - a.global_position
+	a.ctrl.yaw = atan2(-to_d.x, -to_d.z)
+	a.lock_on_looked()
+	_ok("Lock: looking at a foe makes it the rival", a.locked and a.rival == d and a.aim_target() == d, str(a.aim_target()))
+	a.fooled_by = null
+	doll.undo()
+	_ok("Lock: a player never has an aiding", a.aiding == null)
+	# Off a KO.
+	a.rival = b
+	b._damage_direct(999999.0)
+	_ok("Lock: a foe's KO moves it to the other", a.rival == d and a.aim_target() == d, str(a.rival))
+	# The moves of whoever falls for a trick, on that foe only.
+	f = await _doubles(["pikachu", "gengar", "charizard", "lucario"])
+	f[3].rival = f[2]
+	f[1].rival = f[0]
+	await _tap_move(f[1], "mov4")
+	await _wait(0.5)
+	_ok("Substitute: those after it fall for it", f[0].fooled_by == null or f[0].rival == f[1], str(f[0].fooled_by))
+	# Retargeting does not cure infatuation; the charmer leaving does.
+	f = await _doubles(["pikachu", "sylveon", "charizard", "lucario"])
+	f[0].infatuate("sylveon")
+	f[0].rival = f[3]
+	await _wait(0.2)
+	_ok("Infatuation: a retarget does not cure it", f[0].charmed_by == "sylveon" and f[0].charmer == f[1])
+	f[1]._damage_direct(999999.0)
+	await _wait(0.1)
+	_ok("Infatuation: the charmer's KO does", f[0].charmed_by == "")
+	# A Hex burst doubles against whoever it lands on.
+	f = await _doubles(["gengar", "pikachu", "charizard", "lucario"])
+	f[3].inflict("psn")
+	f[0].rival = f[1]
+	f[0].locked = false
+	f[0].ctrl.aim_at = f[3].global_position
+	await _tap_move(f[0], "mov3")
+	var hurt0: float = f[3].hp
+	await _wait(1.6)
+	_ok("Hex: doubles on the status of who it lands on", f[3].hp < hurt0 - f[3].hp_max * 0.03, "%.0f -> %.0f" % [hurt0, f[3].hp])
+
+
+## A hit active on "on", from "by": whatever Combat does with it.
+func _doubles_touch(by: Fighter, on: Fighter) -> Hit:
+	var g := Hit.new()
+	g.user = by
+	g.local = false
+	g.shape = "sphere"
+	g.center = on.center()
+	g.radius = 0.5
+	g.move_id = "thundershock"
+	g.type = "electric"
+	g.cat = "special"
+	g.damage = 52.0
+	g.lifetime = 0.05
+	return main.combat.add_hit(g)
+
+
+func _doubles_friendly_fire() -> void:
+	# Off.
+	var f: Array = await _doubles([["pikachu", "lucario"], "snorlax", "charizard", "lucario"], {"team_size": 2})
+	var a: Fighter = f[0]
+	var b: Fighter = f[1]
+	var c: Fighter = f[2]
+	_ok("Off: the ally is spared, its decoys too", main.combat.spares(a, c))
+	var hp0: float = c.hp
+	_team_shot(a, c.center() + Vector3(0, 0, -2), Vector3(0, 0, 10), 0.5, null)
+	_doubles_touch(a, c)
+	await _wait(0.45)
+	_ok("Off: shots and hits pass through the ally", c.hp == hp0, "%.0f" % c.hp)
+	# Stripes on the ground.
+	f = await _doubles(["blastoise", "snorlax", "charizard", "lucario"], {}, {0: ["icebeam", "aquajet", "hydropump", "rapidspin"]})
+	a = f[0]
+	b = f[1]
+	c = f[2]
+	f[3].global_position = Vector3(10, 0, 8)
+	b.global_position = Vector3(4, 0, 0)
+	a.global_position = Vector3(-4, 0, 0)
+	c.global_position = Vector3(0, 0, 0)
+	c.locked = false
+	await _tap_move(a, "mov1")
+	var chilled := false
+	for k in 150:
+		await get_tree().physics_frame
+		chilled = chilled or c.slow < 1.0
+	_ok("Off: an ally's ground zone does not touch it", not chilled, "slow %.2f" % c.slow)
+
+	# On.
+	f = await _doubles([["pikachu", "lucario"], "snorlax", "charizard", "lucario"], {"team_size": 2, "friendly_fire": 1.0})
+	a = f[0]
+	b = f[1]
+	c = f[2]
+	var pa: Party = main.parties[0]
+	_ok("On: the ally is not spared", not main.combat.spares(a, c) and not main.combat.spares(c, a))
+	_ok("On: a foe, as ever", not main.combat.spares(a, b))
+	_ok("On or off: the same trainer's replacement is spared", main.combat.spares(a, pa.members[1]) and main.combat.spares(pa.members[1], a))
+	a.energy = 50.0
+	c.energy = 50.0
+	pa.charges = 0
+	var wait0: float = pa._recharge
+	var hp1: float = c.hp
+	var trainer: Trainer = main.trainers[0]
+	var hop0: float = trainer._hop
+	var res := _team_hit(a, c)
+	_ok("On: it lands, at full damage", res == "hit" and c.hp < hp1, "%s %.0f" % [res, c.hp])
+	_ok("On: no energy for anybody", a.energy == 50.0 and c.energy == 50.0, "%.1f %.1f" % [a.energy, c.energy])
+	_ok("On: no time off the next switch", pa._recharge == wait0, "%.2f %.2f" % [wait0, pa._recharge])
+	_ok("On: no cheer", trainer._hop == hop0)
+	_ok("On: nobody's last hit", c.last_hit_by == null)
+	var e0: float = a.energy
+	_team_hit(a, b)
+	_ok("On: a foe's hit charges as ever", a.energy > e0 and b.last_hit_by == a, "%.1f" % a.energy)
+	await _wait(0.4)
+	# Shots and streams of allies, either way.
+	var s1: Dictionary = _team_shot(a, Vector3(0, 6, -2), Vector3(0, 0, 8), 1.0, null)
+	var s2: Dictionary = _team_shot(c, Vector3(0, 6, 2), Vector3(0, 0, -8), 1.0, null)
+	await _wait(0.4)
+	_ok("On: allies' shots do not clash", not s1.get("clashed", false) and not s2.get("clashed", false))
+	s1.age_t = s1.lifetime
+	s2.age_t = s2.lifetime
+	await _wait(0.1)
+	var g1 := Hit.new()
+	g1.user = a
+	g1.local = false
+	g1.shape = "capsule"
+	g1.a = Vector3(0, 9, -2)
+	g1.b = Vector3(0, 9, 2)
+	g1.radius = 0.4
+	g1.interval = 0.1
+	g1.move_id = "flamethrower"
+	g1.type = "fire"
+	main.combat.add_hit(g1)
+	var g2: Hit = g1.copy()
+	g2.user = c
+	g2.a = Vector3(-2, 9, 0)
+	g2.b = Vector3(2, 9, 0)
+	main.combat.add_hit(g2)
+	await _wait(0.05)
+	_ok("On: allies' streams do not cut each other", g1.cut == 0.0 and g2.cut == 0.0, "%.2f %.2f" % [g1.cut, g2.cut])
+	var g3: Hit = g1.copy()
+	g3.user = b
+	main.combat.add_hit(g3)
+	g3.a = Vector3(0, 9, -2)
+	g3.b = Vector3(0, 9, 2)
+	g3.move_id = "hydropump"
+	g3.type = "water"
+	await _wait(0.05)
+	_ok("A foe's stream still cuts it", g1.cut != 0.0 or g2.cut != 0.0 or g3.cut != 0.0, "%.2f %.2f %.2f" % [g1.cut, g2.cut, g3.cut])
+	g1.active = false
+	g2.active = false
+	g3.active = false
+	await _wait(0.05)
+	# An ally's deflect neither breaks nor returns my shot.
+	var swing := Hit.new()
+	swing.user = c
+	swing.local = false
+	swing.shape = "sphere"
+	swing.center = c.center() + c.forward()
+	swing.radius = 1.0
+	swing.move_id = "irontail"
+	swing.lifetime = 2.0
+	main.combat.add_hit(swing)
+	var mine: Dictionary = _team_shot(a, c.center() + c.forward() * 2.0, Vector3(0, 0, -0.5), 1.0, null)
+	_ok("An ally's deflect does not touch my shot", not main.combat._try_deflect(mine, Vector3.ZERO) and not mine.get("deflected", false))
+	var theirs: Dictionary = _team_shot(b, c.center() + c.forward() * 2.0, Vector3(0, 0, -0.5), 1.0, null)
+	_ok("It does a foe's", main.combat._try_deflect(theirs, Vector3.ZERO))
+	mine.age_t = mine.lifetime
+	theirs.age_t = theirs.lifetime
+	swing.active = false
+	# Stripes on the ground, this time.
+	f = await _doubles(["blastoise", "snorlax", "charizard", "lucario"], {"friendly_fire": 1.0}, {0: ["icebeam", "aquajet", "hydropump", "rapidspin"]})
+	a = f[0]
+	b = f[1]
+	c = f[2]
+	f[3].global_position = Vector3(10, 0, 8)
+	b.global_position = Vector3(4, 0, 0)
+	a.global_position = Vector3(-4, 0, 0)
+	c.global_position = Vector3(2, 0, 2.5)
+	await _tap_move(a, "mov1")
+	chilled = false
+	var near: Fighter = c
+	for k in 150:
+		await get_tree().physics_frame
+		near.global_position = Vector3(1.5, 0, 0)
+		chilled = chilled or near.slow < 1.0
+	_ok("On: an ally's ground zone touches it", chilled, "slow %.2f" % near.slow)
+
+
+func _doubles_winning() -> void:
+	# One each.
+	var f: Array = await _doubles(["pikachu", "snorlax", "charizard", "lucario"])
+	var a: Fighter = f[0]
+	var c: Fighter = f[2]
+	f[1]._damage_direct(999999.0)
+	await _wait(0.1)
+	_ok("One trainer out does not end it", main._end_t < 0.0 and a.rival == f[3] and c.rival == f[3])
+	_ok("Moves on the one left", main.fighters[1].state == "ko")
+	# Watching the ally.
+	a._damage_direct(999999.0)
+	await _wait(0.1)
+	_ok("Out of Pokémon, the player watches their ally", main._end_t < 0.0 and main.camera.target == c and main.player == a, str(main.camera.target))
+	_ok("The camera's flick leaves the ally's lock alone", main.camera.target != main.player)
+	_ok("No eyes while watching", true)
+	var rival0: Fighter = c.rival
+	f[3]._damage_direct(999999.0)
+	await _wait(0.1)
+	_ok("Both out ends it, for the side that is left", main._end_t >= 0.0 and main.winning_team == 0, "%d" % main.winning_team)
+	_ok("It stood against the one left at the end", rival0 == f[3])
+	await _wait(0.3)
+	main.rematch()
+	await _wait(0.2)
+	_ok("A rematch puts everyone back", main.fighters.all(func(o): return o.state != "ko" and o.hp == o.hp_max) and main._end_t < 0.0 and main.camera.target == main.player and a.rival == f[1], str(a.rival))
+	_ok("The trainers react by side", main.trainers.size() == 4)
+	# Sizes 2 and 3, with a mirror pick on each side.
+	for size in [2, 3]:
+		var extra := ["lucario", "gengar", "scizor", "charizard"]
+		var teams: Array = []
+		for s in 4:
+			var t: Array = ["pikachu"]
+			for k in range(size - 1):
+				t.append(extra[(s + k) % 4])
+			teams.append(t)
+		f = await _doubles(teams, {"team_size": size})
+		var sides: Array = main.parties
+		_ok("Size %d: everyone has that many, mirror picks and all" % size, sides.all(func(p): return p.members.size() == size) and main.fighters.all(func(o): return o.species == "pikachu"))
+		var foe0: Fighter = f[1]
+		var next: Fighter = await _team_faint_and_wait(sides[1])
+		_ok("Size %d: a replacement comes, to its slot" % size, main.fighters[1] == next and next != foe0 and next.slot == 1 and next.team == 1 and next.state != "ko", next.state)
+		_ok("Size %d: it is the replacement's foes that look at it" % size, f[0].rival == f[3] and next.rival != null and next.rival.team == 0, str(f[0].rival))
+		_ok("Size %d: its frame's portrait" % size, main.hud._portraits[1].sp == next.species)
+		for keep in range(size - 1):
+			await _team_faint_and_wait(sides[1])
+		main.fighters[1]._damage_direct(999999.0)
+		await _wait(0.1)
+		_ok("Size %d: that trainer is out, the battle goes on" % size, sides[1].alive_count() == 0 and main._end_t < 0.0 and main.fighters[0].rival == main.fighters[3])
+		for keep in range(size - 1):
+			await _team_faint_and_wait(sides[3])
+		main.fighters[3]._damage_direct(999999.0)
+		await _wait(0.1)
+		_ok("Size %d: both out, it ends" % size, main._end_t >= 0.0 and main.winning_team == 0)
+	# After a KO: the stages of whoever made it, not those of whoever was looking.
+	f = await _doubles([["pikachu", "lucario"], "snorlax", "charizard", "gengar"], {"team_size": 2})
+	f[1].boost("atk", 2)
+	f[3].boost("atk", 2)
+	f[0].rival = f[3]
+	f[0].hp = 1.0
+	_team_hit(f[1], f[0])
+	await _wait(1.9)
+	_ok("After a KO, the stages of the one that made it go", main.parties[0].active != f[0] and f[1].stages.atk == 0 and f[3].stages.atk == 2, "%d %d" % [f[1].stages.atk, f[3].stages.atk])
+
+
+func _doubles_ally_switch() -> void:
+	var swap := ["allyswitch", "shadowball", "sludgebomb", "hex"]
+	var f: Array = await _doubles(["gengar", "snorlax", "pikachu", "lucario"], {}, {0: swap})
+	var a: Fighter = f[0]
+	var b: Fighter = f[1]
+	var c: Fighter = f[2]
+	a.locked = false
+	var here := a.global_position
+	var there := c.global_position
+	var e0: float = a.energy
+	# Refused: nothing is spent.
+	a.ctrl.aim_ally = false
+	await _tap_move(a, "mov1")
+	await _wait(0.05)
+	_ok("Ally Switch: off the crosshair it is refused", a.state == "free" and a.energy >= e0 and a.cd("allyswitch") == 0.0 and a.global_position.distance_to(here) < 0.1, a.state)
+	_ok("Ally Switch: says so", a.refused("allyswitch") != "")
+	# Locked on, the player's own frame resets it.
+	main.player.is_player = true
+	a.locked = true
+	a.ctrl.aim_ally = true
+	await _wait(0.05)
+	_ok("Ally Switch: locked on, never under the crosshair", not a.ctrl.aim_ally and a.refused("allyswitch") != "")
+	a.locked = false
+	main.player.is_player = false
+	# The camera's aim.
+	main.player.is_player = true
+	await _look_at_body(a, c)
+	await get_tree().physics_frame
+	_ok("Under the crosshair, it knows", a.ctrl.aim_ally, "yaw %.2f pitch %.2f" % [main.camera.yaw, main.camera.pitch])
+	_ok("And the ally is not what the aim assist sticks to", main.camera._over == null)
+	# Through a wall it does not.
+	var wall := StaticBody3D.new()
+	wall.collision_layer = Combat.WORLD_LAYER
+	var cs := CollisionShape3D.new()
+	var box := BoxShape3D.new()
+	box.size = Vector3(4.0, 8.0, 0.4)
+	cs.shape = box
+	wall.add_child(cs)
+	main.add_child(wall)
+	wall.global_position = a.global_position.lerp(c.global_position, 0.6)
+	await _wait(0.15)
+	_ok("Ally Switch: not through a wall", not a.ctrl.aim_ally)
+	wall.queue_free()
+	await _wait(0.1)
+	main.player.is_player = false
+	# It goes.
+	a.ctrl.aim_ally = true
+	here = a.global_position
+	there = c.global_position
+	var shot_at_a: Dictionary = _team_shot(b, Vector3(0, 8, 0), Vector3(0, 0.1, 0), 3.0, a)
+	var shot_at_c: Dictionary = _team_shot(b, Vector3(1, 8, 0), Vector3(0, 0.1, 0), 3.0, c)
+	e0 = a.energy
+	await _tap_move(a, "mov1")
+	await _wait(0.12)
+	_ok("Ally Switch: they swap places", a.global_position.distance_to(there) < 0.5 and c.global_position.distance_to(here) < 0.5, "%s %s" % [a.global_position, c.global_position])
+	_ok("Ally Switch: shots in flight swap targets", shot_at_a.target == c and shot_at_c.target == a)
+	_ok("Ally Switch: costs its energy", a.energy < e0, "%.1f" % a.energy)
+	_ok("Ally Switch: foes' locks stay on the same Pokémon", b.rival == a and f[3].rival == c)
+	shot_at_a.age_t = shot_at_a.lifetime
+	shot_at_c.age_t = shot_at_c.lifetime
+	await _wait(0.35)
+	_ok("Ally Switch: the cooldown runs after it worked", a.cd("allyswitch") > 7.0, "%.1f" % a.cd("allyswitch"))
+	# No ally, and an ally who cannot be swapped with.
+	f = await _doubles(["gengar", "snorlax", "pikachu", "lucario"], {}, {0: swap})
+	a = f[0]
+	c = f[2]
+	a.locked = false
+	a.ctrl.aim_ally = true
+	c.state = "recall"
+	_ok("Ally Switch: not with an ally recalling", a.refused("allyswitch") != "")
+	c.state = "free"
+	c.global_position = a.global_position + Vector3(0, 0, 21)
+	_ok("Ally Switch: not out of reach", a.refused("allyswitch") != "")
+	c.global_position = a.global_position + Vector3(0, 0, 6)
+	_ok("Ally Switch: nothing wrong now", a.refused("allyswitch") == "", a.refused("allyswitch"))
+	c._damage_direct(999999.0)
+	var e1: float = a.energy
+	await _tap_move(a, "mov1")
+	await _wait(0.1)
+	_ok("Ally Switch: not with no ally", a.state == "free" and a.cd("allyswitch") == 0.0 and a.energy >= e1)
+	# It goes at the moment its startup ends, if the ally is still there.
+	f = await _doubles(["gengar", "snorlax", "pikachu", "lucario"], {}, {0: swap})
+	a = f[0]
+	c = f[2]
+	a.locked = false
+	a.ctrl.aim_ally = true
+	e1 = a.energy
+	await _tap_move(a, "mov1")
+	await get_tree().physics_frame
+	c._damage_direct(999999.0)
+	await _wait(0.5)
+	_ok("Ally Switch: gone by then, it costs nothing", a.cd("allyswitch") == 0.0 and a.energy >= e1 - 0.01, "cd %.1f, energy %.1f of %.1f" % [a.cd("allyswitch"), a.energy, e1])
+	# Off a stage's void.
+	main.set_stage("floating")
+	f = await _doubles(["gengar", "snorlax", "pikachu", "lucario"], {}, {0: swap})
+	a = f[0]
+	c = f[2]
+	a.locked = false
+	a.ctrl.aim_ally = true
+	_ok("Ally Switch: on solid ground it works on a void stage", a.refused("allyswitch") == "", a.refused("allyswitch"))
+	c.global_position = Vector3(0, 0, 200)
+	_ok("Ally Switch: not with one of them off a stage's edge", a.refused("allyswitch") != "")
+	c.global_position = DOUBLES_SPOTS[2]
+	main.set_stage("night")
+	await _wait(0.1)
+
+
+func _doubles_helping_hand() -> void:
+	var cheer := ["helpinghand", "thundershock", "quickattack", "irontail"]
+	var f: Array = await _doubles(["pikachu", "snorlax", "scizor", "lucario"], {}, {0: cheer})
+	var a: Fighter = f[0]
+	var c: Fighter = f[2]
+	c.global_position = a.global_position + Vector3(0, 0, 3)
+	await _wait(0.1)
+	_ok("Helping Hand: in reach", a.ctrl.ally_near)
+	await _tap_move(a, "mov1")
+	await _wait(0.4)
+	_ok("Helping Hand: it reaches the ally", is_equal_approx(c.help_mult, 1.5) and c.help_t > 2.5, "%.2f %.2f" % [c.help_mult, c.help_t])
+	_ok("Helping Hand: its cooldown", a.cd("helpinghand") > 5.0, "%.1f" % a.cd("helpinghand"))
+	_ok("Helping Hand: its tag", main.hud.stage_tags(c).any(func(tag): return tag[1]))
+	# A status move leaves it, a damaging one takes it, on every hit.
+	await _tap_move(c, "mov3")
+	await _wait(0.1)
+	_ok("Helping Hand: a status move leaves it waiting", c.action != null and c.action.id == "swordsdance" and c.action.help == 1.0 and c.help_t > 0.0)
+	await _wait(1.2)
+	c.help_t = 3.0
+	await _tap_move(c, "mov1")
+	await get_tree().physics_frame
+	_ok("Helping Hand: the next damaging move takes it", c.action != null and is_equal_approx(c.action.help, 1.5) and c.help_t == 0.0, str(c.action))
+	var bonus := 0.0
+	for k in 20:
+		await get_tree().physics_frame
+		for g in main.combat.hits:
+			if g.user == c:
+				bonus = g.bonus
+	_ok("Helping Hand: its hit carries it", is_equal_approx(bonus, 1.5), "%.2f" % bonus)
+	await _wait(0.5)
+	c.help_t = 0.1
+	await _wait(0.2)
+	_ok("Helping Hand: it ends", c.help_t == 0.0)
+	await _tap_move(c, "mov2")
+	await get_tree().physics_frame
+	_ok("Helping Hand: nothing is left of it", c.action != null and c.action.help == 1.0)
+	# All of Swift's stars.
+	f = await _doubles(["pikachu", "snorlax", "sylveon", "lucario"], {}, {0: cheer, 2: ["swift", "moonblast", "drainingkiss", "hypervoice"]})
+	c = f[2]
+	c.help_t = 3.0
+	c.help_mult = 1.5
+	await _tap_move(c, "mov1")
+	var stars := {}
+	for k in 45:
+		await get_tree().physics_frame
+		for p in main.combat.projectiles:
+			if p.user == c:
+				stars[p.get("seq", -1)] = p.hit.bonus
+	_ok("Helping Hand: on all five stars", stars.size() == 5 and stars.values().all(func(b): return is_equal_approx(b, 1.5)), str(stars))
+	# All of a stream's ticks.
+	f = await _doubles(["pikachu", "snorlax", "charizard", "lucario"], {}, {0: cheer})
+	c = f[2]
+	c.help_t = 3.0
+	c.help_mult = 1.5
+	c.ctrl.press("mov1")
+	var ticks: Array = []
+	for k in 50:
+		await get_tree().physics_frame
+		for g in main.combat.hits:
+			if g.user == c:
+				ticks.append(g.bonus)
+	c.ctrl.release("mov1")
+	_ok("Helping Hand: a stream's ticks too", not ticks.is_empty() and ticks.all(func(b): return is_equal_approx(b, 1.5)), "%d, %s" % [ticks.size(), ticks.slice(0, 3)])
+	# Out of reach it is refused, and with no ally.
+	f = await _doubles(["pikachu", "snorlax", "scizor", "lucario"], {}, {0: cheer})
+	a = f[0]
+	c = f[2]
+	c.global_position = a.global_position + Vector3(0, 0, 12)
+	await _wait(0.1)
+	var e0: float = a.energy
+	_ok("Helping Hand: out of reach, not near", not a.ctrl.ally_near)
+	await _tap_move(a, "mov1")
+	await _wait(0.1)
+	_ok("Helping Hand: out of reach it is refused at no cost", a.state == "free" and a.cd("helpinghand") == 0.0 and a.energy >= e0 and c.help_t == 0.0)
+	# Reach is body to body, for big bodies too.
+	c.global_position = a.global_position + Vector3(0, 0, 5.0 + a.radius() + c.radius() - 0.05)
+	await _wait(0.05)
+	_ok("Helping Hand: its reach goes body to body", a.ctrl.ally_near, "%.2f" % a.gap_to(c))
+	# A cut cast loses it.
+	f = await _doubles(["pikachu", "snorlax", "scizor", "lucario"], {}, {0: cheer})
+	a = f[0]
+	c = f[2]
+	c.global_position = a.global_position + Vector3(0, 0, 3)
+	await _wait(0.1)
+	await _tap_move(a, "mov1")
+	await get_tree().physics_frame
+	_team_hit(f[1], a, 2)
+	await _wait(0.2)
+	_ok("Helping Hand: a cut cast loses it", c.help_t == 0.0 and a.state != "action", a.state)
+	# In a 1 vs 1.
+	main.menu.choice.format = "1v1"
+	main.menu.choice.rules = BattleRules.defaults()
+	main.menu.choice.loadouts = [{"pikachu": {"moves": cheer, "ability": Roster.POKEMON.pikachu.passive.id}}, {}, {}, {}]
+	var ab: Array = await _setup("pikachu", "snorlax", Vector3(-3, 0, 0), Vector3(3, 0, 0))
+	main.menu.choice.loadouts = [{}, {}, {}, {}]
+	_ok("Helping Hand: offered in a 1 vs 1, and always refused", "helpinghand" in ab[0].data.moves and ab[0].refused("helpinghand") != "")
+	e0 = ab[0].energy
+	await _tap_move(ab[0], "mov1")
+	await _wait(0.1)
+	_ok("Helping Hand: at no cost", ab[0].state == "free" and ab[0].energy >= e0)
+	var learners := func(move: String) -> Array: return Roster.POKEMON.keys().filter(func(sp): return Loadout.moves_for(sp).has(move))
+	_ok("Helping Hand: 13 of 15, not Gengar or Goodra, and common", learners.call("helpinghand").size() == 13 and not "gengar" in learners.call("helpinghand") and not "goodra" in learners.call("helpinghand") and Loadout.is_common("helpinghand"), str(learners.call("helpinghand")))
+	_ok("Ally Switch: who learns it", learners.call("allyswitch") == ["gengar", "mewtwo"], str(learners.call("allyswitch")))
+	_ok("Tailwind: who learns it; not Charizard, it is legacy there", learners.call("tailwind") == ["scizor"], str(learners.call("tailwind")))
+	var rolled_ally := false
+	var rolled_alone := false
+	for k in 300:
+		var four := Loadout.random_moves("mewtwo", k % 2 == 0)
+		var has_it := four.any(func(m): return Moves.DATA[m].get("needs_ally", false))
+		if k % 2 == 0:
+			rolled_ally = rolled_ally or has_it
+		else:
+			rolled_alone = rolled_alone or has_it
+	_ok("Random rolls leave them out outside a 2 vs 2", rolled_ally and not rolled_alone)
+	var saw_it := false
+	var kept := true
+	for k in 60:
+		var set_up := Loadout.ai_doubles("scizor")
+		saw_it = saw_it or set_up.moves.has("tailwind")
+		kept = kept and set_up.moves.size() == 4 and Loadout.valid("scizor", set_up) == set_up
+	_ok("An AI's set may swap a move for one that helps", saw_it and kept)
+
+
+func _doubles_tailwind() -> void:
+	var gust := ["tailwind", "bulletpunch", "xscissor", "swordsdance"]
+	var f: Array = await _doubles(["scizor", "snorlax", "pikachu", "lucario"], {}, {0: gust})
+	var a: Fighter = f[0]
+	var c: Fighter = f[2]
+	var b: Fighter = f[1]
+	c.global_position = a.global_position + Vector3(0, 0, 3)
+	b.global_position = a.global_position + Vector3(2, 0, 0)
+	f[3].global_position = a.global_position + Vector3(0, 0, -15)
+	await get_tree().physics_frame
+	var base: float = a.speed_stage()
+	var spe: float = a.data.stats.spe
+	await _tap_move(a, "mov1")
+	await _wait(0.8)
+	_ok("Tailwind: the caster and an ally inside", a.tailwind_t > 11.0 and c.tailwind_t > 11.0, "%.1f %.1f" % [a.tailwind_t, c.tailwind_t])
+	_ok("Tailwind: never a foe, inside or not", b.tailwind_t == 0.0 and f[3].tailwind_t == 0.0)
+	_ok("Tailwind: Speed x2 in speed_stage", is_equal_approx(a.speed_stage(), (4.0 + 0.032 * spe * 2.0) / (4.0 + 0.032 * spe)) and base == 1.0, "%.3f" % a.speed_stage())
+	_ok("Tailwind: its cooldown", a.cd("tailwind") > 19.0, "%.1f" % a.cd("tailwind"))
+	_ok("Tailwind: its tag", main.hud.stage_tags(a).any(func(tag): return tag[1]))
+	a.clear_stages()
+	_ok("Tailwind: nothing that clears stages takes it", a.tailwind_t > 0.0)
+	# Refreshes, does not stack.
+	a.tailwind_t = 2.0
+	a.cds.erase("tailwind")
+	a.energy = 100.0
+	await _tap_move(a, "mov1")
+	await _wait(0.5)
+	_ok("Tailwind: casting again refreshes, it does not stack", a.tailwind_t > 11.0 and a.tailwind_t <= 12.0 and is_equal_approx(a.speed_stage(), (4.0 + 0.032 * spe * 2.0) / (4.0 + 0.032 * spe)), "%.1f" % a.tailwind_t)
+	# An ally out of reach.
+	f = await _doubles(["scizor", "snorlax", "pikachu", "lucario"], {}, {0: gust})
+	a = f[0]
+	c = f[2]
+	c.global_position = a.global_position + Vector3(0, 0, 9)
+	await _wait(0.05)
+	await _tap_move(a, "mov1")
+	await _wait(0.5)
+	_ok("Tailwind: an ally outside gets nothing", a.tailwind_t > 11.0 and c.tailwind_t == 0.0, "%.1f" % c.tailwind_t)
+	a.tailwind_t = 0.05
+	await _wait(0.1)
+	_ok("Tailwind: 12 s and it ends", a.tailwind_t == 0.0 and a.speed_stage() == 1.0)
+	# A hit in its startup stops it.
+	f = await _doubles(["scizor", "snorlax", "pikachu", "lucario"], {}, {0: gust})
+	a = f[0]
+	await _tap_move(a, "mov1")
+	await _wait(0.05)
+	_team_hit(f[1], a, 2)
+	await _wait(0.4)
+	_ok("Tailwind: a hit in its startup stops it", a.tailwind_t == 0.0)
+	# Leaving the field.
+	f = await _doubles([["scizor", "lucario"], "snorlax", "pikachu", "lucario"], {"team_size": 2}, {0: gust})
+	a = f[0]
+	a.tailwind_t = 12.0
+	main.parties[0].charges = 1
+	await _team_switch(main.parties[0], 0)
+	_ok("Tailwind: ends on leaving the field", main.parties[0].active != a and a.tailwind_t == 0.0)
+	# Works in a 1 vs 1.
+	main.menu.choice.format = "1v1"
+	main.menu.choice.rules = BattleRules.defaults()
+	main.menu.choice.loadouts = [{"scizor": {"moves": gust, "ability": Roster.POKEMON.scizor.passive.id}}, {}, {}, {}]
+	var ab: Array = await _setup("scizor", "snorlax", Vector3(-3, 0, 0), Vector3(3, 0, 0))
+	main.menu.choice.loadouts = [{}, {}, {}, {}]
+	await _tap_move(ab[0], "mov1")
+	await _wait(0.5)
+	_ok("Tailwind: works anywhere", ab[0].tailwind_t > 11.0)
+
+
+func _doubles_ai() -> void:
+	var f: Array = await _doubles(["pikachu", "snorlax", "charizard", "lucario"])
+	var b: Fighter = f[1]
+	var d: Fighter = f[3]
+	var x: AI = main.ais[0]
+	var hard: Dictionary = {"reaction": 0.0, "defense": 1.0, "punish": 1.0, "deflect": 0.0, "deflect_error": 0.0}
+	var seen := {"state": "free", "phase": "", "action": "", "pos": main.fighters[0].global_position}
+	# Its ally's shot.
+	var s1: Dictionary = _team_shot(d, b.center() + Vector3(0, 0, -3), Vector3(0, 0, 10), 0.8, null)
+	x._cooldown_def = 0.0
+	s1.age_t = 0.1
+	_ok("AI: an ally's shot is no threat", not x._defend(seen, 8.0, hard))
+	s1.age_t = s1.lifetime
+	await _wait(0.05)
+	var s2: Dictionary = _team_shot(f[0], b.center() + Vector3(0, 0, -3), Vector3(0, 0, 10), 0.8, null)
+	x._cooldown_def = 0.0
+	s2.age_t = 0.1
+	_ok("AI: a foe's is", x._defend(seen, 8.0, hard))
+	s2.age_t = s2.lifetime
+	await _wait(0.05)
+	# Friendly fire.
+	f = await _doubles(["pikachu", "snorlax", "charizard", "lucario"], {"friendly_fire": 1.0})
+	b = f[1]
+	d = f[3]
+	x = main.ais[0]
+	var a: Fighter = f[0]
+	b.global_position = Vector3(4, 0, 0)
+	a.global_position = Vector3(-4, 0, 0)
+	d.global_position = Vector3(0, 0, 0)
+	seen = {"pos": a.global_position}
+	_ok("AI: friendly fire on, it holds a shot with its ally in line", x._hits_ally({"kind": "projectile", "max": 15.0}, seen))
+	d.global_position = Vector3(0, 0, 6)
+	_ok("AI: not if it is clear", not x._hits_ally({"kind": "projectile", "max": 15.0}, seen))
+	d.global_position = Vector3(2, 0, 2)
+	_ok("AI: nor an area move with its ally in reach", x._hits_ally({"kind": "area", "max": 6.0}, seen))
+	main.friendly_fire = false
+	d.global_position = Vector3(0, 0, 0)
+	_ok("AI: off, it does not care", not x._hits_ally({"kind": "projectile", "max": 15.0}, seen))
+	main.friendly_fire = true
+	# Spacing.
+	f = await _doubles(["pikachu", "snorlax", "charizard", "lucario"])
+	b = f[1]
+	d = f[3]
+	d.global_position = b.global_position + Vector3(0.0, 0, 1.0)
+	x = main.ais[0]
+	x.mode = "active"
+	x._decision_t = 99.0
+	var was: float = b.global_position.distance_to(d.global_position)
+	await _wait(0.8)
+	x.mode = "still"
+	_ok("AI: it keeps from its ally", b.global_position.distance_to(d.global_position) > was, "%.2f -> %.2f" % [was, b.global_position.distance_to(d.global_position)])
+	# Choosing a rival.
+	f = await _doubles(["pikachu", "snorlax", "charizard", "lucario"])
+	x = main.ais[0]
+	var near: Fighter = f[0]
+	var other: Fighter = f[2]
+	b = f[1]
+	near.hp = near.hp_max * 0.1
+	near.global_position = b.global_position + Vector3(-4, 0, 0)
+	other.global_position = b.global_position + Vector3(-16, 0, 0)
+	b.rival = other
+	x.rival = other
+	x._rival_t = 0.0
+	x._choose_rival(0.01)
+	_ok("AI: it goes after the closest and weakest", b.rival == near and x.rival == near, str(b.rival))
+	x._rival_t = 1.5
+	near.global_position = b.global_position + Vector3(-12, 0, 0)
+	other.global_position = b.global_position + Vector3(-4, 0, 0)
+	x._choose_rival(0.01)
+	_ok("AI: with some stickiness", b.rival == near)
+	other.ctrl.press("mov1")
+	await get_tree().physics_frame
+	other.ctrl.release("mov1")
+	x._choose_rival(0.01)
+	_ok("AI: a foe close by and attacking takes over at once", b.rival == other, "%s %s" % [other.state, b.rival])
+	# Helping: Ally Switch.
+	var swap := ["allyswitch", "shadowball", "sludgebomb", "hex"]
+	f = await _doubles(["pikachu", "snorlax", "gengar", "lucario"], {}, {2: swap})
+	a = f[0]
+	var c: Fighter = f[2]
+	b = f[1]
+	x = main.ais[1]
+	_ok("AI: its ally's AI is the second", x.me == c)
+	a.hp = a.hp_max * 0.1
+	b.rival = a
+	b.global_position = a.global_position + Vector3(3, 0, 0)
+	var here := c.global_position
+	x._help_t = 0.0
+	x._help(hard, 0.01)
+	_ok("AI: aims Ally Switch at its ally alone", c.aiding == a and c.aim_target() == a, str(c.aiding))
+	_ok("AI: it never aims that at a foe", not c.foes().has(c.aiding))
+	x.mode = "active"
+	for k in 40:
+		await get_tree().physics_frame
+		if c.cd("allyswitch") > 0.0:
+			break
+	x.mode = "still"
+	_ok("AI: Ally Switch goes off", c.cd("allyswitch") > 0.0 and c.global_position.distance_to(here) > 1.0, "%.1f" % c.cd("allyswitch"))
+	_ok("AI: aiding ends with its startup", c.aiding == null, str(c.aiding))
+	# Helping: a player's ally only helps a windup it sees.
+	var cheer := ["helpinghand", "bulletpunch", "xscissor", "swordsdance"]
+	f = await _doubles(["pikachu", "snorlax", "scizor", "lucario"], {}, {2: cheer})
+	a = f[0]
+	c = f[2]
+	x = main.ais[1]
+	a.is_player = true
+	c.global_position = a.global_position + Vector3(0, 0, 3)
+	await _wait(0.1)
+	_ok("AI: a player's next press cannot be known", not x._wants_helping_hand(a, hard))
+	a.is_player = false
+	await _tap_move(a, "mov1")
+	await get_tree().physics_frame
+	_ok("AI: a windup it can see", x._wants_helping_hand(a, hard), a.state)
+	await _wait(0.6)
+	# Helping: Tailwind.
+	var gust := ["tailwind", "bulletpunch", "xscissor", "swordsdance"]
+	f = await _doubles(["pikachu", "snorlax", "scizor", "lucario"], {}, {2: gust})
+	a = f[0]
+	c = f[2]
+	x = main.ais[1]
+	x._decision_t = 0.0
+	a.global_position = c.global_position + Vector3(0, 0, 4)
+	f[1].global_position = c.global_position + Vector3(12, 0, 0)
+	f[3].global_position = c.global_position + Vector3(12, 0, 5)
+	_ok("AI: Tailwind with its ally in reach and nobody close", x._wants_tailwind(a))
+	f[1].global_position = c.global_position + Vector3(3, 0, 0)
+	_ok("AI: not with a foe close", not x._wants_tailwind(a))
+	f[1].global_position = c.global_position + Vector3(12, 0, 0)
+	a.tailwind_t = 3.0
+	_ok("AI: not if its ally has it", not x._wants_tailwind(a))
+	# They finish a battle on their own.
+	f = await _doubles(["pikachu", "snorlax", "charizard", "lucario"])
+	for o in f:
+		o.hp = o.hp_max * 0.15
+	for ai_of in main.ais:
+		ai_of.mode = "active"
+	var t0 := t
+	while main._end_t < 0.0 and t - t0 < 60.0:
+		await get_tree().physics_frame
+	_ok("AI: three AIs finish a battle", main._end_t >= 0.0 or f[0].state == "free", "%.1f s" % (t - t0))
+
+
+func _doubles_hiding() -> void:
+	var f: Array = await _doubles(["pikachu", "snorlax", "charizard", "gengar"])
+	var a: Fighter = f[0]
+	var d: Fighter = f[3]
+	a.is_player = true
+	main.player = a
+	var doll := Decoy.new()
+	main.add_child(doll)
+	doll.setup(main, d, 8.0)
+	main.combat.targets.append(doll)
+	await _wait(0.05)
+	_ok("A decoy gets its user's arrow color", Hud.arrow_color(a, doll.user) == Hud.RED_MARK and Hud.arrow_color(a, f[2]) == Hud.BLUE_MARK)
+	_ok("And its outline", main.hud.outline.marked(doll) and main.hud.outline.marked(d) and main.hud.outline.marked(f[2]))
+	_ok("Not the player's own body", not main.hud.outline.marked(a))
+	doll.undo()
+	# Hidden.
+	d.translucent = 5.0
+	await _wait(0.05)
+	_ok("A hidden foe gets no arrow", d.out_of_sight())
+	_ok("And no outline", not main.hud.outline.marked(d))
+	var mine: Fighter = f[2]
+	mine.translucent = 5.0
+	await _wait(0.05)
+	_ok("An ally's Substitute stays visible to its partner", not mine.out_of_sight() and mine.model.visible and mine.model.mesh_instance.transparency > 0.0)
+	mine.translucent = 0.0
+	a.is_player = false
+	d.translucent = 0.0
+	# Out of the mask when fainted.
+	f[1]._damage_direct(999999.0)
+	await _wait(0.05)
+	_ok("A KO leaves the outline", not main.hud.outline.marked(f[1]))
+	main.options.team_outline = false
+	await _wait(0.05)
+	_ok("The setting takes every outline off", not main.hud.outline.marked(f[3]) and not main.hud.outline.marked(f[2]))
+	main.options.team_outline = true
+	_ok("Both start on", main.options.team_outline and main.options.team_arrows)
+	# In a 1 vs 1 nothing is marked.
+	main.menu.choice.format = "1v1"
+	main.menu.choice.rules = BattleRules.defaults()
+	var ab: Array = await _setup("pikachu", "snorlax", Vector3(-3, 0, 0), Vector3(3, 0, 0))
+	await _wait(0.05)
+	_ok("A 1 vs 1 has neither", not main.doubles and not main.hud.outline.marked(ab[1]))
+
+
+## Every stage: four fit, its field goes on closing, and the result shows.
+func _doubles_stages() -> void:
+	for id in ["league", "floating", "night"]:
+		main.set_stage(id)
+		var f: Array = await _doubles(["pikachu", "snorlax", "charizard", "lucario"])
+		_ok("%s: four start on solid ground, with their trainers apart" % id, f.all(func(o): return main.arena.inside(o.start_pos, 1.0) and o.state != "ko") and main.trainers[0].global_position != main.trainers[2].global_position)
+		if id == "league":
+			var zone0: float = main.arena.zone_t
+			await _wait(0.3)
+			_ok("League: the field goes on closing with four", main.arena.zone_t > zone0, "%.2f" % main.arena.zone_t)
+		f[1]._damage_direct(999999.0)
+		f[3]._damage_direct(999999.0)
+		await _wait(0.1)
+		main._end_t = main.RESULT_AT + 0.1
+		await get_tree().process_frame
+		await get_tree().process_frame
+		_ok("%s: over, and the result shows" % id, main.winning_team == 0 and main.fighters.size() >= 2)
+		_capture("doubles_result_" + id)
+
+
+func _doubles_singles() -> void:
+	main.menu.choice.format = "1v1"
+	main.menu.choice.rules = BattleRules.defaults()
+	var ab: Array = await _setup("pikachu", "gengar", Vector3(-3, 0, 0), Vector3(3, 0, 0))
+	var a: Fighter = ab[0]
+	var b: Fighter = ab[1]
+	_ok("1 vs 1: slots are the sides", a.slot == 0 and b.slot == 1 and a.team == 0 and b.team == 1 and not main.doubles and main.ais.size() == 1)
+	_ok("1 vs 1: spares as it was", main.combat.spares(a, a) and not main.combat.spares(a, b) and not main.combat.spares(b, a))
+	_ok("1 vs 1: no ally", a.ally() == null and b.ally() == null)
+	_ok("1 vs 1: lock candidates as they were", a.lock_candidates() == [b])
+	var doll := Decoy.new()
+	main.add_child(doll)
+	doll.setup(main, b, 5.0)
+	main.combat.targets.append(doll)
+	_ok("1 vs 1: its decoys too, and an own decoy is not spared", a.lock_candidates() == [b, doll] and b.lock_candidates() == [a] and not main.combat.spares(b, doll))
+	doll.undo()
+	_ok("1 vs 1: credit for a KO", main.ko_credit(a) == b)
+	var ab3: Array = await _team_battle("charizard", "charizard,lucario,venusaur", "garchomp", "garchomp,gengar,blastoise")
+	var pa: Party = main.parties[0]
+	_ok("3 vs 3: its bench spared", main.combat.spares(ab3[0], pa.members[1]) and not main.combat.spares(ab3[0], ab3[1]))
+	_ok("3 vs 3: the two out", main.fighters.size() == 2 and main.ais.size() == 1 and main.parties.size() == 2 and pa.side == 0)
+	_ok("3 vs 3: scores as they were", is_equal_approx(Party.score(ab3[0], ab3[1]), Party.score(ab3[0], ab3[1])))
+	ab3[1].boost("atk", 2)
+	ab3[0].rival = ab3[1]
+	ab3[0].hp = 1.0
+	# Poison, no hit: the rival's stages still go, as they did.
+	ab3[0]._damage_direct(5.0)
+	await _wait(1.9)
+	_ok("3 vs 3: the replacement clears the rival's stages, as ever", ab3[1].stages.atk == 0, "%d" % ab3[1].stages.atk)
+
+
+## Random picks, AI against AI: how long they last and who wins.
+func _double_battles() -> void:
+	await get_tree().physics_frame
+	var total := int(main._args.get("battles", "10"))
+	var speed := float(main._args.get("speed", "1"))
+	var diff: String = main._args.get("diff", "normal")
+	var m: Menu = main.menu
+	var size: int = int(m.choice.rules.team_size)
+	var rows: Array = []
+	var by_team := [0, 0]
+	var helped := {"allyswitch": 0, "helpinghand": 0, "tailwind": 0}
+	for n in total:
+		seed(2000 + n)
+		var names: Array = Roster.POKEMON.keys().filter(func(sp): return not Roster.POKEMON[sp].has("echo_of"))
+		names.shuffle()
+		m.choice.format = "2v2"
+		for s in 4:
+			var team: Array = []
+			while team.size() < size:
+				var sp: String = names.pick_random()
+				if not m.on_team(sp, team):
+					team.append(sp)
+			m.choice["p%d" % (s + 1)] = team[0]
+			m.choice[Menu.team_key(s)] = team
+		main.start_battle(m.choice.p1, m.choice.p2, diff)
+		Engine.physics_ticks_per_second = roundi(60.0 * speed)
+		Engine.max_physics_steps_per_frame = maxi(8, roundi(8.0 * speed))
+		Engine.time_scale = speed
+		await get_tree().physics_frame
+		for f in main.fighters:
+			f.hit_taken.connect(func(_q, _info): _hits += 1)
+		var counted := {}
+		var t0 := t
+		while main._end_t < 0.0 and t - t0 < 900.0:
+			for f in main.fighters:
+				if is_instance_valid(f) and f.action and helped.has(f.action.id) and not counted.has(f.action):
+					counted[f.action] = true
+					helped[f.action.id] += 1
+			await get_tree().physics_frame
+		var done: bool = main._end_t >= 0.0
+		if done:
+			by_team[main.winning_team] += 1
+		rows.append({"t": t - t0, "done": done})
+		print("battle %d: %s and %s vs %s and %s  %.0f s  %s" % [n + 1, m.choice.p1, m.choice.p3, m.choice.p2, m.choice.p4, t - t0, ("side %d wins" % main.winning_team) if done else "UNFINISHED"])
+	var sum_t := 0.0
+	var unfinished := 0
+	for r in rows:
+		sum_t += r.t
+		unfinished += 0 if r.done else 1
+	print("SUMMARY: %d battles at size %d, mean %.0f s (min %.0f, max %.0f), sides won %d-%d, %d unfinished; used %s" % [total, size, sum_t / total,
+		rows.map(func(r): return r.t).min(), rows.map(func(r): return r.t).max(), by_team[0], by_team[1], unfinished, helped])
+	Engine.time_scale = 1.0
+	Engine.physics_ticks_per_second = 60
+	get_tree().quit()
+
+
+## With a window: the outline, seen from behind the player, and what it costs a frame.
+func _outline_test() -> void:
+	await get_tree().physics_frame
+	var f: Array = await _doubles(["pikachu", "charizard", "snorlax", "gengar"])
+	f[0].is_player = true
+	main.player = f[0]
+	Engine.max_fps = 0
+	DisplayServer.window_set_vsync_mode(DisplayServer.VSYNC_DISABLED)
+	await _wait(1.0)
+	_capture("outline_on")
+	# Nearby, on a decoy, and on the fade of an entrance.
+	f[0].global_position = Vector3(-2, 0, -1)
+	await _wait(0.5)
+	_capture("outline_close")
+	# The ally in view, blue.
+	f[2].global_position = Vector3(1, 0, -3)
+	f[0].global_position = Vector3(-4, 0, -3)
+	await _wait(0.3)
+	_capture("outline_ally")
+	f[3].appear = 0.5
+	await _wait(0.2)
+	f[3].appear = 1.0
+	var doll := Decoy.new()
+	main.add_child(doll)
+	doll.setup(main, f[3], 8.0)
+	doll.global_position = Vector3(4, 0, 0)
+	main.combat.targets.append(doll)
+	await _wait(0.2)
+	_capture("outline_decoy")
+	doll.undo()
+	for setting in [true, false, true, false]:
+		main.options.team_outline = setting
+		await _wait(0.5)
+		var sum := 0.0
+		var n := 0
+		var t0 := Time.get_ticks_usec()
+		for k in 240:
+			await get_tree().process_frame
+			n += 1
+		sum = float(Time.get_ticks_usec() - t0) / 1000.0
+		print("outline %s: %.2f ms a frame (%d frames)" % ["on " if setting else "off", sum / n, n])
+	main.options.team_outline = true
+	# A team of three each, as the HUD reads them.
+	f = await _doubles([["pikachu", "lucario", "scizor"], ["charizard", "lucario", "scizor"], ["snorlax", "lucario", "scizor"], ["gengar", "lucario", "scizor"]], {"team_size": 3})
+	f[0].is_player = true
+	main.player = f[0]
+	await _wait(1.0)
+	_capture("doubles_hud_teams")
+	f[0].locked = false
+	await _wait(0.4)
+	_capture("doubles_hud_arrows")
+	# The opening.
+	main._args["intro"] = "1"
+	main.rematch()
+	await _wait(0.8)
+	_capture("doubles_opening")
+	main._args.erase("intro")
+	await _wait(2.0)
+	# Out of Pokémon: the player watches their ally, and the HUD stays on their own frame.
+	f = await _doubles(["pikachu", "charizard", "snorlax", "gengar"])
+	f[0].is_player = true
+	main.player = f[0]
+	f[0]._damage_direct(999999.0)
+	await _wait(1.0)
+	_capture("doubles_watching")
+	get_tree().quit()
+
+
+## Presses an action for two frames, as a tap of a key.
+func _menu_tap(action: String) -> void:
+	Input.action_press(action)
+	await get_tree().process_frame
+	await get_tree().process_frame
+	Input.action_release(action)
+	await get_tree().process_frame
+	await get_tree().process_frame
+
+
+## A capture once the screen has settled (nothing, without a window).
+func _menu_shot(n: String) -> void:
+	if DisplayServer.get_name() != "headless":
+		await _wait(0.8)
+		_capture(n)
+
+
+## The rules' ids this battle shows.
+func _rule_rows() -> Array:
+	return main.menu.rules_items().filter(func(r): return r.kind == "choice").map(func(r): return r.id)
+
+
+func _menu_doubles() -> void:
+	var m: Menu = main.menu
+	while m._t < 0.3:
+		await get_tree().process_frame
+	await _menu_tap("menu_accept")      # past the title
+	await _wait(0.2)
+	await _menu_tap("menu_accept")      # Battle
+	await _wait(0.2)
+	_ok("The format's tiles: 2 vs 2 among them offline", m.screen == "format" and m.format_items().size() == 4 and m.format_items()[2][0] == "2v2", m.screen)
+	m._hosting = true
+	_ok("And online", m.format_items().size() == 4 and m.format_items()[2][0] == "2v2")
+	m._hosting = false
+	await _menu_tap("move_right")
+	await _menu_tap("move_down")
+	_ok("Keys reach it", m.cursor == 2, "%d" % m.cursor)
+	await _menu_shot("doubles_format")
+	await _menu_tap("menu_accept")
+	await _wait(0.1)
+	await _menu_shot("doubles_wall")
+	_ok("On to the wall, with 2 vs 2's rules", m.screen == "selection" and m.choice.format == "2v2" and m.team_battle() and m.team_size() == 1 and m.sel_phase == "p1")
+	var rows := _rule_rows()
+	_ok("Size 1: Doubles and Aiming, no switching", "team_size" in rows and "friendly_fire" in rows and "no_lock" in rows and not "recall" in rows and not "field_pace" in rows, str(rows))
+	# Rules and Options from the wall.
+	var at: int = m.cursor
+	await _menu_tap("menu_extra")
+	_ok("Rules open from the wall", m.screen == "rules" and m._rules_return == "wall", m.screen)
+	await _menu_tap("menu_back")
+	_ok("And come back to it, with nothing changed", m.screen == "selection" and m.sel_phase == "p1" and m.cursor == at, m.screen)
+	await _menu_tap("pause")
+	_ok("Options open from the wall", m.screen == "options" and m.options_return, m.screen)
+	await _menu_tap("menu_back")
+	_ok("And come back to it, not to the main menu", m.screen == "selection" and m.sel_phase == "p1" and m.cursor == at and not m.options_return, m.screen)
+	# Picking, in order.
+	var order: Array = []
+	for k in 4:
+		order.append(m.sel_phase)
+		await _menu_tap("menu_info")
+	_ok("You, your ally, then the foes", order == ["p1", "p3", "p2", "p4"] and m.sel_phase == "setup", "%s %s" % [order, m.sel_phase])
+	for s in 4:
+		_ok("Slot %d has its pick" % s, m.choice[Menu.team_key(s)].size() == 1 and m.choice[Menu.team_key(s)][0] == m.choice["p%d" % (s + 1)], str(m.choice[Menu.team_key(s)]))
+	_ok("Its options have Options, next to Rules", abs(m.setup_items().find("options") - m.setup_items().find("rules")) == 1)
+	await _menu_shot("doubles_setup")
+	var p1: String = m.choice.p1
+	var p4: String = m.choice.p4
+	# Back with nothing changed, the picks stay.
+	m._open_rules("setup")
+	await _menu_tap("menu_back")
+	_ok("Nothing is lost by opening the rules", m.sel_phase == "setup" and m.choice.p1 == p1 and m.choice.team4.size() == 1)
+	# Changing one team with the others picked: they stay.
+	var p3: String = m.choice.p3
+	await _menu_tap("mov4")
+	_ok("From the options to my team, with my pick out and the AIs' in", m.sel_phase == "p1" and m.choice.team.is_empty() and m.team_preview == p1 \
+		and m.choice.team3 == [p3] and m.choice.team2.size() == 1 and m.choice.team4 == [p4], m.sel_phase)
+	await _menu_shot("doubles_repick")
+	m._team_pick(p1)
+	_ok("Picked again, straight back to the options", m.sel_phase == "setup" and m.choice.team == [p1], m.sel_phase)
+	m._remove_pick(2, 0)
+	_ok("A click on the ally's pick, from the options: that one picks again", m.sel_phase == "p3" and m.choice.team3.is_empty() and m.team_preview == p3 and m.choice.team4 == [p4], m.sel_phase)
+	m._remove_pick(0, 0)
+	_ok("A click on mine with the ally's out: mine next", m.sel_phase == "p1" and m.choice.team.is_empty(), m.sel_phase)
+	m._team_pick(p1)
+	_ok("And on to the one still short", m.sel_phase == "p3", m.sel_phase)
+	m._remove_pick(0, 0)
+	m._repick_mine()
+	_ok("On my team already, the key does nothing", m.sel_phase == "p1" and m.choice.team.is_empty(), m.sel_phase)
+	m.sel_phase = "p3"
+	m._team_back()
+	_ok("Back with nobody picked behind it does not pop thin air", m.screen == "format", m.screen)
+	m.screen = "selection"
+	m.choice.team = [p1]
+	m.sel_phase = "p3"
+	m._team_pick(p3)
+	_ok("All full again: the options", m.sel_phase == "setup" and m.choice.p3 == p3, m.sel_phase)
+	# Raising the size.
+	m._open_rules("setup")
+	await _menu_tap("move_right")
+	_ok("The first row is the size", m.team_size() == 2, "%d" % m.team_size())
+	await _menu_tap("menu_back")
+	_ok("A bigger team goes back to the first trainer not full", m.sel_phase == "p1" and m.choice.team[0] == p1 and m.choice.team.size() == 1 and m.choice.team4.size() == 1, m.sel_phase)
+	rows = _rule_rows()
+	_ok("Size 2: switching shows", "recall" in rows and "field_pace" in rows)
+	var left: Array = []
+	while m.sel_phase != "setup" and left.size() < 12:
+		left.append(m.sel_phase)
+		await _menu_tap("menu_info")
+	_ok("Refilled in order", left == ["p1", "p3", "p2", "p4"], str(left))
+	await _menu_shot("doubles_setup_two")
+	_ok("Everyone has two, no species twice", m.choice.team.size() == 2 and m.choice.team4.size() == 2 and m.choice.team[0] == p1 and m.choice.team4[0] == p4)
+	# Lowering it.
+	m._open_rules("setup")
+	await _menu_tap("move_left")
+	await _menu_tap("menu_back")
+	_ok("A smaller team drops the last picks", m.sel_phase == "setup" and m.choice.team == [p1] and m.choice.team4 == [p4], m.sel_phase)
+	# Lowered mid-pick: the first one not full.
+	m.choice.rules.team_size = 2
+	m._fit_picks()
+	await _menu_tap("menu_info")
+	_ok("Mid-pick", m.sel_phase == "p1" and m.choice.team.size() == 2 or m.sel_phase == "p3", m.sel_phase)
+	m.choice.rules.team_size = 1
+	m._fit_picks()
+	_ok("Lowered mid-pick, every team fits: on to the options", m.sel_phase == "setup" and m.choice.team.size() == 1)
+	# The seats, halfway through the picks: a room of one is enough, nothing is sent.
+	var keep_choice: Dictionary = m.choice.duplicate(true)
+	m.online = true
+	main.net = Net.new()
+	main.net.host = true
+	m._clear_picks()
+	m.seats = []
+	m.sel_phase = "p1"
+	m._room_changed()
+	_ok("A host with AIs picks for all four", m.pick_order() == ["p1", "p3", "p2", "p4"], str(m.pick_order()))
+	m._team_pick("charizard")
+	m._team_pick("lucario")
+	_ok("My pick, the ally's, then on to a foe", m.sel_phase == "p2" and m.choice.team3 == ["lucario"], m.sel_phase)
+	m.swap_seats(1, 2)
+	_ok("A swap with the last pick just made: the AI takes it along", m.choice.team2 == ["lucario"] and m.choice.p2 == "lucario" and m.choice.team3.is_empty(), "%s %s" % [m.choice.team2, m.choice.team3])
+	_ok("Whoever is full now is not picked for: the first one short", m.sel_phase == "p3", m.sel_phase)
+	m.swap_seats(0, 3)
+	_ok("My own seat moves: my team stays, the rest change slot", main.net.seat == 3 and m.choice.team == ["charizard"] and m.choice.team3 == ["lucario"] and m.choice.team2.is_empty(), "%d %s %s" % [main.net.seat, m.choice.team3, m.choice.team2])
+	_ok("And the picking moves on with them", m.sel_phase == "p2", m.sel_phase)
+	m._team_pick("garchomp")
+	m._team_pick("gengar")
+	_ok("Finished after the swaps: the options", m.sel_phase == "setup" and m.can_repick_mine(), m.sel_phase)
+	var start: Dictionary = m.seats_start()
+	_ok("The start has each team in its seat", start.seats[3].team == ["charizard"] and start.seats[1].team == ["lucario"] and start.seats[2].team == ["garchomp"] and start.seats[0].team == ["gengar"], str(start.seats.map(func(s): return s.team)))
+	m._repick_mine()
+	_ok("The host's key too", m.sel_phase == "p1" and m.choice.team.is_empty() and m.choice.team3 == ["lucario"], m.sel_phase)
+	m._team_pick("charizard")
+	m.me_ready = true
+	_ok("Ready, no change until it is undone", not m.can_repick_mine() and not m.can_remove_pick(2))
+	m.me_ready = false
+	main.net.free()
+	main.net = null
+	m.online = false
+	m.seats = []
+	m.choice = keep_choice
+	m.sel_phase = "setup"
+	# The formats' rules.
+	m.choice.format = "3v3"
+	rows = _rule_rows()
+	_ok("3 vs 3: no Doubles rules", not "team_size" in rows and not "friendly_fire" in rows and "recall" in rows and m.team_size() == 3)
+	m.choice.format = "1v1"
+	rows = _rule_rows()
+	_ok("1 vs 1: Aiming alone", rows == ["legacy_aim", "no_lock", "aim_assist"] and m.team_size() == 1 and not m.team_battle(), str(rows))
+	m.choice.format = "2v2"
+	_ok("The rule's numbers read plainly", BattleRules.text("team_size", 2.0) == "2" and BattleRules.text("friendly_fire", 0.0) != BattleRules.text("friendly_fire", 1.0))
+	var cleaned := BattleRules.sanitized({"team_size": 9.0, "friendly_fire": 1.0})
+	_ok("What comes from outside is kept in range", cleaned.team_size == 3.0 and cleaned.friendly_fire == 1.0)
+	# The settings.
+	var opt: Settings = main.options
+	var ids: Array = opt.items().map(func(i): return i.id)
+	_ok("The settings have their rows", "team_outline" in ids and "team_arrows" in ids and "mouse_flick" in ids and "cycle_target" in ids)
+	_ok("Change target starts on V, clashing with nothing", opt.items().filter(func(i): return i.id == "cycle_target")[0].clashes.is_empty() and "V" in opt.items().filter(func(i): return i.id == "cycle_target")[0].kb)
+	var file := "user://settings_test.cfg"
+	opt.team_outline = false
+	opt.team_arrows = false
+	opt.mouse_flick = false
+	opt.save_to(file)
+	opt.team_outline = true
+	opt.team_arrows = true
+	opt.mouse_flick = true
+	opt.load_from(file)
+	_ok("They save and load", not opt.team_outline and not opt.team_arrows and not opt.mouse_flick)
+	opt._change("team_outline", 1)
+	_ok("A toggle flips", opt.team_outline)
+	opt._change("mouse_flick", 1)
+	_ok("The mouse's sweep flips too", opt.mouse_flick)
+	opt.team_outline = true
+	opt.team_arrows = true
+	DirAccess.remove_absolute(ProjectSettings.globalize_path(file))
+	# An online start while on Options.
+	m._open_options()
+	opt.waiting = "jump"
+	m._start_vs(m.choice.p1, m.choice.p2)
+	_ok("A battle starting clears a key being waited for", opt.waiting == "" and not m.options_return and m.screen == "vs")
+	await _wait(0.8)
+	_capture("doubles_vs")
+	# Fight.
+	var t0 := t
+	while m.is_open and t - t0 < 4.0:
+		await get_tree().process_frame
+	_ok("The VS goes on to the battle: four out, four trainers", not m.is_open and main.fighters.size() == 4 and main.trainers.size() == 4 and main.parties.size() == 4 and main.doubles)
+	var fails := _results.filter(func(r): return not r[1]).size()
+	print("RESULT: %d of %d" % [_results.size() - fails, _results.size()])
 	get_tree().quit()
 
 
