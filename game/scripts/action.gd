@@ -20,6 +20,8 @@ var startup_mult := 1.0          # shortens the wind-up (Solar Beam in harsh sun
 var finished := false
 var landed := false
 var charge := 0.0         # 0 to 1 for chargeable moves
+var help := 1.0           # Helping Hand: what every hit and shot of this use is multiplied by
+var free_of_cost := false # it failed before doing anything (Ally Switch): no cooldown
 
 # What the action tells the fighter while it lasts.
 var moves_freely := false

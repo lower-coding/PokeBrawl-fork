@@ -10,6 +10,10 @@ extends Node
 ## With --format=3v3 (both) each picks a team, which the other must not see until both are
 ## ready, and the host's --rules hold for both. Each side keeps dropping itself to 1 HP, so all
 ## three go; AI and KOs make the switches, and the final line has who came out on each side.
+## With --format=2v2 (all; two to four copies) each picks at random, the host for the empty seats too.
+## In the first round the host swaps seats 1 and 2 on the Seats screen once a guest is in, so a lone
+## guest ends up its ally. Nothing of the other side's may show until the start. A guest with --leave
+## goes before picking: the seat is the AI's again and the room goes on.
 ## Prints a MENU_NET_FINAL line to compare both copies.
 
 const CHOOSES := {"host": ["charizard", "gengar"], "guest": ["lucario", "pikachu"]}
@@ -30,12 +34,15 @@ var _end := ""
 var _states_at_start := 0     # net.states_applied when the battle started
 var _last := {}                # HP and state of the last battle frame
 var _three := false             # --format=3v3
+var _doubles := false           # --format=2v2
+var _swapped := false           # the host has swapped seats 1 and 2
 
 
 func _ready() -> void:
 	process_mode = Node.PROCESS_MODE_ALWAYS
 	role = main._args.get("role", "host")
 	_three = main._args.get("format", "") == "3v3"
+	_doubles = main._args.get("format", "") == "2v2"
 
 
 func _step(text: String) -> void:
@@ -73,7 +80,7 @@ func _capture(n: String) -> void:
 
 func _physics_process(delta: float) -> void:
 	_t += delta
-	if _t > (500.0 if _three else 150.0):
+	if _t > (500.0 if _three else 180.0 if _doubles else 150.0):
 		_finish("timed out at: " + str(_steps.back() if not _steps.is_empty() else "start"))
 		return
 	_wait_t -= delta
@@ -107,7 +114,11 @@ func _menu(m: Menu) -> void:
 			_go_to(m, m.ONLINE, "create" if role == "host" else "join")
 		"format":
 			_step("format")
-			_go_to(m, m.FORMATS, "3v3" if _three else "1v1")
+			# Under 3 vs 3, the second tile.
+			if _doubles and m.cursor == 1:
+				_press("move_down")
+			else:
+				_go_to(m, m.FORMATS, "2v2" if _doubles else "3v3" if _three else "1v1")
 		"waiting":
 			_step("waiting for the guest")
 			if m._t > 6.0:
@@ -133,6 +144,9 @@ func _menu(m: Menu) -> void:
 				_round_end()
 				return
 			if _round >= 2:
+				return
+			if _doubles:
+				_doubles_room(m)
 				return
 			# The room's format comes from the host, a moment after connecting.
 			if _three and not m.team_battle():
@@ -174,9 +188,75 @@ func _menu(m: Menu) -> void:
 				_press("move_up")
 			else:
 				_press("move_right" if target > m.cursor else "move_left")
+		"seats":
+			_seats_screen(m)
+		"rules", "options", "moves", "profile":
+			_finish("stuck on the %s screen" % m.screen)
 		"vs":
 			_step("VS %s vs %s" % m._vs)
 			_capture("vs_%d" % (_round + 1))
+
+
+## Picks at random for whoever is picking, then Ready, with the host's swap on the way.
+func _doubles_room(m: Menu) -> void:
+	if m.choice.format != "2v2" or not m.has_seats():
+		return
+	if main._args.has("leave") and role == "guest":
+		_finish("")
+		main.close_net()
+		return
+	# Nothing of a player on the other side, on this screen.
+	for slot in [1, 3]:
+		if m.seat_at(slot).peer != Menu.SEAT_AI and not m.choice[Menu.team_key(slot)].is_empty():
+			_finish("the other side's team was shown before the start: %s" % [m.choice[Menu.team_key(slot)]])
+			return
+		if not m.seat_at(slot).team.is_empty() and not main.net.host:
+			_finish("the room told a guest the other side's team: %s" % [m.seat_at(slot).team])
+			return
+	if role == "host" and _round == 1 and m.choice.stage != "floating":
+		_press("mov2")
+		return
+	if role == "host" and _round == 0 and not _swapped and not main.net.guests.is_empty():
+		if main._args.has("guests") and main.net.guests.size() < int(main._args.guests):
+			return
+		m._open_seats()
+		return
+	if m.sel_phase == "setup":
+		if not m.me_ready:
+			# Ready is highlighted on arriving; with the options changed it may not be.
+			m.setup_cursor = m.setup_items().find("ready")
+			if not main._args.has("guests") or main.net.guests.size() >= int(main._args.guests):
+				_step("selection %d: Ready, on %s" % [_round + 1, m.setup_items()[m.setup_cursor]])
+				_press("menu_accept")
+		else:
+			_step("selection %d: ready, waiting for %s" % [_round + 1, m.seats.map(func(s): return [s.peer, s.ready, s.team.size(), s.get("count", 0), s.version])])
+			_capture("selection_%d" % (_round + 1))
+		return
+	_step("selection %d: picks for %s" % [_round + 1, m.sel_phase])
+	if _swapped:
+		_capture("wall")
+	_press("menu_info")
+
+
+## From my seat to seat 1, A, then round to seat 2, A, as a player would, and back.
+func _seats_screen(m: Menu) -> void:
+	if _swapped:
+		_capture("seats")
+		_press("menu_back")
+		return
+	if m.seats_held < 0:
+		if m.seats_cursor == 1:
+			_press("menu_accept")
+		else:
+			_press("move_right")
+	elif m.seats_cursor == 2:
+		_press("menu_accept")
+		_swapped = true
+		_step("seats 1 and 2 swapped")
+	elif m.seats_cursor == 1:
+		_press("move_left")
+	else:
+		_press("move_down")
 
 
 func _go_to(m: Menu, list: Array, id: String) -> void:
@@ -193,18 +273,25 @@ func _combat(delta: float) -> void:
 		if _round >= 2 and role == "host":
 			_finish("")
 		return
-	if not net.in_battle or net.local == null or not is_instance_valid(net.remote):
+	if not net.in_battle or net.local == null or net.remotes.is_empty():
 		return
 	# Both battles are over: only the host leaving is still to come.
 	if _round >= 2:
 		return
 	var l: Fighter = net.local
-	var r: Fighter = net.remote
+	var r: Fighter = net.remote if is_instance_valid(net.remote) else net.remotes.values()[0]
 	if _combat_t < 0.0:
 		_combat_t = 0.0
 		_step("battle %d: me %s, rival %s, ping %d ms" % [_round + 1, l.species, r.species, net.ping_ms()])
 		_states_at_start = net.states_applied
 		var expected: Array = [CHOOSES[role][_round], CHOOSES["guest" if role == "host" else "host"][_round]]
+		if _doubles:
+			expected = [l.species, r.species]
+			var by_seat := {}
+			for f in main.fighters:
+				by_seat[net.seat_of(f.slot)] = main.parties[f.slot].members.map(func(o): return o.species)
+			_step("seat %d: teams by seat %s, copies %s" % [net.seat, by_seat, net.remotes.keys()])
+			print("TEAMS_BY_SEAT ", JSON.stringify(by_seat))
 		if _three:
 			var theirs: Array = TEAMS["guest" if role == "host" else "host"][_round]
 			expected = [TEAMS[role][_round][0], theirs[0]]
@@ -229,7 +316,7 @@ func _combat(delta: float) -> void:
 			_finish("battle %d on stage %s, expected %s" % [_round + 1, main.arena.stage, want_stage])
 			return
 	_combat_t += delta
-	_last = {"me_ko": l.state == "ko", "my_hp": int(l.hp), "rival_hp": int(r.hp)}
+	_last = {"me_ko": main.winning_team != 0 if _doubles else l.state == "ko", "my_hp": int(l.hp), "rival_hp": int(r.hp)}
 	if _three:
 		_last.mine = main.parties[0].history.duplicate()
 		_last.rival = main.parties[1].history.duplicate()
@@ -244,7 +331,8 @@ func _combat(delta: float) -> void:
 	# To avoid waiting for a whole battle: at 10 s each side drops itself to 1 HP
 	# (each copy controls its own); the next hit ends it.
 	if _combat_t > 10.0 and _combat_t - delta <= 10.0:
-		l.hp = minf(l.hp, 1.0)
+		for f in net.owned:
+			f.hp = minf(f.hp, 1.0)
 	# In sync: the rival's states keep arriving during the battle, also after "pick another".
 	if _combat_t > 8.0 and _combat_t - delta <= 8.0 and net.states_applied - _states_at_start < 120:
 		_finish("battle %d out of sync: only %d rival states applied in 8 s" % [_round + 1, net.states_applied - _states_at_start])
@@ -259,7 +347,7 @@ func _combat(delta: float) -> void:
 				_finish("")
 		else:
 			_wait_t = 1.0
-	elif _combat_t > (240.0 if _three else 60.0):
+	elif _combat_t > (240.0 if _three or _doubles else 60.0):
 		_finish("battle %d does not end" % (_round + 1))
 
 

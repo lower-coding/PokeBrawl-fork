@@ -10,6 +10,7 @@ extends RefCounted
 ##   jump            A         Cross         Space
 ##   dodge           B         Circle        Shift
 ##   lock on         RS (R3)   R3            middle click or Tab
+##   change target   (none)    (none)        V                     (locked on)
 ##   switch 1, 2     X, Y      Square, △     1, 2                  (3 vs 3)
 ##   move 1          LB        L1            Q
 ##   move 2          RB        R1            E
@@ -22,15 +23,15 @@ extends RefCounted
 ## The player can change any of the battle actions in Options (Settings), and the keys that
 ## move (WASD): the glyphs are read from the map, so they always show what is really bound.
 
-const ACTIONS := ["jump", "dodge", "lock_on", "mov1", "mov2", "mov3", "mov4", "pause",
+const ACTIONS := ["jump", "dodge", "lock_on", "cycle_target", "mov1", "mov2", "mov3", "mov4", "pause",
 	"move_left", "move_right", "move_up", "move_down", "cam_left", "cam_right", "cam_up", "cam_down",
 	"menu_accept", "menu_back", "menu_info", "menu_extra", "debug", "reset", "descend", "switch1", "switch2", "first_person"]
 
 ## What the HUD shows next to each action, per controller type (translated on display).
 const GLYPHS := {
-	"xbox": {"jump": "A", "dodge": "B", "lock_on": "RS", "mov1": "LB", "mov2": "RB", "mov3": "LT", "mov4": "RT", "menu_back": "B", "menu_info": "Y", "menu_extra": "X", "descend": "LS", "switch1": "X", "switch2": "Y", "first_person": "-"},
-	"playstation": {"jump": "✕", "dodge": "○", "lock_on": "R3", "mov1": "L1", "mov2": "R1", "mov3": "L2", "mov4": "R2", "menu_back": "○", "menu_info": "△", "menu_extra": "□", "descend": "L3", "switch1": "□", "switch2": "△", "first_person": "-"},
-	"keyboard": {"jump": "Space", "dodge": "Shift", "lock_on": "Tab", "mov1": "Q", "mov2": "E", "mov3": "RMB", "mov4": "F", "menu_back": "Backspace", "menu_info": "X", "menu_extra": "R", "descend": "Ctrl", "switch1": "1", "switch2": "2", "first_person": "C"},
+	"xbox": {"jump": "A", "dodge": "B", "lock_on": "RS", "cycle_target": "-", "mov1": "LB", "mov2": "RB", "mov3": "LT", "mov4": "RT", "menu_back": "B", "menu_info": "Y", "menu_extra": "X", "descend": "LS", "switch1": "X", "switch2": "Y", "first_person": "-"},
+	"playstation": {"jump": "✕", "dodge": "○", "lock_on": "R3", "cycle_target": "-", "mov1": "L1", "mov2": "R1", "mov3": "L2", "mov4": "R2", "menu_back": "○", "menu_info": "△", "menu_extra": "□", "descend": "L3", "switch1": "□", "switch2": "△", "first_person": "-"},
+	"keyboard": {"jump": "Space", "dodge": "Shift", "lock_on": "Tab", "cycle_target": "V", "mov1": "Q", "mov2": "E", "mov3": "RMB", "mov4": "F", "menu_back": "Backspace", "menu_info": "X", "menu_extra": "R", "descend": "Ctrl", "switch1": "1", "switch2": "2", "first_person": "C"},
 }
 ## The arrow keys of each direction. Only the other key of a direction can be changed: the arrows
 ## stay, like the stick and the D-pad, so the menus can always be used.
@@ -83,7 +84,7 @@ static func configure() -> void:
 	_axis("cam_right", JOY_AXIS_RIGHT_X, 1.0)
 	_axis("cam_up", JOY_AXIS_RIGHT_Y, -1.0)
 	_axis("cam_down", JOY_AXIS_RIGHT_Y, 1.0)
-	for ac in [["jump", KEY_SPACE], ["dodge", KEY_SHIFT], ["lock_on", KEY_TAB], ["mov1", KEY_Q], ["mov2", KEY_E],
+	for ac in [["jump", KEY_SPACE], ["dodge", KEY_SHIFT], ["lock_on", KEY_TAB], ["cycle_target", KEY_V], ["mov1", KEY_Q], ["mov2", KEY_E],
 			["mov4", KEY_F], ["pause", KEY_ESCAPE], ["move_left", KEY_A], ["move_right", KEY_D], ["move_up", KEY_W],
 			["move_down", KEY_S], ["move_left", KEY_LEFT], ["move_right", KEY_RIGHT], ["move_up", KEY_UP],
 			["move_down", KEY_DOWN], ["menu_accept", KEY_ENTER], ["menu_accept", KEY_SPACE], ["menu_back", KEY_BACKSPACE], ["menu_info", KEY_X], ["menu_extra", KEY_R],

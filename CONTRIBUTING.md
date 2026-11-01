@@ -250,12 +250,13 @@ The content is data first, so adding to it does not mean touching the battle sys
 
 ### The battle system
 
-- **Teams:** 3 vs 3 with switching is in, as a prototype. A team preview, other sizes and moves
-  that act on a switch (U-turn, hazards) are not.
-- **Doubles, 2 vs 2:** moves that hit an ally or both rivals, which today are left out.
+- **Teams:** 3 vs 3 with switching is in, as a prototype. A team preview and moves that act on a
+  switch (U-turn, hazards) are not.
+- **2 vs 2:** in, offline and online, with one to three Pokémon a trainer. Redirection (Follow Me, Lightning
+  Rod pulling shots), spread damage reduction, moves that hit both rivals by design and an AI taking over
+  from a player who disconnects are not.
 - **Items, terrains and more weather**, on top of the statuses and weather already in.
-- **Online:** more players and spectators. The rematch already counts the votes of every
-  player, not just two.
+- **Online:** spectators.
 - **AI:** each species has its own style; it could learn the matchups, read the stadium and
   play teams.
 

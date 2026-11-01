@@ -395,8 +395,8 @@ func _platform_collider() -> void:
 ## glow underneath, 7 m off the deck's end. Nobody can get to it: it has no collision, and
 ## a tall invisible wall (layer 3, fighters only) round it stops flyers and jumps. It does
 ## not touch projectiles or the camera.
-func trainer_spot(side: float) -> Vector3:
-	return Vector3(side * TRAINER_X, 0.0, 0.0)
+func trainer_spot(side: float, z := 0.0) -> Vector3:
+	return Vector3(side * TRAINER_X, 0.0, z)
 
 
 func _trainer_platforms() -> void:

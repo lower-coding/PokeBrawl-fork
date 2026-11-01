@@ -54,7 +54,13 @@ extends RefCounted
 ##   stars, fan, gap               Swift: how many, how wide they leave (rad to each side) and the
 ##                                 seconds between them
 ##   look                          which wave widewave.gd draws: "gleam" or "voice"
-##   counterplay                   what the opponent can do (for design and the selection screen)
+##   needs_ally                    it does nothing without an ally on the field: refused at no cost
+##                                 (Fighter.refused), and random rolls leave it out outside a 2 vs 2
+##   aims_at_ally                  and the ally has to be under the crosshair (Ally Switch)
+##   ally_reach                    and within these meters, body to body (Helping Hand)
+##   pulse_radius                  a pulse around its user: who is inside at that moment gets it (Tailwind)
+##   buff_dur, help_mult           how long what it gives lasts (s); Helping Hand's damage multiplier
+##   counterplay                  what the opponent can do (for design and the selection screen)
 ## Player-facing text (display_name, desc, counterplay) is in English and is translated
 ## through game/i18n/translations.csv.
 
@@ -826,4 +832,23 @@ const DATA := {
 		"desc": "A great shout spreads across the field in waves of sound.",
 		"ai": {"min": 2.0, "max": 13.0, "kind": "projectile", "value": 1.2},
 		"counterplay": "Up close it is too tall to jump: dodge through it. Further away it is low enough to jump."},
+	# ---------------------------------------------------------------- For an ally (2 vs 2)
+	"allyswitch": {
+		"display_name": "Ally Switch", "script": "res://scripts/moves/allyswitch.gd", "type": "psychic", "cat": "status", "power": 0, "pp": 15, "accuracy": 0, "priority": 2,
+		"needs_ally": true, "aims_at_ally": true, "cost": 16.0, "cd": 8.0, "reach": 20.0, "startup": 0.1, "active": 0.05, "recovery": 0.2,
+		"desc": "Swaps places with its ally, wherever it is in sight. Shots on the way to one go after the other. Needs the ally under the crosshair.",
+		"ai": {"min": 0.0, "max": 99.0, "kind": "ally", "value": 0.9},
+		"counterplay": "It takes 8 s to come back: bait it out, then press your attack."},
+	"helpinghand": {
+		"display_name": "Helping Hand", "script": "res://scripts/moves/helpinghand.gd", "type": "normal", "cat": "status", "power": 0, "pp": 20, "accuracy": 0, "priority": 5,
+		"needs_ally": true, "ally_reach": 5.0, "help_mult": 1.5, "buff_dur": 3.0, "cost": 10.0, "cd": 6.0, "startup": 0.08, "active": 0.05, "recovery": 0.2,
+		"desc": "Cheers on a nearby ally: its next attack within 3 s hits 1.5 times as hard. Needs the ally close.",
+		"ai": {"min": 0.0, "max": 99.0, "kind": "ally", "value": 0.8},
+		"counterplay": "It needs them together: split them up, or dodge the boosted attack and it is wasted."},
+	"tailwind": {
+		"display_name": "Tailwind", "script": "res://scripts/moves/tailwind.gd", "type": "flying", "cat": "status", "power": 0, "pp": 15, "accuracy": 0, "priority": 0,
+		"pulse_radius": 7.0, "buff_dur": 12.0, "cost": 18.0, "cd": 20.0, "startup": 0.3, "active": 0.1, "recovery": 0.3,
+		"desc": "A gust around it: itself and an ally in reach move faster for 12 s.",
+		"ai": {"min": 6.0, "max": 99.0, "kind": "ally", "value": 0.8},
+		"counterplay": "It is open while it calls the wind. Afterwards, wait it out or slow them down."},
 }

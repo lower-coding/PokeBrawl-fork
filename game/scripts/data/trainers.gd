@@ -47,3 +47,16 @@ static func rival_for(mine: String, species: String) -> String:
 	var all := ids()
 	all.erase(valid(mine))
 	return all[absi(hash(species)) % all.size()]
+
+
+## In a 2 vs 2, one for each of "species" (the other three trainers' leads): all different, and
+## none of them yours.
+static func rivals_for(mine: String, species: Array) -> Array:
+	var all := ids()
+	all.erase(valid(mine))
+	var out: Array = []
+	for sp in species:
+		var pick: String = all[absi(hash(sp)) % all.size()]
+		all.erase(pick)
+		out.append(pick)
+	return out

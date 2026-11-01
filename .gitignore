@@ -5,7 +5,10 @@
 /captures/
 /export/
 
-# Personal notes, never published
+# Personal notes, never published: specs and the generated move and ability lists
+/spec/
+/docs/moves_by_type.md
+/docs/abilities_by_effect.md
 /private/
 
 # Python

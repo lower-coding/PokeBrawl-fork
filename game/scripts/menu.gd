@@ -8,13 +8,17 @@ extends Node
 ##   waiting     host waiting: its IPs and whether the router opened the port
 ##   join        type the IP (keyboard, or digit by digit with the gamepad)
 ##   connecting  trying to join someone else's game
-##   format      Battle, Training and hosting online: 1 vs 1 or 3 vs 3, before anyone picks
+##   format      Battle, Training and hosting online: 1 vs 1, 3 vs 3 or 2 vs 2, before anyone picks
 ##   selection   Pokémon grid on top, each side's picks below with their moves, and the
 ##               battle's options (stage, difficulty, rules, edit moves, fight). Random picks a
 ##               Pokémon on the grid and rolls moves on the options. Online: each picks their
 ##               own and the host picks the stage and the rules. A team stays hidden from the
-##               rival until both are ready
-##   rules       a 3 vs 3's rules for this battle (BattleRules), from the selection
+##               rival until both are ready. In a 2 vs 2 the host also picks for the AIs in the
+##               empty seats, and partners see each other's picks as they come. Whoever picks for
+##               others can change one team without undoing the rest (a click on a pick, or mov4
+##               for their own)
+##   seats       a 2 vs 2's four seats online: the host swaps any two, at any point of the picks
+##   rules       this battle's rules (BattleRules), from the grid or its options
 ##   moves       each Pokémon's default four moves and ability, its stats sheet and each move's
 ##               details. Opened from the selection it lists only that battle's picks, and what
 ##               changes there lasts for that battle (prepping)
@@ -33,18 +37,20 @@ const STAGE_TEXT := {"night": "A Galar stadium at night, packed and walled all r
 const PORTRAIT_SIZE := Vector2i(340, 240)
 const FORM_ZONE := 10            # a wall tab's zone number: cell * this + which form
 const MAIN_MENU := [["combat", "Battle", "Against the AI. Pick your Pokémon, the rival and the difficulty."],
-	["online", "Online", "1 vs 1 or 3 vs 3 with a friend over the internet."],
+	["online", "Online", "1 vs 1, 3 vs 3 or 2 vs 2 with friends over the internet."],
 	["training", "Training", "Still or active rival, no rush. R resets, T stops or frees the rival."],
 	["moves", "Moves", "Pick each Pokémon's four moves and its ability, and see what each one does."],
 	["options", "Options", "Controls, sound, screen and language."],
 	["quit", "Quit", "Close the game."],
 	["profile", "Profile", "Your trainer and your name. Online, your rival sees them."]]
-const ONLINE := [["create", "Host game", "Your friend joins with your IP. Port 7777 (UDP)."],
+const ONLINE := [["create", "Host game", "Your friends join with your IP. Port 7777 (UDP)."],
 	["join", "Join", "Type the IP of whoever hosted the game."],
 	["back", "Back", ""]]
 const FORMATS := [["1v1", "1 vs 1", "One Pokémon each."],
 	["3v3", "3 vs 3", "Three Pokémon a side, one on the field at a time. Switch between them."],
+	["2v2", "2 vs 2", "Two trainers a side, with one to three Pokémon each."],
 	["back", "Back", ""]]
+const FORMAT_NAV := [[-1, -1, -1, 1], [-1, 2, 0, -1], [1, 3, 0, -1], [2, -1, 0, -1]]
 const IP_CHARS := "0123456789."
 ## Headings among a move slot's options: rows that are not moves and the cursor skips.
 const OWN_MOVES := "#own"
@@ -62,6 +68,9 @@ const NAME_KEYS := [["Q", "W", "E", "R", "T", "Y", "U", "I", "O", "P"], ["A", "S
 ## from each one ([up, down, left, right], -1 stays).
 const MAIN_NAV := [[-1, -1, -1, 1], [6, 3, 0, 2], [6, 4, 1, -1], [1, -1, 0, 4], [2, 5, 3, -1], [4, -1, 3, -1], [-1, 2, 1, -1]]
 const ONLINE_NAV := [[-1, -1, -1, 1], [-1, 2, 0, -1], [1, -1, 0, -1]]
+## A seat's "peer", in a 2 vs 2 online: no player, or the host. A guest's is its ENet id, 2 or more.
+const SEAT_AI := 0
+const SEAT_HOST := 1
 const CRY_DB := -30.0            # a Pokémon's cry on being chosen
 const VS_CRY_DB := -22.0         # and on the VS screen
 
@@ -69,18 +78,20 @@ var main: Node
 var is_open := false
 var screen := "title"
 var cursor := 0
-## The next battle. "format": 1v1 or 3v3; "team", "team2": each side's picks in a 3 vs 3, the
-## first one leads (it is "p1" or "p2" too); "rules": BattleRules; "loadouts": per side, species ->
-## the moves rolled for this battle (what is chosen by hand is saved, in Loadout). Not saved: it
-## lasts until the game closes.
-var choice := {"p1": "pikachu", "p2": "snorlax", "diff": "normal", "mode": "combat", "stage": "night",
-	"format": "1v1", "team": [], "team2": [], "rules": BattleRules.defaults(), "loadouts": [{}, {}]}
-var team_preview := ""           # a 3 vs 3's pick: who the cursor is on, shown in the next slot
+## The next battle. "format": 1v1, 3v3 or 2v2; "team" to "team4": each trainer's picks with a team,
+## by slot, the first one leads (it is "p1" to "p4" too); "rules": BattleRules; "loadouts": per
+## slot, species -> the moves rolled for this battle (what is chosen by hand is saved, in Loadout).
+## Not saved: it lasts until the game closes.
+var choice := {"p1": "pikachu", "p2": "snorlax", "p3": "charizard", "p4": "lucario", "diff": "normal", "mode": "combat", "stage": "night",
+	"format": "1v1", "team": [], "team2": [], "team3": [], "team4": [], "rules": BattleRules.defaults(), "loadouts": [{}, {}, {}, {}]}
+var team_preview := ""           # a team's pick: who the cursor is on, shown in the next slot
 var form_pick := {}              # wall Pokémon -> the form showing (in memory only)
 var rules_cursor := 1            # the Rules screen: highlighted row (0 is a heading)
 var rules_top := 0               # first row shown (it scrolls)
+var _rules_return := "setup"     # where the Rules screen goes back to: "wall" or "setup"
+var options_return := false      # the Options screen came from the selection: back there, picks and room intact
 var online := false
-var sel_phase := "p1"             # p1, p2 (the rival against the AI), setup (options and start)
+var sel_phase := "p1"             # who is picking (pick_order), setup (options and start)
 var setup_cursor := 0
 var me_ready := false
 var rival_choice_id := ""
@@ -116,6 +127,12 @@ var details := false             # the details panel of the highlighted move
 var _edit_return := "main"       # where B leaves the Moves screen to
 var rival_name := ""             # the online rival's name
 var rival_version := ""          # the online rival's game version ("" until it says)
+## A 2 vs 2 online, by seat: {peer, name, trainer, team, loadouts, ready, version, count}. The host
+## keeps it and tells each one what they may see (_room_for); a 1 vs 1 or 3 vs 3 has its one rival.
+var seats: Array = []
+var seats_cursor := 0            # the Seats screen: highlighted seat
+var seats_held := -1             # and the one picked to swap with it
+var _room_size := -1             # the team size the room last said
 # Profile screen: -1 is the name, 0.. the trainers' grid.
 var profile_cursor := 0
 var name_edit := false           # typing the name
@@ -257,18 +274,21 @@ func _go(p: String) -> void:
 				choice.p2 = rival_choice_id
 			rival_count = 0
 			rival_team = []
+			if choice.format == "2v2":
+				_clear_picks()
+				seats = []
 			if team_battle():
 				choice.team = []
 				choice.team2 = []
 				team_preview = pokemon_list()[cursor]
 			send_choice()
 		elif team_battle():
-			# Back from a battle both teams are still picked: straight to its options.
-			if choice.team.size() == Party.SIZE and choice.team2.size() == Party.SIZE:
+			# Back from a battle every team is still picked: straight to its options.
+			if pick_order().all(func(ph): return choice[team_key(phase_side(ph))].size() == team_size()):
 				_to_setup()
 			team_preview = pokemon_list()[cursor]
 	elif p == "format":
-		cursor = maxi(FORMATS.map(func(f): return f[0]).find(choice.format), 0)
+		cursor = maxi(format_items().map(func(f): return f[0]).find(choice.format), 0)
 	elif p == "profile":
 		name_edit = false
 		profile_cursor = TrainerData.ids().find(main.options.trainer)
@@ -286,7 +306,9 @@ func online_connected() -> void:
 	rival_version = ""
 	rival_ready = false
 	message = ""
-	choice.loadouts = [{}, {}]
+	choice.loadouts = [{}, {}, {}, {}]
+	seats = []
+	_room_size = -1
 	if not is_open:
 		open_menu("selection")
 	else:
@@ -372,16 +394,14 @@ func _menu_frame(delta: float) -> void:
 				_sound("back")
 				_go("title")
 		"format":
-			_move_nav(ONLINE_NAV)
+			_move_nav(FORMAT_NAV)
 			if _accept():
 				_sound("ok")
-				if FORMATS[cursor][0] == "back":
+				if format_items()[cursor][0] == "back":
 					_go("online" if _hosting else "main")
 				else:
-					choice.format = FORMATS[cursor][0]
-					choice.team = []
-					choice.team2 = []
-					choice.loadouts = [{}, {}]
+					choice.format = format_items()[cursor][0]
+					_clear_picks()
 					if _hosting:
 						var err: String = main.start_net(true, "")
 						message = err
@@ -422,6 +442,8 @@ func _menu_frame(delta: float) -> void:
 			main.options.menu_input(self)
 		"rules":
 			_rules_input()
+		"seats":
+			_seats_input()
 		"profile":
 			_profile_input()
 
@@ -594,12 +616,25 @@ func _save_ip(text: String) -> void:
 
 # ---------------------------------------------------------------- selection
 
+## The formats on offer.
+func format_items() -> Array:
+	return FORMATS
+
+
+func _clear_picks() -> void:
+	for side in 4:
+		choice[team_key(side)] = []
+	choice.loadouts = [{}, {}, {}, {}]
+
+
 ## The options under the picks, in order. Online the guest cannot change the stage.
 func setup_items() -> Array:
 	var out: Array = ["stage"]
-	if not online and choice.mode != "training":
+	if (not online and choice.mode != "training") or _hosts_ais():
 		out.append("diff")
-	return out + ["rules", "build", "ready" if online else "fight"]
+	if _hosts_room():
+		out.append("seats")
+	return out + ["options", "rules", "build", "ready" if online else "fight"]
 
 
 func _selection() -> void:
@@ -616,6 +651,23 @@ func _selection() -> void:
 		return
 	if _pressed("menu_info"):
 		_random_pick()
+		return
+	# How many picks there are depends on the rules, so they open before picking too.
+	if _pressed("menu_extra"):
+		_sound("ok")
+		_open_rules("wall")
+		return
+	if _pressed("pause"):
+		_sound("ok")
+		_open_options()
+		return
+	if _pressed("mov4"):
+		_repick_mine()
+		return
+	# Who sits where does not wait for the picks.
+	if _pressed("lock_on") and has_seats() and host:
+		_sound("ok")
+		_open_seats()
 		return
 	var to := cursor
 	if _pressed("move_right"):
@@ -702,6 +754,7 @@ func _random_pick() -> void:
 func _to_setup() -> void:
 	sel_phase = "setup"
 	_keep_picked_loadouts()
+	_roll_ai_helpers()
 	var items := setup_items()
 	setup_cursor = items.size() - 1          # straight on Fight / Ready
 	if online:
@@ -710,6 +763,8 @@ func _to_setup() -> void:
 
 func _setup_input(list: Array) -> void:
 	var items := setup_items()
+	# A guest taking the last empty seat takes Difficulty away.
+	setup_cursor = mini(setup_cursor, items.size() - 1)
 	var item: String = items[setup_cursor]
 	var host: bool = not online or (main.net != null and main.net.host)
 	if online and me_ready:
@@ -720,6 +775,12 @@ func _setup_input(list: Array) -> void:
 		return
 	if _pressed("mov2"):
 		_random_battle_moves()
+		return
+	if _pressed("mov1") and not online:
+		_random_ai_moves()
+		return
+	if _pressed("mov4"):
+		_repick_mine()
 		return
 	# The options sit side by side: left and right go through them, up and down change them.
 	if _pressed("move_left"):
@@ -749,10 +810,13 @@ func _setup_input(list: Array) -> void:
 				_sound("move")
 			"rules":
 				_sound("ok")
-				screen = "rules"
-				enter_t = 0.0
-				rules_cursor = 1
-				rules_top = 0
+				_open_rules("setup")
+			"options":
+				_sound("ok")
+				_open_options()
+			"seats":
+				_sound("ok")
+				_open_seats()
 			"build":
 				_sound("ok")
 				_open_battle_moves()
@@ -766,12 +830,21 @@ func _setup_input(list: Array) -> void:
 				main.check_start()
 	elif _pressed("menu_back"):
 		_sound("back")
-		sel_phase = "p1" if online else "p2"
+		sel_phase = pick_order()[-1]
 		if team_battle():
 			_last_pick_back(list)
 			send_choice()
 		else:
 			cursor = cell_of(choice[sel_phase])
+
+
+## The Options screen on top of the selection: no _go, so the picks and the room stay.
+func _open_options() -> void:
+	options_return = true
+	screen = "options"
+	enter_t = 0.0
+	main.options.cursor = 1
+	main.options.top = 0
 
 
 # ---------------------------------------------------------------- this battle's moves
@@ -784,9 +857,11 @@ func prepping() -> bool:
 ## This battle's picks, each as [side, species]. Online, only mine: the rival sets its own.
 func battle_picks() -> Array:
 	var out: Array = []
-	for side in (1 if online else 2):
-		var lead: String = choice.p1 if side == 0 else choice.p2
-		for sp in (choice["team" if side == 0 else "team2"] if team_battle() else [lead]):
+	var by_slot := pick_order()
+	by_slot.sort()
+	for ph in by_slot:
+		var side := phase_side(ph)
+		for sp in (choice[team_key(side)] if team_battle() else [choice[ph]]):
 			out.append([side, sp])
 	return out
 
@@ -801,7 +876,7 @@ func battle_loadout(side: int, sp: String) -> Dictionary:
 func _default_loadout(side: int, sp: String) -> Dictionary:
 	if side == 0:
 		return main.my_loadout(sp)
-	return Loadout.default_for(sp) if online else main.ai_loadout(sp)
+	return Loadout.default_for(sp) if online and not ai_pick(side) else main.ai_loadout(sp, side)
 
 
 ## What was rolled, for this battle only: a roll never overwrites a saved set.
@@ -816,7 +891,7 @@ func _set_battle_loadout(side: int, sp: String, lo: Dictionary) -> void:
 ## What was rolled for a Pokémon lasts while it stays picked.
 func _keep_picked_loadouts() -> void:
 	var picks := battle_picks()
-	for side in 2:
+	for side in choice.loadouts.size():
 		for sp in choice.loadouts[side].keys():
 			if not [side, sp] in picks:
 				choice.loadouts[side].erase(sp)
@@ -824,7 +899,7 @@ func _keep_picked_loadouts() -> void:
 
 func _roll_moves(side: int, sp: String) -> void:
 	var lo := battle_loadout(side, sp)
-	lo.moves = Loadout.random_moves(sp)
+	lo.moves = Loadout.random_moves(sp, choice.format == "2v2")
 	_set_battle_loadout(side, sp, lo)
 
 
@@ -835,6 +910,24 @@ func _random_battle_moves() -> void:
 		_roll_moves(pick[0], pick[1])
 	if online:
 		send_choice()
+
+
+## Random moves for the AI's picks alone: mine stay as they are.
+func _random_ai_moves() -> void:
+	_sound("ok")
+	for pick in battle_picks():
+		if pick[0] != 0:
+			_roll_moves(pick[0], pick[1])
+
+
+## In a 2 vs 2, an AI's pick with nothing set may bring a move that helps its ally. It is a roll like
+## any other, decided here, so the cards and the Moves screen show what it will play.
+func _roll_ai_helpers() -> void:
+	if choice.format != "2v2" or not main._plays_saved():
+		return
+	for pick in battle_picks():
+		if pick[0] != 0 and not Loadout.has_set(pick[1], pick[0]) and not choice.loadouts[pick[0]].has(pick[1]):
+			_set_battle_loadout(pick[0], pick[1], Loadout.ai_doubles(pick[1]))
 
 
 ## The random button: whatever fits where it shows.
@@ -862,28 +955,73 @@ func _open_battle_moves() -> void:
 
 # ---------------------------------------------------------------- picking a team
 
-## This battle is a 3 vs 3.
+## This battle has teams, so its picks go by trainer (Party): a 3 vs 3 or a 2 vs 2, even at one each.
 func team_battle() -> bool:
-	return choice.format == "3v3"
+	return choice.format != "1v1"
+
+
+## How many Pokémon each trainer brings.
+func team_size() -> int:
+	match choice.format:
+		"3v3":
+			return 3
+		"2v2":
+			return int(choice.rules.team_size)
+	return 1
+
+
+## Who picks, in order: you, your ally, then the foes. Online, only you, and the host for the AIs in
+## a 2 vs 2's empty seats.
+func pick_order() -> Array:
+	if online:
+		return ["p1"] + ["p3", "p2", "p4"].filter(func(ph): return ai_pick(phase_side(ph)))
+	return ["p1", "p3", "p2", "p4"] if choice.format == "2v2" else ["p1", "p2"]
+
+
+## The slot a phase picks for ("p3" is slot 2). Picking for nobody, the options: slot 0.
+static func phase_side(phase: String) -> int:
+	return int(phase.substr(1)) - 1 if phase.begins_with("p") else 0
+
+
+static func team_key(side: int) -> String:
+	return "team" if side == 0 else "team%d" % (side + 1)
 
 
 ## A whole team for "side": its lead, the picks, then whoever comes next in the roster until it
-## is full. No species twice on a team, and no two forms of one.
-func team_ids(side: int, lead: String) -> Array:
+## is full. No species twice on a team, and no two forms of one. "size": how many, if not this
+## battle's.
+func team_ids(side: int, lead: String, size := -1) -> Array:
 	var ids: Array = [lead]
-	for sp in choice["team" if side == 0 else "team2"] + pokemon_list():
-		if ids.size() < Party.SIZE and Roster.POKEMON.has(sp) and not on_team(sp, ids):
+	var full := size if size >= 0 else team_size()
+	for sp in choice[team_key(side)] + pokemon_list():
+		if ids.size() < full and Roster.POKEMON.has(sp) and not on_team(sp, ids):
 			ids.append(sp)
 	return ids
 
 
 func _picks_key() -> String:
-	return "team" if sel_phase == "p1" else "team2"
+	return team_key(phase_side(sel_phase))
+
+
+## On from "sel_phase", whose team is full: to the next one that is not (a team changed on its own
+## leaves the others as they are), then to the battle's options.
+func _next_picker() -> void:
+	var order := pick_order()
+	var at: int = order.find(sel_phase)
+	for i in range(1, order.size() + 1):
+		var ph: String = order[(at + i) % order.size()]
+		if choice[team_key(phase_side(ph))].size() < team_size():
+			sel_phase = ph
+			cursor = cell_of(choice[sel_phase])
+			team_preview = pokemon_list()[cursor]
+			send_choice()
+			return
+	_to_setup()
 
 
 ## Pressed on the wall: adds the Pokémon to the team, or takes it out if it was already in. Its
-## other form on the team is swapped for this one. The third pick moves on: to the rival's team,
-## then to the battle's options.
+## other form on the team is swapped for this one. The last pick moves on: to the next trainer's
+## team, then to the battle's options.
 func _team_pick(sp: String) -> void:
 	var picks: Array = choice[_picks_key()]
 	if sp in picks:
@@ -898,30 +1036,23 @@ func _team_pick(sp: String) -> void:
 		return
 	picks.append(sp)
 	_cry(sp)
-	if picks.size() < Party.SIZE:
+	if picks.size() < team_size():
 		send_choice()
 		return
 	choice[sel_phase] = picks[0]
-	if online:
-		_to_setup()
-	elif sel_phase == "p1":
-		sel_phase = "p2"
-		cursor = cell_of(choice.p2)
-		team_preview = pokemon_list()[cursor]
-	else:
-		_to_setup()
+	_next_picker()
 
 
-## Back while picking: out goes the last pick; with none, to the team before or the format.
+## Back while picking: out goes the last pick; with none, to the team before that has any, or the
+## format.
 func _team_back() -> void:
-	var list := pokemon_list()
-	if not choice[_picks_key()].is_empty():
-		_last_pick_back(list)
-	elif sel_phase == "p2":
-		sel_phase = "p1"
-		_last_pick_back(list)
-	else:
-		_go("format")
+	var order := pick_order()
+	for i in range(order.find(sel_phase), -1, -1):
+		sel_phase = order[i]
+		if not choice[_picks_key()].is_empty():
+			_last_pick_back(pokemon_list())
+			return
+	_go("format")
 
 
 ## The last pick of whoever is picking comes off the team, with the cursor on it.
@@ -934,12 +1065,44 @@ func _last_pick_back(list: Array) -> void:
 
 ## A click on a pick of the team being picked takes it out ("slot": its place on the team).
 func _remove_pick(side: int, slot: int) -> void:
-	if sel_phase != ("p1" if side == 0 else "p2"):
+	if not can_remove_pick(side):
 		return
-	var picks: Array = choice[_picks_key()]
+	var picks: Array = choice[team_key(side)]
 	if slot < picks.size():
+		sel_phase = "p%d" % (side + 1)
+		cursor = cell_of(picks[slot])
+		team_preview = picks[slot]
 		picks.remove_at(slot)
 		_sound("back")
+		send_choice()
+
+
+## Whether a click can take a pick out of that side's team. In a 2 vs 2, of any team this copy picks
+## for, even from the options: that one picks again and the others keep theirs.
+func can_remove_pick(side: int) -> bool:
+	var phase := "p%d" % (side + 1)
+	if sel_phase == phase:
+		return true
+	return choice.format == "2v2" and phase in pick_order() and not (online and me_ready)
+
+
+## In a 2 vs 2 with others to pick for, whether I can go back to my team without undoing theirs.
+func can_repick_mine() -> bool:
+	return choice.format == "2v2" and sel_phase != "p1" and pick_order().size() > 1 and not (online and me_ready)
+
+
+## To my team from whoever is being picked, or from the options. A full one loses its last pick,
+## with the cursor on it, as Back does; picking again goes on to whoever is still short.
+func _repick_mine() -> void:
+	if not can_repick_mine():
+		return
+	_sound("back")
+	sel_phase = "p1"
+	if choice.team.size() == team_size():
+		_last_pick_back(pokemon_list())
+	else:
+		cursor = cell_of(choice.p1)
+		team_preview = pokemon_list()[cursor]
 		send_choice()
 
 
@@ -948,13 +1111,23 @@ func _remove_pick(side: int, slot: int) -> void:
 const RULES_ROWS := 12           # rows shown at once on the Rules screen (it scrolls)
 
 
+## Whether a rule counts in this battle: Aiming always, Doubles only in a 2 vs 2, and those about
+## switching wherever a trainer has someone to switch to.
+func _rule_counts(d: Dictionary) -> bool:
+	if d.get("any_format", false):
+		return true
+	if d.has("only"):
+		return choice.format == d.only
+	return team_size() > 1
+
+
 ## Rows of the Rules screen: {id, kind (header, choice, action), label, value (translated),
 ## help, changed}.
 func rules_items() -> Array:
 	var out: Array = []
 	var group := ""
 	for d in BattleRules.DEFS:
-		if not team_battle() and not d.get("any_format", false):
+		if not _rule_counts(d):
 			continue
 		if d.group != group:
 			group = d.group
@@ -1003,9 +1176,41 @@ func _rules_input() -> void:
 		_sound("back")
 		screen = "selection"
 		enter_t = 0.0
-		setup_cursor = setup_items().find("rules")
+		if _rules_return == "setup":
+			setup_cursor = setup_items().find("rules")
+		_fit_picks()
 		if online:
 			send_choice()
+
+
+## Opens the Rules screen; it goes back to "from" ("wall" or "setup").
+func _open_rules(from: String) -> void:
+	_rules_return = from
+	screen = "rules"
+	enter_t = 0.0
+	rules_cursor = 1
+	rules_top = 0
+
+
+## The size of a team may have changed: whoever has too many loses their last picks, and the
+## picking goes on with the first trainer who is not full. Nothing changes if every team fits.
+func _fit_picks() -> void:
+	if choice.format != "2v2":
+		return
+	var first_short := ""
+	for ph in pick_order():
+		var picks: Array = choice[team_key(phase_side(ph))]
+		picks.resize(mini(picks.size(), team_size()))
+		if not picks.is_empty():
+			choice[ph] = picks[0]
+		if picks.size() < team_size() and first_short == "":
+			first_short = ph
+	if first_short != "":
+		sel_phase = first_short
+		cursor = cell_of(choice[first_short])
+		team_preview = pokemon_list()[cursor]
+	elif sel_phase != "setup":
+		_to_setup()
 
 
 ## Online only the host sets the rules; the guest can read them.
@@ -1368,6 +1573,9 @@ func shown_move() -> String:
 ## have picked: a team seen as it is being picked could just be countered.
 func send_choice() -> void:
 	if main.net:
+		if choice.format == "2v2" and main.net.host:
+			_room_changed()
+			return
 		var d := {"t": "choice", "species": choice.p1, "ready": me_ready, "loadout": battle_loadout(0, choice.p1), "trainer": main.options.trainer, "name": main.options.shown_name(),
 			"ver": Menu.version()}
 		if main.net.host:
@@ -1378,6 +1586,8 @@ func send_choice() -> void:
 			d.count = choice.team.size()
 			if me_ready:
 				choice.team = team_ids(0, choice.p1)
+			# In a 2 vs 2 the host holds it back from the other side, and partners see it as it comes.
+			if me_ready or choice.format == "2v2":
 				d.team = choice.team
 				d.loadouts = {}
 				for sp in choice.team:
@@ -1392,12 +1602,10 @@ func room_settings(d: Dictionary) -> void:
 		return
 	if d.has("rules"):
 		choice.rules = BattleRules.sanitized(d.rules)
-	if not d.get("format", choice.format) in ["1v1", "3v3"] or d.get("format", choice.format) == choice.format:
+	if not d.get("format", choice.format) in ["1v1", "3v3", "2v2"] or d.get("format", choice.format) == choice.format:
 		return
 	choice.format = d.format
-	choice.team = []
-	choice.team2 = []
-	choice.loadouts = [{}, {}]
+	_clear_picks()
 	me_ready = false
 	sel_phase = "p1"
 	team_preview = choice.p1
@@ -1406,12 +1614,332 @@ func room_settings(d: Dictionary) -> void:
 		send_choice()
 
 
+# ---------------------------------------------------------------- a 2 vs 2's room
+
+## Who sits where is known here: not until the host has said, on a guest.
+func has_seats() -> bool:
+	return online and choice.format == "2v2" and seats.size() == 4 and main.net != null
+
+
+## The seat of whoever is in "slot" on this screen.
+func seat_at(slot: int) -> Dictionary:
+	return seats[main.net.seat_of(slot)]
+
+
+## Whether this copy picks for that slot: the host, for an AI in an empty seat.
+func ai_pick(slot: int) -> bool:
+	return slot != 0 and main.net != null and main.net.host and has_seats() and seat_at(slot).peer == SEAT_AI
+
+
+func _hosts_room() -> bool:
+	return online and choice.format == "2v2" and main.net != null and main.net.host
+
+
+func _hosts_ais() -> bool:
+	return _hosts_room() and has_seats() and seats.any(func(seat): return seat.peer == SEAT_AI)
+
+
+## New players can come in, in a 2 vs 2, until the VS screen.
+func in_room() -> bool:
+	return _vs_t < 0.0
+
+
+func _blank_seat(peer := SEAT_AI) -> Dictionary:
+	return {"peer": peer, "name": "", "trainer": "", "team": [], "loadouts": {}, "ready": false, "version": "", "count": 0}
+
+
+## The host: the four seats, from who is connected. Whoever stays keeps their picks; a seat with a
+## new person in it starts over.
+func _sync_seats() -> void:
+	var net: Net = main.net
+	if seats.size() != 4:
+		seats = [_blank_seat(), _blank_seat(), _blank_seat(), _blank_seat()]
+	for s in 4:
+		var peer := SEAT_HOST if s == net.seat else SEAT_AI
+		for id in net.guests:
+			if net.guests[id] == s:
+				peer = id
+		if seats[s].peer != peer:
+			seats[s] = _blank_seat(peer)
+			if net.slot_of(s) != 0:
+				choice[team_key(net.slot_of(s))] = []
+				choice.loadouts[net.slot_of(s)] = {}
+
+
+## The host's own picks and the AIs', as the seats have them.
+func _picks_to_seats() -> void:
+	var net: Net = main.net
+	for s in 4:
+		var seat: Dictionary = seats[s]
+		var slot: int = net.slot_of(s)
+		if seat.peer > SEAT_HOST:
+			continue
+		seat.team = choice[team_key(slot)].duplicate()
+		if seat.peer == SEAT_HOST:
+			seat.name = main.options.shown_name()
+			seat.trainer = main.options.trainer
+			seat.version = Menu.version()
+			seat.ready = me_ready
+			if me_ready:
+				choice.team = team_ids(0, choice.p1)
+				seat.team = choice.team.duplicate()
+		seat.loadouts = {}
+		for sp in seat.team:
+			seat.loadouts[sp] = battle_loadout(slot, sp)
+
+
+## What "to" may see: everything of their own side, only how many of the other's.
+func _room_for(to: int) -> Dictionary:
+	var view: Array = []
+	for s in 4:
+		var seat: Dictionary = seats[s].duplicate(true)
+		seat.count = seat.team.size()
+		if s % 2 != to % 2:
+			seat.team = []
+			seat.loadouts = {}
+		view.append(seat)
+	return {"t": "room", "you": to, "seats": view, "stage": choice.stage, "format": choice.format, "rules": choice.rules}
+
+
+## The host: something changed. Each player gets their own view of it. "again": everyone has to get
+## ready again, which a guest has to be told: it keeps its own "ready" otherwise, and the host would
+## wait for it for good.
+func _room_changed(again := false) -> void:
+	var net: Net = main.net
+	_sync_seats()
+	_picks_to_seats()
+	_show_seats(_room_for(net.seat).seats)
+	for id in net.guests:
+		var view := _room_for(net.guests[id])
+		view.again = again
+		net.send_event_to(id, view)
+
+
+## On the cards: the other players' picks, as far as this screen may know them.
+func _show_seats(view: Array) -> void:
+	var net: Net = main.net
+	for s in 4:
+		var slot: int = net.slot_of(s)
+		if slot == 0 or ai_pick(slot):
+			continue
+		var team := _clean_team(view[s].team)
+		choice[team_key(slot)] = team
+		if not team.is_empty():
+			choice["p%d" % (slot + 1)] = team[0]
+
+
+## What came from outside, as a team: known Pokémon, none twice, no more than fit.
+func _clean_team(team) -> Array:
+	var out: Array = []
+	if team is Array:
+		for sp in team:
+			if sp is String and Roster.POKEMON.has(sp) and not on_team(sp, out) and out.size() < team_size():
+				out.append(sp)
+	return out
+
+
+## The host: a guest's choice, for its seat ("from" is Net's word on who sent it).
+func seat_choice(d: Dictionary) -> void:
+	var s := int(d.get("from", -1))
+	if s < 0 or not main.net.host:
+		return
+	_sync_seats()
+	var seat: Dictionary = seats[s]
+	seat.name = str(d.get("name", "")).substr(0, NAME_MAX)
+	var trainer := str(d.get("trainer", ""))
+	seat.trainer = TrainerData.valid(trainer) if trainer != "" else ""
+	var ver := str(d.get("ver", ""))
+	seat.version = ver if ver != "" else "?"
+	seat.team = _clean_team(d.get("team", []))
+	var sets = d.get("loadouts", {})
+	seat.loadouts = {}
+	for sp in seat.team:
+		seat.loadouts[sp] = Loadout.valid(sp, sets.get(sp, {}) if sets is Dictionary else {})
+	seat.ready = bool(d.get("ready", false)) and seat.team.size() == team_size()
+	_room_changed()
+
+
+## A guest: the host's word on the room. A team size that changes may send me back to pick.
+func take_room(d: Dictionary) -> void:
+	var net: Net = main.net
+	if net.host:
+		return
+	net.seat = int(d.get("you", net.seat))
+	seats = d.get("seats", [])
+	if seats.size() != 4:
+		seats = []
+		return
+	_show_seats(seats)
+	if d.get("again", false):
+		me_ready = false
+	if STAGES.has(d.get("stage", "")):
+		choice.stage = d.stage
+	if is_open and team_size() != _room_size:
+		var first := _room_size < 0
+		_room_size = team_size()
+		if not first:
+			_fit_picks()
+			if sel_phase != "setup":
+				me_ready = false
+			send_choice()
+
+
+## Someone came in, or left: the host goes on picking for whoever is an AI now.
+func seat_taken(_seat: int) -> void:
+	_room_changed()
+	_fit_host_picks()
+	main.check_start()
+
+
+func seat_freed(_seat: int) -> void:
+	_room_changed()
+	_fit_host_picks()
+	main.check_start()
+
+
+func _fit_host_picks() -> void:
+	if not is_open:
+		return
+	var short: bool = pick_order().any(func(ph): return choice[team_key(phase_side(ph))].size() < team_size())
+	var stuck: bool = sel_phase != "setup" and (not sel_phase in pick_order() or choice[_picks_key()].size() >= team_size())
+	if (sel_phase == "setup" and short) or stuck:
+		me_ready = false
+		_fit_picks()
+		send_choice()
+
+
+## The host: whether all the players are ready, with a full team and the same game.
+func room_ready() -> bool:
+	if not me_ready:
+		return false
+	_sync_seats()
+	if version_mismatch():
+		return false
+	for seat in seats:
+		if seat.peer > SEAT_HOST and (not seat.ready or seat.team.size() != team_size()):
+			return false
+	return true
+
+
+## The host's start: seats, teams and sets for all four, and now the other side can know them.
+func seats_start() -> Dictionary:
+	var net: Net = main.net
+	_picks_to_seats()
+	var ai_trainers := TrainerData.rivals_for(main.options.trainer, [choice.p2, choice.p3, choice.p4])
+	var out: Array = []
+	for s in 4:
+		var seat: Dictionary = seats[s]
+		var slot: int = net.slot_of(s)
+		var team: Array = seat.team
+		var sets: Dictionary = seat.loadouts
+		var trainer: String = seat.trainer
+		if seat.peer <= SEAT_HOST:
+			team = team_ids(slot, choice["p%d" % (slot + 1)])
+			sets = {}
+			for sp in team:
+				sets[sp] = battle_loadout(slot, sp)
+		if seat.peer == SEAT_AI:
+			trainer = ai_trainers[slot - 1]
+		out.append({"peer": seat.peer, "name": seat.name, "trainer": trainer, "team": team, "loadouts": sets})
+	return {"t": "start", "seats": out, "guests": net.guests.values(), "stage": choice.stage, "format": choice.format, "rules": choice.rules, "diff": choice.diff}
+
+
+## Everyone: the start's teams go on the slots of this screen.
+func take_start(d: Dictionary) -> void:
+	var net: Net = main.net
+	me_ready = false
+	# The cards say how hard the AIs are, and only the host has picked.
+	if DIFFICULTIES.has(d.get("diff", "")):
+		choice.diff = d.diff
+	net.guest_seats = d.guests
+	net.humans = d.guests.size() + 1
+	seats = []
+	for seat in d.seats:
+		seats.append(_blank_seat().merged(seat, true))
+	for slot in 4:
+		var team: Array = seat_at(slot).team
+		choice[team_key(slot)] = team.duplicate()
+		choice["p%d" % (slot + 1)] = team[0]
+
+
+## What "slot" brings, as the start says.
+func seat_loadout(slot: int, sp: String) -> Dictionary:
+	return Loadout.valid(sp, seat_at(slot).loadouts.get(sp, {}))
+
+
+func _open_seats() -> void:
+	screen = "seats"
+	enter_t = 0.0
+	seats_cursor = main.net.seat
+	seats_held = -1
+
+
+## The host swaps any two seats: A on one, A on the other, even halfway through the picks. An AI takes
+## its team along. Everyone has to get ready again.
+func swap_seats(a: int, b: int) -> void:
+	var net: Net = main.net
+	_picks_to_seats()
+	var moved: Dictionary = seats[a]
+	seats[a] = seats[b]
+	seats[b] = moved
+	for id in net.guests:
+		if net.guests[id] == a:
+			net.guests[id] = b
+		elif net.guests[id] == b:
+			net.guests[id] = a
+	if net.seat == a:
+		net.seat = b
+	elif net.seat == b:
+		net.seat = a
+	me_ready = false
+	for s in 4:
+		seats[s].ready = false
+		if seats[s].peer == SEAT_AI:
+			choice[team_key(net.slot_of(s))] = seats[s].team.duplicate()
+			choice.loadouts[net.slot_of(s)] = seats[s].loadouts.duplicate()
+			if not seats[s].team.is_empty():
+				choice["p%d" % (net.slot_of(s) + 1)] = seats[s].team[0]
+	_room_changed(true)
+	_fit_host_picks()
+
+
+func _seats_input() -> void:
+	# Across is the other side, down the partner, as the screen lays them out.
+	var to := seats_cursor
+	if _pressed("move_left") or _pressed("move_right"):
+		to = seats_cursor ^ 1
+	elif _pressed("move_up") or _pressed("move_down"):
+		to = seats_cursor ^ 2
+	if to != seats_cursor:
+		seats_cursor = to
+		_sound("move")
+	if _accept():
+		_sound("ok")
+		if seats_held < 0:
+			seats_held = seats_cursor
+		else:
+			if seats_held != seats_cursor:
+				swap_seats(seats_held, seats_cursor)
+			seats_held = -1
+	elif _pressed("menu_back"):
+		_sound("back")
+		if seats_held >= 0:
+			seats_held = -1
+		else:
+			screen = "selection"
+			enter_t = 0.0
+			if sel_phase == "setup":
+				setup_cursor = setup_items().find("seats")
+
+
+# ---------------------------------------------------------------- a rival's picks
+
 ## A 3 vs 3 rival's picks: how many, and its team and moves once it is ready.
 func rival_team_choice(d: Dictionary) -> void:
 	rival_count = int(d.get("count", 0))
 	rival_team = []
 	var team = d.get("team", [])
-	if not team is Array or team.size() != Party.SIZE:
+	if not team is Array or team.size() != team_size():
 		return
 	var seen := {}
 	for sp in team:
@@ -1431,6 +1959,12 @@ static func version() -> String:
 
 ## Online: whether the rival plays another version (then the battle does not start).
 func version_mismatch() -> bool:
+	if has_seats():
+		for seat in seats:
+			if seat.peer != SEAT_AI and seat.version != "" and seat.version != Menu.version():
+				rival_version = seat.version
+				return true
+		return false
 	return rival_version != "" and rival_version != Menu.version()
 
 
@@ -1448,6 +1982,9 @@ func rival_choice(sp: String, ready: bool, loadout := {}, trainer := "", rival :
 
 
 func _start_vs(mine: String, theirs: String) -> void:
+	# Online the start can come while on the Options screen, even waiting for a key.
+	main.options.waiting = ""
+	options_return = false
 	_vs = [mine, theirs]
 	_vs_t = 0.0
 	screen = "vs"
@@ -1652,8 +2189,19 @@ func _mouse(ev: InputEvent) -> void:
 				ask_restore()
 			"rand":
 				_press_random()
+			"rand_ai":
+				_random_ai_moves()
+			"open_rules":
+				_sound("ok")
+				_open_rules("wall")
+			"open_options":
+				_sound("ok")
+				_open_options()
+			"open_seats":
+				_sound("ok")
+				_open_seats()
 			"tslot":
-				_remove_pick(z.i / Party.SIZE, z.i % Party.SIZE)
+				_remove_pick(z.i / team_size(), z.i % team_size())
 			"form":
 				_click_form(z.i / FORM_ZONE, z.i % FORM_ZONE)
 			"mvp":
@@ -1697,7 +2245,7 @@ func _tap(action: String) -> void:
 
 
 func _hover(z: Dictionary) -> void:
-	var before := [cursor, profile_cursor, setup_cursor, _key, name_key, edit_slot, edit_cursor, confirm.get("on")]
+	var before := [cursor, profile_cursor, setup_cursor, _key, name_key, edit_slot, edit_cursor, confirm.get("on"), seats_cursor]
 	match z.kind:
 		"confirm":
 			if z.i >= 0:
@@ -1732,11 +2280,14 @@ func _hover(z: Dictionary) -> void:
 		"tab":
 			if screen == "selection" and sel_phase == "setup" and not (online and me_ready):
 				setup_cursor = z.i
+		"seat":
+			if screen == "seats":
+				seats_cursor = z.i
 		"key":
 			_key = Vector2i(z.i % 4, z.i / 4)
 		"nkey":
 			name_key = Vector2i(z.i % 10, z.i / 10)
-	if [cursor, profile_cursor, setup_cursor, _key, name_key, edit_slot, edit_cursor, confirm.get("on")] != before:
+	if [cursor, profile_cursor, setup_cursor, _key, name_key, edit_slot, edit_cursor, confirm.get("on"), seats_cursor] != before:
 		_sound("move")
 
 

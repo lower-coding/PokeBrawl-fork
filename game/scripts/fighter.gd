@@ -47,12 +47,17 @@ var main: Node
 var species := "pikachu"
 var data: Dictionary
 var types: Array = []
-var team := 0
+var team := 0                        # its side: slot % 2
+var slot := 0                        # its trainer's place: 0 to 3 in a 2 vs 2, the same as team otherwise
 var party: Party = null              # its team (--team); null in a 1 vs 1
-var rival: Fighter
+var rival: Fighter                   # the foe it is after now
+var aiding: Fighter = null           # AI only: the ally it is turning to for a helping move
+var last_hit_by: Fighter = null      # the last foe that hit it (the stages a KO clears, in a 2 vs 2)
 var ctrl := Intent.new()
 var is_player := false
-var is_remote := false               # online: the rival's copy, moved by the network
+const HELP_COLOR := Color("ffd21f")
+const TAILWIND_COLOR := Color(0.8, 0.93, 1.0)
+var is_remote := false               # online: someone else's copy, moved by the network
 var net_state := {}                 # last real state received from the rival
 var net_lead := 0                # frames to fast-forward whatever starts (the ping)
 var start_pos := Vector3.ZERO       # where each battle starts (rematch)
@@ -88,6 +93,7 @@ var _confuse_fx := 0.0
 ## Infatuated with this species (Cute Charm), for charmed_t more seconds. It sits alongside a
 ## status. _love_seed makes both copies online agree on which presses fail (_love_fails).
 var charmed_by := ""
+var charmer: Fighter = null          # the one with that species that charmed it: it ends when that one leaves
 var charmed_t := 0.0
 var _love_seed := 0
 var _love_fx := 0.0
@@ -120,6 +126,12 @@ var _status_fx := 0.0
 var translucent := 0.0               # Substitute (Gengar)
 var _skin_t := 0.0
 var _goo_t := 0.0                    # Gooey: until it can slow an attacker again
+var help_t := 0.0                    # seconds its next damaging move stays boosted (Helping Hand)
+var help_mult := 1.0
+var _help_fx := 0.0
+var tailwind_t := 0.0                # seconds its Speed stays doubled (Tailwind)
+var _wind_fx := 0.0
+var _blinked := false                # gone from view in the middle of a dodge (Gengar's)
 var fooled_by: Node3D = null         # decoy it is locked on (the AI falls for it; a player picks it)
 var ai_aim = null                    # AI only: where it thinks the rival is (delayed, with error)
 var aim_lead := 1.0                  # how much projectiles lead a moving target (the AI uses less)
@@ -284,6 +296,8 @@ func on_floor() -> bool:
 ## What it looks at and aims at: the rival, or a decoy it is locked on (the AI falls for
 ## one; Substitute locks its rival on its doll; a player can pick one, see switch_target).
 func aim_target() -> Node3D:
+	if aiding and is_instance_valid(aiding) and aiding.state != "ko":
+		return aiding
 	if fooled_by and is_instance_valid(fooled_by) and not fooled_by.is_queued_for_deletion():
 		return fooled_by
 	return rival
@@ -327,21 +341,53 @@ func aiming_at_foe() -> bool:
 	return false
 
 
+## Legacy aim: the ally is in line with where the camera looks, at any height.
+func looks_at_ally() -> bool:
+	var mate := ally()
+	if mate == null:
+		return false
+	var look := camera_forward()
+	var to: Vector3 = mate.global_position - global_position
+	to.y = 0.0
+	return to.dot(look) > 0.0 and (to - look * to.dot(look)).length() < mate.radius() + 0.3
+
+
 ## Where the camera looks, flat (free aim).
 func camera_forward() -> Vector3:
 	return Vector3(-sin(ctrl.yaw), 0.0, -cos(ctrl.yaw))
 
 
-## What it can lock on: the rival and the rival's decoys (Substitute's doll, Double Team's
-## clones): it cannot always tell the real one.
+## The other side's Pokémon on the field, still standing.
+func foes() -> Array:
+	return main.fighters.filter(func(f): return f.team != team and f.state != "ko")
+
+
+## Its partner on the field, in a 2 vs 2.
+func ally() -> Fighter:
+	if main.fighters.size() != 4:
+		return null
+	var a: Fighter = main.fighters[(slot + 2) % 4]
+	return a if a.state != "ko" else null
+
+
+## What it can lock on: every foe and their decoys (Substitute's doll, Double Team's clones): it
+## cannot always tell the real one. Never the ally.
 func lock_candidates() -> Array:
-	var out: Array = []
-	if rival and is_instance_valid(rival) and rival.state != "ko":
-		out.append(rival)
+	var out: Array = foes()
 	for o in main.combat.targets:
-		if o is Decoy and is_instance_valid(o) and o.user == rival and not o.is_queued_for_deletion():
+		if o is Decoy and is_instance_valid(o) and is_instance_valid(o.user) and o.user.team != team and not o.is_queued_for_deletion():
 			out.append(o)
 	return out
+
+
+## Whom a lock now points at: a Fighter is the rival; a decoy, its user fooling it.
+func _lock_choice(o: Node3D) -> void:
+	if o is Decoy:
+		rival = o.user
+		fooled_by = o
+	else:
+		rival = o
+		fooled_by = null
 
 
 ## Locks on whatever is closest to where the camera looks (the real one or not).
@@ -359,11 +405,11 @@ func lock_on_looked() -> void:
 		if a < best_a:
 			best_a = a
 			best = o
-	fooled_by = null if best == rival else best
+	_lock_choice(best)
 
 
 ## Souls style: the next target to the right (side 1) or the left (-1) of the current one
-## on screen, among the rival and its decoys.
+## on screen, among the foes and their decoys.
 func switch_target(side: int) -> void:
 	var cur: Node3D = aim_target()
 	if cur == null:
@@ -380,7 +426,32 @@ func switch_target(side: int) -> void:
 			best_d = d
 			best = o
 	if best:
-		fooled_by = null if best == rival else best
+		_lock_choice(best)
+
+
+## One press, one step: the next target clockwise around it. Unlike switch_target this does not
+## depend on where the camera ends up, so every target comes up in turn and it goes back to the first.
+func cycle_target() -> void:
+	var cur: Node3D = aim_target()
+	if cur == null:
+		return
+	var best: Node3D = null
+	var best_a := INF
+	for o in lock_candidates():
+		if o == cur:
+			continue
+		var a := fposmod(_bearing(o) - _bearing(cur), TAU)
+		if a < best_a:
+			best_a = a
+			best = o
+	if best:
+		_lock_choice(best)
+
+
+## Where "o" stands around it, seen from above, growing clockwise.
+func _bearing(o: Node3D) -> float:
+	var to: Vector3 = o.global_position - global_position
+	return atan2(to.x, -to.z)
 
 
 ## How high the feet can rise with hits and dashes that go upward: its jump height
@@ -418,22 +489,28 @@ func confuse(secs: float) -> void:
 	confused = secs
 	button_moves = _shuffled_buttons()
 	if not is_remote and main.net and main.net.linked:
-		main.net.send_event({"t": "confused", "secs": secs, "sp": species})
+		main.net.send_event({"t": "confused", "secs": secs, "slot": main.net.seat_of(slot), "sp": species})
 
 
 ## Infatuated with "by" for LOVE_TIME seconds, or until either leaves the field. For LOVE_LOCK
 ## seconds after it wears off nothing charms it. The owner picks the seed and tells the attacker's
 ## copy (net "infatuated").
-func infatuate(by: String, love_seed := -1) -> void:
+func infatuate(by: String, love_seed := -1, from: Fighter = null) -> void:
 	if state == "ko" or charmed_by != "" or _charm_lock > 0.0:
 		return
 	charmed_by = by
+	charmer = from
+	if charmer == null:
+		for f in foes():
+			if f.species == by:
+				charmer = f
 	charmed_t = LOVE_TIME
 	_love_seed = randi() if love_seed < 0 else love_seed
 	main.vfx.text(center() + Vector3.UP * 1.0, tr("Infatuated!"), LOVE_COLOR)
 	main.hud.log_entry(tr("%s: %s") % [tr(data.display_name), tr("Infatuated!")])
 	if not is_remote and main.net and main.net.linked:
-		main.net.send_event({"t": "infatuated", "sp": species, "by": by, "seed": _love_seed})
+		main.net.send_event({"t": "infatuated", "slot": main.net.seat_of(slot), "sp": species, "by": by, "seed": _love_seed,
+			"charmer": main.net.seat_of(charmer.slot) if is_instance_valid(charmer) else -1})
 
 
 ## Whether this press of "button" fails. From the press's number and the seed, not randf: the
@@ -472,7 +549,7 @@ func inflict(kind: String) -> bool:
 	if state == "ko" or status != "" or status_lock > 0.0 or not Status.can_get(kind, types, data.passive.id):
 		return false
 	if is_remote:
-		main.net.send_event({"t": "effect", "type": "status", "v": 0.0, "move": kind, "to": species})
+		main.net.send_event({"t": "effect", "type": "status", "v": 0.0, "move": kind, "to": main.net.seat_of(slot), "sp": species})
 		return true
 	status = kind
 	status_t = Status.DURATION.get(kind, 0.0)
@@ -563,9 +640,10 @@ func _status_process(delta: float) -> void:
 ## Effect on this fighter caused by the rival (Rough Skin, Static, Detect). If this is
 ## an online rival's copy, it is sent to the rival, who is in charge of its own
 ## Pokémon.
-func effect(type: String, value: float, move := "") -> void:
+func effect(type: String, value: float, move := "", from: Fighter = null) -> void:
 	if is_remote:
-		main.net.send_event({"t": "effect", "type": type, "v": value, "move": move, "to": species})
+		main.net.send_event({"t": "effect", "type": type, "v": value, "move": move, "to": main.net.seat_of(slot), "sp": species,
+			"by": main.net.seat_of(from.slot) if is_instance_valid(from) else -1})
 		return
 	match type:
 		"damage":
@@ -579,7 +657,7 @@ func effect(type: String, value: float, move := "") -> void:
 		"confuse":
 			confuse(value)
 		"infatuate":
-			infatuate(move)
+			infatuate(move, -1, from)
 		"self_boost":
 			if stages.has(move):
 				boost(move, int(value))
@@ -588,6 +666,19 @@ func effect(type: String, value: float, move := "") -> void:
 			if Moves.DATA.has(move):
 				cds[move] = maxf(cds.get(move, 0.0), value)
 				main.vfx.text(center() + Vector3.UP * 0.9, tr("%s is disabled!") % tr(Moves.DATA[move].display_name), Color(0.75, 0.6, 1.0))
+
+
+## From an ally's move (Main.give_buff): on every copy, each with its look.
+func take_buff(kind: String, secs: float, mult: float) -> void:
+	match kind:
+		"helped":
+			help_t = secs
+			help_mult = mult
+			main.vfx.burst("stars", center(), Vector3.UP, HELP_COLOR, 1.2)
+			main.vfx.text(center() + Vector3.UP * 1.0, tr("Helping Hand!"), HELP_COLOR)
+		"tailwind":
+			tailwind_t = secs
+			main.vfx.text(center() + Vector3.UP * 1.0, tr("Tailwind!"), TAILWIND_COLOR)
 
 
 ## Online copy: moves toward the rival's real state (position extrapolated with the
@@ -690,6 +781,8 @@ func _physics_process(delta: float) -> void:
 		return
 	_update_head_pitch()
 	_timers(delta)
+	if main.doubles and not is_remote:
+		ctrl.ally_near = _ally_in_reach()
 	_read_buffer(delta)
 	_state_t += delta
 	var on_ground := is_on_floor()
@@ -838,7 +931,7 @@ func _disable_all(secs: float) -> bool:
 	if any:
 		said_disabled()
 		if not is_remote and main.net and main.net.linked:
-			main.net.send_event({"t": "disabled", "sp": species})
+			main.net.send_event({"t": "disabled", "slot": main.net.seat_of(slot), "sp": species})
 	return any
 
 
@@ -874,14 +967,19 @@ func _cut_cooldown() -> void:
 
 ## A used move goes on cooldown (keeping a longer one already set, like a Disable).
 func _start_cooldown(move: String) -> void:
+	if action and action.id == move and action.free_of_cost:
+		return
 	var c: float = Moves.cooldown(move)
 	if c > 0.0:
 		cds[move] = maxf(cds.get(move, 0.0), c)
 
 
-## The rival on the field has Pressure: its cooldowns tick slower, whichever set them.
+## A foe on the field has Pressure: its cooldowns tick slower, whichever set them.
 func _pressured() -> bool:
-	return rival != null and is_instance_valid(rival) and rival.data.passive.id == "pressure" and rival.state not in ["ko", "recall"]
+	for f in main.fighters:
+		if f.team != team and f.data.passive.id == "pressure" and f.state not in ["ko", "recall"]:
+			return true
+	return false
 
 
 func _timers(delta: float) -> void:
@@ -906,6 +1004,7 @@ func _timers(delta: float) -> void:
 	_charm_lock = maxf(0.0, _charm_lock - delta)
 	if charmed_by != "":
 		_love_step(delta)
+	_helper_timers(delta)
 	_flash = maxf(0.0, _flash - delta * 6.0)
 	lowered_t = maxf(0.0, lowered_t - delta)
 
@@ -939,7 +1038,7 @@ func _timers(delta: float) -> void:
 	if translucent > 0.0:
 		translucent -= delta
 		var hidden := translucent > 0.0
-		var sees_self: bool = is_player or (main.net != null and not is_remote)
+		var sees_self := _sees_ghost()
 		model.visible = not hidden or sees_self
 		model.mesh_instance.transparency = 0.85 if hidden and sees_self else 0.0
 		model.mesh_instance.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF if hidden else GeometryInstance3D.SHADOW_CASTING_SETTING_ON
@@ -962,15 +1061,31 @@ func _timers(delta: float) -> void:
 			_combo = 0
 
 
-## Infatuated: it wears off into LOVE_LOCK, or ends if the one it loves is gone. The species, not
-## the fighter: a rival switching out repoints "rival" (Main.on_party_swap), a cut recall does not.
+## Whoever plays this Pokémon sees its Substitute as a ghost, and so does its partner: otherwise an
+## AI ally would hide from its own side.
+func _sees_ghost() -> bool:
+	if is_player or (main.net != null and not is_remote and slot == 0):
+		return true
+	return main.player != null and main.player.is_player and main.player.team == team
+
+
+## Out of everyone's sight: under the ground (Dig), gone in a move or a dodge, or in its Substitute
+## for those who cannot see its ghost.
+func out_of_sight() -> bool:
+	if appear <= 0.01 or _blinked or (action and (action.hides_body or (action.id == "dig" and action.phase == "active"))):
+		return true
+	return translucent > 0.0 and not _sees_ghost()
+
+
+## Infatuated: it wears off into LOVE_LOCK, or ends if the one who charmed it is gone. Leaving the
+## field takes it out of main.fighters, and a cut recall does not.
 func _love_step(delta: float) -> void:
 	charmed_t -= delta
 	if charmed_t <= 0.0:
 		charmed_by = ""
 		_charm_lock = LOVE_LOCK
 		return
-	if state == "ko" or rival == null or not is_instance_valid(rival) or rival.species != charmed_by or rival.state == "ko":
+	if state == "ko" or charmer == null or not is_instance_valid(charmer) or charmer.state == "ko" or not charmer in main.fighters:
 		charmed_by = ""
 		return
 	_love_fx -= delta
@@ -1130,21 +1245,23 @@ func _flight_timers(delta: float) -> void:
 		main.vfx.text(center() + Vector3.UP * 0.9, tr("Out of stamina"), Color(1.0, 0.7, 0.4))
 
 
+## Nobody walks through anybody: every other Fighter on the field.
 func _separate() -> void:
-	if rival == null or not is_instance_valid(rival) or rival.state == "ko":
+	if action and action.d.get("pierces", false):
 		return
-	if (action and action.d.get("pierces", false)) or (rival.action and rival.action.d.get("pierces", false)):
-		return
-	var d := global_position - rival.global_position
-	d.y = 0.0
-	var min_d: float = radius() + rival.radius()
-	var l := d.length()
-	if l < min_d and l > 0.001 and absf(global_position.y - rival.global_position.y) < data.height:
-		# Position correction (not velocity: otherwise it accumulates and they slide away).
-		# Each one moves its share; the heavier one, less.
-		var part: float = data.knockback / (data.knockback + rival.data.knockback)
-		var corr: Vector3 = d / l * (min_d - l) * part * 0.5
-		global_position += Vector3(corr.x, 0, corr.z)
+	for o in main.fighters:
+		if o == self or not is_instance_valid(o) or o.state == "ko" or (o.action and o.action.d.get("pierces", false)):
+			continue
+		var d: Vector3 = global_position - o.global_position
+		d.y = 0.0
+		var min_d: float = radius() + o.radius()
+		var l := d.length()
+		if l < min_d and l > 0.001 and absf(global_position.y - o.global_position.y) < data.height:
+			# Position correction (not velocity: otherwise it accumulates and they slide away).
+			# Each one moves its share; the heavier one, less.
+			var part: float = data.knockback / (data.knockback + o.data.knockback)
+			var corr: Vector3 = d / l * (min_d - l) * part * 0.5
+			global_position += Vector3(corr.x, 0, corr.z)
 
 
 func _land() -> void:
@@ -1187,6 +1304,14 @@ func _try_actions(on_ground: bool) -> void:
 		var b := "mov%d" % (i + 1)
 		if _wants(b):
 			var move: String = data.moves[button_moves[i]]
+			if ready(move):
+				var why := refused(move)
+				if why != "":
+					_consume(b)
+					if is_player:
+						main.hud.warn_not_ready(i)
+						main.vfx.text(center() + Vector3.UP * 0.9, why, Color(0.75, 0.77, 0.85))
+					return
 			if ready(move) and _immobilized(move, b):
 				_consume(b)
 				return
@@ -1203,6 +1328,61 @@ func _try_actions(on_ground: bool) -> void:
 				_consume(b)
 				if is_player:
 					main.hud.warn_not_ready(i)
+
+
+## Why this move cannot start now, or "". It costs nothing: no energy, no cooldown.
+func refused(move: String) -> String:
+	var d: Dictionary = Moves.DATA[move]
+	if not d.get("needs_ally", false):
+		return ""
+	var mate := ally()
+	if mate == null or mate.state in ["recall", "enter"] or mate.out_of_sight():
+		return tr("No ally")
+	if d.get("aims_at_ally", false):
+		if not ctrl.aim_ally:
+			return tr("Aim at your ally")
+		if d.has("reach") and global_position.distance_to(mate.global_position) > float(d.reach):
+			return tr("Too far from your ally")
+		# Over a stage's void: the swap would drop whoever is on solid ground into the pit.
+		if main.arena.void_y != -INF and not (main.arena.inside(global_position) and main.arena.inside(mate.global_position)):
+			return tr("Off the field")
+	if d.has("ally_reach") and not ctrl.ally_near:
+		return tr("Too far from your ally")
+	return ""
+
+
+## How far apart it and "o" are, body to body: Snorlax needs no closer than Pikachu does.
+func gap_to(o: Fighter) -> float:
+	return global_position.distance_to(o.global_position) - radius() - o.radius()
+
+
+## Its ally is within reach of the move it has that needs one close.
+func _ally_in_reach() -> bool:
+	var mate := ally()
+	if mate == null:
+		return false
+	for m in data.moves:
+		if Moves.DATA[m].has("ally_reach"):
+			return gap_to(mate) <= float(Moves.DATA[m].ally_reach)
+	return false
+
+
+## Helping Hand's and Tailwind's seconds, and how they look while they run.
+func _helper_timers(delta: float) -> void:
+	if help_t > 0.0:
+		help_t = maxf(0.0, help_t - delta)
+		_help_fx -= delta
+		if _help_fx <= 0.0:
+			_help_fx = 0.15
+			var a := _time * 5.0
+			var at: Vector3 = global_position + Vector3(cos(a), 0.1, sin(a)) * (data.radius + 0.25)
+			main.vfx.burst("stars", at, Vector3.UP, Color("ffd21f"), 0.3)
+	if tailwind_t > 0.0:
+		tailwind_t = maxf(0.0, tailwind_t - delta)
+		_wind_fx -= delta
+		if _wind_fx <= 0.0:
+			_wind_fx = 0.2
+			main.vfx.burst("wind", center(), -forward(), Color(0, 0, 0, 0), 0.35)
 
 
 ## Moves that need the ground used in the air: dives down and does it on landing.
@@ -1227,6 +1407,10 @@ func start(move: String, button: String, extra := {}) -> void:
 	a.d = d
 	a.button = button
 	a.extra = extra
+	# Helping Hand: this use takes the boost, whether it lands or not; a status move leaves it waiting.
+	if help_t > 0.0 and d.cat != "status":
+		a.help = help_mult
+		help_t = 0.0
 	if action:
 		_cut_cooldown()
 		action.finish(true)
@@ -1294,7 +1478,7 @@ func _step_action(delta: float, on_ground: bool) -> void:
 		for i in 4:
 			var b := "mov%d" % (i + 1)
 			var move: String = data.moves[button_moves[i]]
-			if _wants(b) and move != action.id and action.cancels_into(move) and ready(move):
+			if _wants(b) and move != action.id and action.cancels_into(move) and ready(move) and refused(move) == "":
 				_consume(b)
 				if _immobilized(move, b):
 					return
@@ -1353,6 +1537,7 @@ func _step_dodge(delta: float) -> void:
 		velocity.z = v.z
 		if dodge_cfg.get("teleport", false):
 			model.visible = false
+			_blinked = true
 		else:
 			_afterimage_t -= delta
 			if _afterimage_t <= 0.0:
@@ -1362,13 +1547,16 @@ func _step_dodge(delta: float) -> void:
 		if dodge_cfg.get("teleport", false) and not model.visible:
 			model.visible = true
 			main.vfx.burst("shadow", center(), Vector3.UP, Color(0, 0, 0, 0), 1.2)
+		_blinked = false
 		_brake(delta, 16.0)
 	else:
 		model.visible = true
+		_blinked = false
 		_to_free()
 
 
 func _switch_state(e: String) -> void:
+	_blinked = false
 	if state == "recall" and e != "recall":
 		appear_glow = 0.0
 		if party and party.pending:
@@ -1424,6 +1612,9 @@ func speed_stage() -> float:
 	# Chlorophyll: Speed doubles in harsh sunlight.
 	if data.passive.id == "chlorophyll" and main.weather and main.weather.is_on("sun"):
 		k *= 2.0
+	# Tailwind: the same, without using a stage.
+	if tailwind_t > 0.0:
+		k *= 2.0
 	if k == 1.0 or not data.has("stats"):
 		return 1.0
 	var spe: float = data.stats.spe
@@ -1445,7 +1636,7 @@ func boost(stat: String, n: int, source := "") -> void:
 		text = tr(source) + ": " + text
 	main.vfx.text(center() + Vector3.UP * 1.0, text, Color(1.0, 0.85, 0.4) if n > 0 else Color(0.6, 0.75, 1.0))
 	if not is_remote and main.net and main.net.linked:
-		main.net.send_event({"t": "boost", "stat": stat, "stages": stages[stat], "sp": species})
+		main.net.send_event({"t": "boost", "stat": stat, "stages": stages[stat], "slot": main.net.seat_of(slot), "sp": species})
 
 
 func receive(info: Dictionary) -> String:
@@ -1453,6 +1644,8 @@ func receive(info: Dictionary) -> String:
 		return ""
 	var g: Hit = info.hit
 	var at: Fighter = info.attacker
+	# Friendly fire: full damage, but it charges nobody up and nobody cheers it.
+	var friendly: bool = at != null and is_instance_valid(at) and at.team == team
 	var underground: bool = action != null and action.id == "dig" and action.phase == "active"
 	if underground and g.move_id == "earthquake":
 		invulnerable = 0.0
@@ -1551,19 +1744,23 @@ func receive(info: Dictionary) -> String:
 	main.vfx.number(info.point, damage, info.affinity)
 	hit_taken.emit(self, info)
 	main.arena.on_hit(info.attacker, self, damage)
-	main.trainer_react(info.attacker, "cheer")
+	if not friendly:
+		main.trainer_react(info.attacker, "cheer")
 	if g.strength >= 2 or damage > hp_max * 0.12:
 		main.trainer_react(self, "flinch")
-	main.session.hit(team, damage)
+	if not friendly:
+		main.session.hit(team, damage)
 	if at and is_instance_valid(at) and at.team != team:
 		main.hit_ping(at)
-	if at and is_instance_valid(at) and not at.is_remote:
+		last_hit_by = at
+	if at and is_instance_valid(at) and not at.is_remote and not friendly:
 		# Its team's energy, even if it hit with a shot it left flying when it switched out.
 		var credit: Fighter = at.party.active if at.party else at
 		credit.energy = minf(ENERGY_MAX, credit.energy + 3.0)
 		if at.party and not flow:
 			at.party.on_landed_hit()
-	energy = minf(ENERGY_MAX, energy + 2.0)
+	if not friendly:
+		energy = minf(ENERGY_MAX, energy + 2.0)
 	if hp <= 0.0:
 		_die(info)
 		return "hit"
@@ -1572,7 +1769,7 @@ func receive(info: Dictionary) -> String:
 	if data.passive.id == "cutecharm" and g.contact and at and is_instance_valid(at) and not flow and _charm_t <= 0.0:
 		_charm_t = 1.0
 		if (force_roll if force_roll >= 0.0 else randf()) < CUTE_CHARM:
-			at.effect("infatuate", 0.0, species)
+			at.effect("infatuate", 0.0, species, self)
 			main.vfx.text(at.center() + Vector3.UP * 0.7, tr("Cute Charm"), Roster.TYPE_COLOR.fairy)
 	# Counter: it takes the hit without flinching and pays it back.
 	if action and action.has_method("took_hit") and action.took_hit(info, damage):
@@ -1754,6 +1951,9 @@ func leave_field() -> void:
 	_charm_lock = 0.0
 	button_moves = BUTTONS_STRAIGHT
 	last_move = Vector3.ZERO
+	help_t = 0.0
+	tailwind_t = 0.0
+	aiding = null
 	drowsy = 0.0
 	slow = 1.0
 	_slow_t = 0.0
@@ -1832,6 +2032,12 @@ func reset(pos: Vector3, yaw: float) -> void:
 	_charm_t = 0.0
 	button_moves = BUTTONS_STRAIGHT
 	last_move = Vector3.ZERO
+	help_t = 0.0
+	tailwind_t = 0.0
+	aiding = null
+	last_hit_by = null
+	fooled_by = null
+	_blinked = false
 	burned = 0.0
 	poisoned = 0.0
 	steadfast_t = 0.0

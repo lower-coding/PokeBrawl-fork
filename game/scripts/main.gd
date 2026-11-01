@@ -1,5 +1,5 @@
 extends Node3D
-## Main battle scene. Builds the stage, both fighters, the camera, the HUD, effects,
+## Main battle scene. Builds the stage, the fighters, the camera, the HUD, effects,
 ## sound and the AI, and runs the battle: start, KO, rematch, pause and training.
 ##
 ## Launch: godot --path game -- [--p1=pikachu] [--p2=snorlax] [--diff=normal]
@@ -7,6 +7,8 @@ extends Node3D
 ## 3 vs 3:  --team=a,b,c [--team2=d,e,f]     teams (the first one leads; see Party). Online, --team
 ##                                            is your own and both need it
 ##          --rules=id:value,id:value         this battle's rules (BattleRules; online, the host's)
+## 2 vs 2:  --doubles [--p3=x] [--p4=y]       you (p1) and an ally (p3) against p2 and p4, all but
+##          [--team3=a,b] [--team4=c,d]       you played by the AI; teams with --rules=team_size:2 or 3
 ## Online:  --host [--p1=species]            hosts a game (port 7777)
 ##          --join=IP [--p1=species]         joins someone else's
 ##          --bot (the AI plays your own Pokémon), --lag=ms --jitter=ms --loss=%
@@ -26,11 +28,15 @@ var combat: Combat
 var camera: BattleCamera
 var hud: Hud
 var menu: Menu
-var ai: AI
+var ai: AI                       # the first foe's (the debug view, and what tests stop)
+var ais: Array = []              # every AI of this battle
 var player_ai: AI               # only with --aivsai (tests)
 var net: Net                     # online only
-var fighters: Array = []          # the two out on the field
-var parties: Array = []           # each side's Party, same order; empty in a 1 vs 1
+var fighters: Array = []          # those out on the field, by slot: two, or four in a 2 vs 2
+var parties: Array = []           # each slot's Party, same order; empty in a 1 vs 1
+var doubles := false              # a 2 vs 2
+var friendly_fire := false        # moves can hurt an ally (BattleRules)
+var winning_team := -1            # the side that won, once a battle is over
 var field_pace := 1.0             # how much slower the League's field closes (BattleRules)
 var legacy_aim := false           # free aim the old way, level (BattleRules): no true free aim
 var no_lock := false              # players cannot lock on (BattleRules)
@@ -125,12 +131,22 @@ func _ready() -> void:
 		menu.choice.team2 = Array(str(_args.team2).split(",", false))
 	if _args.has("rules"):
 		menu.choice.rules = BattleRules.parsed(str(_args.rules))
+	if _args.has("doubles"):
+		menu.choice.format = "2v2"
+		for s in 2:
+			var key := "team%d" % (s + 3)
+			var lead := "p%d" % (s + 3)
+			if _args.has(key):
+				menu.choice[key] = Array(str(_args[key]).split(",", false))
+				menu.choice[lead] = menu.choice[key][0]
+			if _args.has(lead):
+				menu.choice[lead] = _args[lead]
 	# With --p1, --team, --test or --aivsai it goes straight into battle; otherwise, to the menu.
 	if _args.has("host") or _args.has("join"):
 		var err := start_net(_args.has("host"), _args.get("join", ""), _args.get("p1", str(_args.get("team", "pikachu")).get_slice(",", 0)))
 		if err != "":
 			push_error(err)
-	elif _args.has("p1") or _args.has("team") or _args.has("aivsai") or (_args.has("test") and not _args.test.begins_with("menu")):
+	elif _args.has("p1") or _args.has("team") or _args.has("aivsai") or _args.has("doubles") or (_args.has("test") and not _args.test.begins_with("menu")):
 		var lead_a: String = _args.get("p1", str(_args.get("team", "pikachu")).get_slice(",", 0))
 		var lead_b: String = _args.get("p2", str(_args.get("team2", "snorlax")).get_slice(",", 0))
 		start_battle(lead_a, lead_b, _args.get("diff", "normal"))
@@ -176,8 +192,8 @@ func set_stage(stage_id: String) -> void:
 	move_child(arena, 0)
 	arena.build()
 	_put_trainers()
-	if hud and fighters.size() == 2:
-		portraits(fighters[0].species, fighters[1].species)
+	if hud and fighters.size() >= 2:
+		portraits(fighters[0].species, fighters[1].species, fighters.slice(2).map(func(f): return f.species))
 
 
 ## My Pokémon's moves and ability: what I saved, in the Moves menu or before a battle. Tests and
@@ -188,9 +204,9 @@ func my_loadout(sp: String) -> Dictionary:
 	return Loadout.saved(sp) if _plays_saved() else Loadout.default_for(sp)
 
 
-## The AI's Pokémon's: what I saved for it before a battle, apart from my own.
-func ai_loadout(sp: String) -> Dictionary:
-	return Loadout.saved(sp, 1) if _plays_saved() else Loadout.default_for(sp)
+## The Pokémon of the AI in "slot": what I saved for it before a battle, apart from my own.
+func ai_loadout(sp: String, slot := 1) -> Dictionary:
+	return Loadout.saved(sp, slot) if _plays_saved() else Loadout.default_for(sp)
 
 
 ## Whether saved moves count; of the tests, only for those about them ("prep", "menu_prep"...).
@@ -198,10 +214,23 @@ func _plays_saved() -> bool:
 	return str(_args.get("test", "")).contains("prep") or not (_args.has("test") or _args.has("aivsai"))
 
 
-## A hit by "who" landed on the other side: the ping, for my team's and if it is on. Any of my
-## team's, for a shot left flying by one that switched out.
+## What the Pokémon of "slot" brings to this battle: what the menu shows for it, ally moves included
+## (Menu._roll_ai_helpers). Tests keep the defaults, so they always play the same; double_battles has
+## no menu, and is about how the AI uses them. Online in a 2 vs 2, what the host's start says.
+func _battle_set(slot: int, sp: String) -> Dictionary:
+	if net and doubles:
+		return menu.seat_loadout(slot, sp)
+	var set_up: Dictionary = menu.battle_loadout(slot, sp)
+	var ai_plays: bool = slot != 0 or _args.has("aivsai")
+	if doubles and ai_plays and _args.get("test", "") == "double_battles" and set_up == Loadout.default_for(sp):
+		return Loadout.ai_doubles(sp)
+	return set_up
+
+
+## A hit by "who" landed on the other side: the ping, for mine and if it is on. Any of my trainer's
+## team, for a shot left flying by one that switched out; not my ally's.
 func hit_ping(who: Fighter) -> void:
-	if options.hit_ping and player and player.is_player and who.team == player.team:
+	if options.hit_ping and player and player.is_player and who.slot == player.slot:
 		audio.ping()
 
 
@@ -217,30 +246,32 @@ func start_battle(p1: String, p2: String, diff: String, rival_loadout := {}, riv
 		l.queue_free()
 	fighters.clear()
 	combat.clear()
-	if ai:
-		ai.queue_free()
-	if player_ai:
-		player_ai.queue_free()
+	_clear_ais()
 	legacy_aim = menu.choice.rules.legacy_aim != 0.0
 	no_lock = menu.choice.rules.no_lock != 0.0
 	aim_assist = menu.choice.rules.aim_assist / 100.0
-	var side := 1.0 if net and not net.host else -1.0
-	var a := _create(p1, 0, Vector3(7 * side, 0, 0), -PI * 0.5 * side, menu.battle_loadout(0, p1))
-	var b := _create(p2, 1, Vector3(-7 * side, 0, 0), PI * 0.5 * side,
-		Loadout.valid(p2, rival_loadout) if net else menu.battle_loadout(1, p2))
-	a.rival = b
-	b.rival = a
+	doubles = menu.choice.format == "2v2"
+	friendly_fire = doubles and menu.choice.rules.friendly_fire != 0.0
+	winning_team = -1
+	var side := 1.0 if net and net.seat % 2 == 1 else -1.0
+	var a := _create(p1, 0, _start_spot(0, side), -PI * 0.5 * side, _battle_set(0, p1))
+	var b := _create(p2, 1, _start_spot(1, side), PI * 0.5 * side,
+		Loadout.valid(p2, rival_loadout) if net and not doubles else _battle_set(1, p2))
+	if doubles:
+		_create(menu.choice.p3, 2, _start_spot(2, side), -PI * 0.5 * side, _battle_set(2, menu.choice.p3))
+		_create(menu.choice.p4, 3, _start_spot(3, side), PI * 0.5 * side, _battle_set(3, menu.choice.p4))
+	_first_rivals()
 	player = a
 	a.is_player = true
-	ai = null
 	if net:
-		_setup_net(a, b)
+		_setup_net()
 	else:
-		_setup_ai(a, b, diff)
-	if menu.choice.format == "3v3":
-		_build_party(a)
-		_build_party(b)
-		field_pace = menu.choice.rules.field_pace
+		_setup_ai(diff)
+	if menu.team_battle():
+		for f in fighters.duplicate():
+			_build_party(f)
+		if menu.team_size() > 1:
+			field_pace = menu.choice.rules.field_pace
 	session.event("rules", BattleRules.changed(menu.choice.rules))
 	combat.targets = fighters.duplicate()
 	camera.target = a
@@ -249,47 +280,80 @@ func start_battle(p1: String, p2: String, diff: String, rival_loadout := {}, riv
 	_end_t = -1.0
 	_no_input = 0.25
 	Engine.time_scale = 1.0
-	portraits(p1, p2)
+	portraits(p1, p2, fighters.slice(2).map(func(f): return f.species))
 	for p in parties:
 		for f in p.members.slice(1):
 			hud.prepare_spare_portrait(p.side, f.species)
 	var mine: String = options.trainer
-	_place_trainers([mine, rival_trainer if net and rival_trainer != "" else TrainerData.rival_for(mine, p2)])
+	if net and doubles:
+		_place_trainers(range(4).map(func(s): return menu.seat_at(s).trainer))
+	elif doubles:
+		var others := TrainerData.rivals_for(mine, [p2, menu.choice.p3, menu.choice.p4])
+		_place_trainers([mine, others[0], others[1], others[2]])
+	else:
+		_place_trainers([mine, rival_trainer if net and rival_trainer != "" else TrainerData.rival_for(mine, p2)])
+	hud.outline.begin_battle()
 	_introduce()
 	session.battle_started(p1, p2, arena.stage, net != null, ("host" if net.host else "guest") if net else mode)
 	if _args.has("weather"):
 		weather.start(_args.weather)          # tests: --weather=sun|rain|sand|snow
 
 
-func _setup_ai(a: Fighter, b: Fighter, diff: String) -> void:
-	ai = AI.new()
-	ai.main = self
-	ai.me = b
-	ai.rival = a
-	ai.difficulty = diff
-	ai.process_physics_priority = -10
-	add_child(ai)
+## Where slot's Pokémon starts. "side" is -1 for whoever is at the -x end (the host, offline). In a
+## 2 vs 2 each pair stands apart, each trainer's Pokémon across from one of the other side's; which
+## end of the pair goes by seat, so every copy agrees.
+func _start_spot(slot: int, side: float) -> Vector3:
+	var x := 7.0 * side * (1.0 if slot % 2 == 0 else -1.0)
+	var seat: int = net.seat_of(slot) if net else slot
+	return Vector3(x, 0.0, (-3.5 if seat < 2 else 3.5) if doubles else 0.0)
+
+
+## Each one starts after whoever is across from it.
+func _first_rivals() -> void:
+	for f in fighters:
+		f.rival = fighters[f.slot ^ 1]
+
+
+func _setup_ai(diff: String) -> void:
+	for f in fighters.slice(1):
+		_add_ai(f, diff)
+	ai = ais[0]
 	if _args.has("aivsai"):
-		player_ai = AI.new()
-		player_ai.main = self
-		player_ai.me = a
-		player_ai.rival = b
-		player_ai.difficulty = diff
-		player_ai.process_physics_priority = -10
-		add_child(player_ai)
-		a.is_player = false
+		player_ai = _add_ai(fighters[0], diff)
+		fighters[0].is_player = false
 
 
-# ---------------------------------------------------------------- teams (3 vs 3)
+func _add_ai(f: Fighter, diff: String) -> AI:
+	var x := AI.new()
+	x.main = self
+	x.me = f
+	x.rival = f.rival
+	x.difficulty = diff
+	x.process_physics_priority = -10
+	add_child(x)
+	ais.append(x)
+	return x
+
+
+func _clear_ais() -> void:
+	for x in ais:
+		if is_instance_valid(x):
+			x.queue_free()
+	ais.clear()
+	ai = null
+	player_ai = null
+
+
+# ---------------------------------------------------------------- teams
 
 ## "lead"'s team: its teammates are built here and wait on the bench.
 func _build_party(lead: Fighter) -> void:
 	var list: Array = [lead]
-	for sp in menu.team_ids(lead.team, lead.species).slice(1):
-		var loadout: Dictionary = menu.battle_loadout(lead.team, sp)
-		if lead.team != 0 and net:
+	for sp in menu.team_ids(lead.slot, lead.species).slice(1):
+		var loadout: Dictionary = _battle_set(lead.slot, sp)
+		if lead.team != 0 and net and not doubles:
 			loadout = Loadout.valid(sp, menu.rival_loadouts.get(sp, {}))
-		var l := _create(sp, lead.team, lead.start_pos, lead.start_yaw, loadout)
+		var l := _create(sp, lead.slot, lead.start_pos, lead.start_yaw, loadout)
 		fighters.pop_back()              # only those on the field are there
 		l.rival = lead.rival
 		l.is_remote = lead.is_remote
@@ -297,7 +361,7 @@ func _build_party(lead: Fighter) -> void:
 	var p := Party.new()
 	p.process_physics_priority = -5      # after the input and the AI, before they clear it
 	add_child(p)
-	p.setup(self, lead.team, list, menu.choice.rules.duplicate(), lead.is_remote)
+	p.setup(self, lead.slot, list, menu.choice.rules.duplicate(), lead.is_remote)
 	parties.append(p)
 
 
@@ -311,14 +375,17 @@ func _clear_parties() -> void:
 	field_pace = 1.0
 
 
-## "side" has "incoming" out instead of "out": whoever points at the one on the field points
-## at it now. Shots in flight turn to it too.
+## "side" (a slot) has "incoming" out instead of "out": whoever points at the one on the field
+## points at it now. Shots in flight turn to it too.
 func on_party_swap(side: int, out: Fighter, incoming: Fighter) -> void:
 	fighters[side] = incoming
-	var foe: Fighter = fighters[1 - side]
-	incoming.rival = foe
-	foe.rival = incoming
-	foe.fooled_by = null
+	incoming.rival = out.rival
+	if incoming.rival.state == "ko":
+		incoming.rival = _nearest_foe(incoming, incoming.rival)
+	for f in fighters:
+		if f.rival == out:
+			f.rival = incoming
+			f.fooled_by = null
 	combat.targets[combat.targets.find(out)] = incoming
 	for p in combat.projectiles:
 		if p.target == out:
@@ -328,19 +395,55 @@ func on_party_swap(side: int, out: Fighter, incoming: Fighter) -> void:
 		camera.target = incoming
 		incoming.is_player = out.is_player
 		out.is_player = false
+	elif camera.target == out:
+		camera.target = incoming
 	incoming.locked = out.locked
-	for x in [ai, player_ai]:
-		if x:
-			x.on_swap(out, incoming)
+	for x in ais + ([player_ai] if player_ai and not player_ai in ais else []):
+		x.on_swap(out, incoming)
 	if net:
-		if net.local == out:
-			net.local = incoming
-		if net.remote == out:
-			net.remote = incoming
+		net.swapped(out, incoming)
 	trainers[side].fighter = incoming
 	hud.swap_portrait(side, incoming.species)
 	arena.screens(hud._portraits[0].vp.get_texture(), hud._portraits[1].vp.get_texture(),
 		Roster.TYPE_COLOR[Roster.POKEMON[fighters[0].species].types[0]], Roster.TYPE_COLOR[Roster.POKEMON[fighters[1].species].types[0]])
+
+
+## The foe of "f" closest to it, leaving out "but"; "but" if there is no other.
+func _nearest_foe(f: Fighter, but: Fighter) -> Fighter:
+	var best: Fighter = but
+	var best_d := INF
+	for o in f.foes():
+		var d: float = f.global_position.distance_to(o.global_position)
+		if o != but and d < best_d:
+			best_d = d
+			best = o
+	return best
+
+
+## "who" fainted: everyone after it moves to the nearest other foe at once, so a player's lock
+## jumps to whoever is left. A replacement does not pull it back.
+func _retarget(who: Fighter) -> void:
+	for f in fighters:
+		if f.rival == who and f.state != "ko":
+			f.rival = _nearest_foe(f, who)
+			f.fooled_by = null
+
+
+## Whether "team" still has anyone to send out, on the field or on the bench.
+func _team_alive(team: int) -> bool:
+	for p in parties:
+		if p.members[0].team == team and p.alive_count() > 0:
+			return true
+	return false
+
+
+## Whose stages go when "fainted" is replaced, as the one that made the KO. In a 2 vs 2 that may be
+## no longer on the field; then nobody's.
+func ko_credit(fainted: Fighter) -> Fighter:
+	if not doubles:
+		return fainted.rival
+	var by: Fighter = fainted.last_hit_by
+	return by if is_instance_valid(by) and by in fighters and by.state != "ko" else null
 
 
 func _introduce() -> void:
@@ -349,9 +452,9 @@ func _introduce() -> void:
 	hud.clear_log()
 	arena.on_rematch()
 	_opening()
-	if trainers.size() == 2:
-		hud.log_entry(tr("%s sends out %s!") % [trainers[0].display_name, tr(a.data.display_name)])
-		hud.log_entry(tr("%s sends out %s!") % [trainers[1].display_name, tr(b.data.display_name)])
+	if trainers.size() >= 2:
+		for i in trainers.size():
+			hud.log_entry(tr("%s sends out %s!") % [trainers[i].display_name, tr(fighters[i].data.display_name)])
 	else:
 		hud.log_entry(tr("Go, %s!") % tr(a.data.display_name))
 		hud.log_entry(tr("%s jumps onto the field!") % tr(b.data.display_name))
@@ -373,7 +476,11 @@ func _place_trainers(ids: Array) -> void:
 		t.display_name = tr(TrainerData.LIST[t.id].name)
 		trainers.append(t)
 	trainers[0].display_name = options.shown_name()
-	if net and menu.rival_name != "" and trainers.size() > 1:
+	if net and doubles:
+		for i in range(1, trainers.size()):
+			if menu.seat_at(i).name != "":
+				trainers[i].display_name = menu.seat_at(i).name
+	elif net and menu.rival_name != "" and trainers.size() > 1:
 		trainers[1].display_name = menu.rival_name
 	_put_trainers()
 
@@ -391,7 +498,7 @@ func _put_trainers() -> void:
 		if not is_instance_valid(t) or not is_instance_valid(t.fighter):
 			continue
 		var f: Fighter = t.fighter
-		t.global_position = arena.trainer_spot(signf(f.start_pos.x) if f.start_pos.x != 0.0 else 1.0)
+		t.global_position = arena.trainer_spot(signf(f.start_pos.x) if f.start_pos.x != 0.0 else 1.0, signf(f.start_pos.z) * Arena.TRAINER_APART)
 
 
 ## Visual reactions of a fighter's trainer: "command" (it used a move), "cheer" (it landed a
@@ -472,10 +579,11 @@ func reveal_from_ball(f: Fighter) -> void:
 			audio.cry(f.species, f.global_position))
 
 
-func _create(sp: String, eq: int, pos: Vector3, yaw: float, loadout := {}) -> Fighter:
+func _create(sp: String, slot: int, pos: Vector3, yaw: float, loadout := {}) -> Fighter:
 	var l := Fighter.new()
 	add_child(l)
-	l.setup(self, sp, eq, loadout)
+	l.slot = slot
+	l.setup(self, sp, slot % 2, loadout)
 	l.locked = not no_lock
 	l.global_position = pos
 	l.face_yaw = yaw
@@ -495,12 +603,14 @@ func rematch() -> void:
 	for p in parties:
 		p.restart()
 	var a: Fighter = fighters[0]
-	var b: Fighter = fighters[1]
 	weather.clear()
 	combat.clear()
 	vfx.clear()
-	a.reset(a.start_pos, a.start_yaw)
-	b.reset(b.start_pos, b.start_yaw)
+	for f in fighters:
+		f.reset(f.start_pos, f.start_yaw)
+	_first_rivals()
+	winning_team = -1
+	camera.target = player if player else a
 	camera.yaw = a.start_yaw + PI
 	camera.face_rival()
 	_end_t = -1.0
@@ -511,11 +621,22 @@ func rematch() -> void:
 func _on_defeat(who: Fighter) -> void:
 	if _end_t >= 0.0:
 		return
-	# 3 vs 3: while its team has someone left, the battle goes on.
-	if not parties.is_empty() and parties[who.team].has_more(who):
+	# With a team: while its team has someone left, the battle goes on.
+	if not parties.is_empty() and parties[who.slot].has_more(who):
 		hud.log_entry(tr("%s fainted!") % tr(who.data.display_name))
 		audio.play_sound("ko", who.global_position, -2.0)
-		parties[who.team].on_fainted(who)
+		parties[who.slot].on_fainted(who)
+		if doubles:
+			_retarget(who)
+		return
+	# A trainer with nobody left leaves their partner alone, 1 vs 2. A player watches their ally.
+	if doubles and _team_alive(who.team):
+		hud.log_entry(tr("%s fainted!") % tr(who.data.display_name))
+		hud.log_entry(tr("%s is out of Pokémon!") % trainers[who.slot].display_name)
+		audio.play_sound("ko", who.global_position, -2.0)
+		_retarget(who)
+		if who == player and fighters[(who.slot + 2) % 4].state != "ko":
+			camera.target = fighters[(who.slot + 2) % 4]
 		return
 	_end_t = 0.0
 	# Brief slow motion: the last hit is visible, without taking control away. Not
@@ -523,13 +644,20 @@ func _on_defeat(who: Fighter) -> void:
 	if net == null:
 		Engine.time_scale = 0.35
 	var winner: Fighter = who.rival
+	if doubles:
+		winner = _nearest_foe(who, who.rival)
+	winning_team = 1 - who.team
 	hud.log_entry(tr("%s fainted!") % tr(who.data.display_name))
-	hud.log_entry(tr("%s wins.") % tr(winner.data.display_name))
+	if doubles:
+		var w: Array = trainers.filter(func(t): return t.fighter.team == winning_team)
+		hud.log_entry(tr("%s and %s win.") % [w[0].display_name, w[1].display_name])
+	else:
+		hud.log_entry(tr("%s wins.") % tr(winner.data.display_name))
 	audio.play_sound("ko", who.global_position, -2.0)
 	arena.on_ko(winner)
-	trainer_react(winner, "win")
-	trainer_react(who, "lose")
-	session.battle_ended(winner.species + (" (me)" if winner == player else ""), [int(fighters[0].hp), int(fighters[1].hp)])
+	for f in fighters:
+		trainer_react(f, "win" if f.team == winning_team else "lose")
+	session.battle_ended(winner.species + (" (me)" if winner.team == player.team else ""), fighters.map(func(f): return int(f.hp)))
 
 
 # ---------------------------------------------------------------- online
@@ -561,7 +689,10 @@ func start_net(as_host: bool, ip: String, species := "") -> String:
 	net.disconnected.connect(_disconnection)
 	# --port: two pairs of test copies on the same computer.
 	var port := int(_args.get("port", Net.PORT))
-	var err := net.create(port) if as_host else net.join(ip, port)
+	if as_host and menu.choice.format == "2v2":
+		net.guest_joined.connect(menu.seat_taken)
+		net.guest_left.connect(menu.seat_freed)
+	var err := net.create(port, 3 if menu.choice.format == "2v2" else 1) if as_host else net.join(ip, port)
 	session.event("net_start", {"role": "host" if as_host else "guest", "error": err})
 	net.connected.connect(func(): session.event("connected"))
 	return err
@@ -574,13 +705,22 @@ func close_net() -> void:
 		net = null
 
 
-## The host starts the battle when both are ready.
+## The host starts the battle when both are ready; in a 2 vs 2, when every player is.
 func check_start() -> void:
+	if net and net.host and menu.choice.format == "2v2":
+		# --guests: test copies wait for each other.
+		if menu.room_ready() and net.guests.size() >= int(_args.get("guests", 0)):
+			var doubles_start: Dictionary = menu.seats_start()
+			net.send_event(doubles_start)
+			menu.take_start(doubles_start)
+			set_stage(menu.choice.stage)
+			_start_online(menu.choice.p1, menu.choice.p2)
+		return
 	if net == null or not net.host or not menu.me_ready or not menu.rival_ready or menu.rival_choice_id == "":
 		return
 	if menu.version_mismatch():
 		return
-	if menu.team_battle() and menu.rival_team.size() != Party.SIZE:
+	if menu.team_battle() and menu.rival_team.size() != menu.team_size():
 		return
 	var mine: String = menu.choice.p1
 	var theirs: String = menu.rival_choice_id
@@ -598,24 +738,29 @@ func check_start() -> void:
 	_start_online(mine, theirs)
 
 
-func _setup_net(a: Fighter, b: Fighter) -> void:
-	b.is_remote = true
-	b.is_player = false
-	net.local = a
-	net.remote = b
+## Mine and, on the host, the AIs in a 2 vs 2's empty seats are this copy's to decide; the rest are
+## copies of someone else's.
+func _setup_net() -> void:
+	var a: Fighter = fighters[0]
+	net.owned = [a]
+	net.remotes = {}
+	for f in fighters.slice(1):
+		if net.host and doubles and menu.seat_at(f.slot).peer == Menu.SEAT_AI:
+			net.owned.append(f)
+			_add_ai(f, _args.get("diff", menu.choice.diff))
+		else:
+			f.is_remote = true
+			f.is_player = false
+			net.remotes[f.slot] = f
 	# net.frame counts the whole connection: reset, the rival would drop a second
 	# battle's packets as old.
 	net.in_battle = true
 	net.battle += 1
 	if _args.has("bot"):
-		ai = AI.new()
-		ai.main = self
-		ai.me = a
-		ai.rival = b
-		ai.difficulty = _args.get("diff", "normal")
-		ai.process_physics_priority = -10
-		add_child(ai)
+		_add_ai(a, _args.get("diff", "normal"))
 		a.is_player = false
+	if not ais.is_empty():
+		ai = ais[0]
 
 
 func _net_event(d: Dictionary) -> void:
@@ -623,6 +768,11 @@ func _net_event(d: Dictionary) -> void:
 		"choice":
 			if d.has("stage") and menu.STAGES.has(d.stage):
 				menu.choice.stage = d.stage
+			# In a 2 vs 2 it goes to the host's seats, and comes back to everyone as a "room".
+			if menu.choice.format == "2v2":
+				menu.seat_choice(d)
+				check_start()
+				return
 			menu.room_settings(d)
 			menu.rival_choice(d.species, d.ready, d.get("loadout", {}), str(d.get("trainer", "")), str(d.get("name", "")), str(d.get("ver", "")))
 			menu.rival_team_choice(d)
@@ -636,11 +786,19 @@ func _net_event(d: Dictionary) -> void:
 				menu.choice.team = d.guest_team
 				menu.choice.team2 = d.host_team
 			set_stage(menu.choice.stage)
-			_start_online(d.guest, d.host)
+			if d.has("seats"):
+				menu.take_start(d)
+				_start_online(menu.choice.p1, menu.choice.p2)
+			else:
+				_start_online(d.guest, d.host)
+		"room":
+			menu.room_settings(d)
+			menu.take_room(d)
 		"recall", "recall_cut", "swap", "replace_ball", "replace", "bench_ko":
-			# What the rival's team did, in this battle.
-			if parties.size() == 2 and int(d.get("b", -1)) == net.battle:
-				parties[1].net_event(d)
+			# What a rival's team did, in this battle.
+			var from: int = net.slot_of(int(d.get("slot", -1)))
+			if int(d.get("b", -1)) == net.battle and from >= 0 and from < parties.size():
+				parties[from].net_event(d)
 		"stage":
 			# The host changed the stage in the selection (it is built when the battle starts).
 			if menu.STAGES.has(d.id):
@@ -648,15 +806,19 @@ func _net_event(d: Dictionary) -> void:
 		"to_selection":
 			_to_selection(false)
 		"hit":
+			# Only for whoever threw it.
+			var by: Fighter = _owned_at(int(d.get("by", -1)))
+			if by == null:
+				return
 			# A guard stopped it after all: what was predicted as landed did not (Lash Out, Sucker
 			# Punch: their short recovery is only for a hit).
 			var move: Dictionary = Moves.DATA.get(d.get("move", ""), {})
-			if net.local and net.local.action and net.local.action.id == d.get("move", "") and move.has("recovery_on_hit") and not d.get("res", "") in ["hit", "armor"]:
-				net.local.action.landed = false
-			# Confirmation from the rival: my hit landed. Number and type, like offline.
+			if by.action and by.action.id == d.get("move", "") and move.has("recovery_on_hit") and not d.get("res", "") in ["hit", "armor"]:
+				by.action.landed = false
+			# Confirmation from whoever took it: my hit landed. Number and type, like offline.
 			if fighters.size() > 1 and d.damage > 0.5:
 				vfx.number(d.point, d.damage, d.affinity)
-				hit_ping(net.local)
+				hit_ping(by)
 				if move.get("crit", false):
 					vfx.text(d.point + Vector3.UP * 1.2, tr("Critical hit!"), Color("ffb13a"))
 				if d.affinity > 1.05:
@@ -665,43 +827,52 @@ func _net_event(d: Dictionary) -> void:
 					hud.log_entry(tr("It's not very effective..."))
 		"effect":
 			# Meant for whoever was out when the rival's copy saw it: if that one left, it missed.
-			if net.local and d.get("to", net.local.species) == net.local.species:
-				net.local.effect(d.type, d.v, d.get("move", ""))
+			var to: Fighter = _owned_at(int(d.get("to", -1)))
+			if to and d.get("sp", to.species) == to.species:
+				to.effect(d.type, d.v, d.get("move", ""), _on_field_at(int(d.get("by", -1))))
 		"clash":
-			# The host saw two shots meet: the same here ("h" is the host's shot, "g" mine).
-			if net.local and net.remote:
-				var mine = null
-				var theirs = null
-				for p in combat.projectiles:
-					if combat.shot_by(p, net.local) and p.get("seq", -2) == int(d.g):
-						mine = p
-					elif combat.shot_by(p, net.remote) and p.get("seq", -2) == int(d.h):
-						theirs = p
-				if mine != null and theirs != null:
-					combat.clash(theirs, mine)
+			# The host saw two shots meet: the same here.
+			var a = combat.shot_of(net.slot_of(int(d.sa)), int(d.a))
+			var b = combat.shot_of(net.slot_of(int(d.sb)), int(d.b))
+			if a != null and b != null:
+				combat.clash(a, b)
 		"deflect":
-			# The rival deflected one of my projectiles: the same here.
-			if net.local and net.remote:
-				for p in combat.projectiles:
-					if combat.shot_by(p, net.local) and p.get("seq", -2) == int(d.seq):
-						combat.deflect(p, net.remote, int(d.level))
-						break
+			# Someone deflected a shot: the same here.
+			var shot = combat.shot_of(net.slot_of(int(d.s)), int(d.seq))
+			var deflector: Fighter = _on_field_at(int(d.by))
+			if shot != null and deflector:
+				combat.deflect(shot, deflector, int(d.level))
 		"boost":
-			# The rival's Pokémon changed a stat stage: its copy here needs it for damage.
-			if net.remote and net.remote.stages.has(d.stat) and d.get("sp", net.remote.species) == net.remote.species:
+			# Their Pokémon changed a stat stage: its copy here needs it for damage.
+			var boosted: Fighter = _copy_of(d)
+			if boosted and boosted.stages.has(d.stat):
 				# Its Lash Out is worked out here, so the fresh drop has to be known too.
-				if int(d.stages) < int(net.remote.stages[d.stat]):
-					net.remote.lowered_t = Fighter.LOWERED_T
-				net.remote.stages[d.stat] = int(d.stages)
+				if int(d.stages) < int(boosted.stages[d.stat]):
+					boosted.lowered_t = Fighter.LOWERED_T
+				boosted.stages[d.stat] = int(d.stages)
 		"confused":
-			if net.remote and d.get("sp", net.remote.species) == net.remote.species:
-				net.remote.confuse(float(d.secs))
+			var confused: Fighter = _copy_of(d)
+			if confused:
+				confused.confuse(float(d.secs))
 		"disabled":
-			if net.remote and d.get("sp", net.remote.species) == net.remote.species:
-				net.remote.said_disabled()
+			var disabled: Fighter = _copy_of(d)
+			if disabled:
+				disabled.said_disabled()
 		"infatuated":
-			if net.remote and d.get("sp", net.remote.species) == net.remote.species:
-				net.remote.infatuate(str(d.by), int(d.seed))
+			var charmed: Fighter = _copy_of(d)
+			if charmed:
+				charmed.infatuate(str(d.by), int(d.seed), _on_field_at(int(d.get("charmer", -1))))
+		"ally_switch":
+			# Its owner decided: each Pokémon goes where the other stood, on every copy.
+			var one: Fighter = _on_field_at(int(d.by))
+			var other: Fighter = _on_field_at(int(d.to))
+			if one and other:
+				combat.swap_allies(one, other, d.by_to, d.to_to)
+		"buff":
+			# On every copy: damage is worked out where the hit lands, with the attacker's copy.
+			var buffed: Fighter = _on_field_at(int(d.to))
+			if buffed:
+				buffed.take_buff(d.kind, float(d.secs), float(d.mult))
 		"rematch":
 			rematch()
 		"asks_rematch":
@@ -712,6 +883,31 @@ func _net_event(d: Dictionary) -> void:
 			for id in d.get("ids", []):
 				rematch_votes[str(id)] = true
 			rematch_of = int(d.get("of", 2))
+
+
+## The Pokémon out in seat "s", or null.
+func _on_field_at(s: int) -> Fighter:
+	var slot: int = net.slot_of(s) if s >= 0 else -1
+	return fighters[slot] if slot >= 0 and slot < fighters.size() else null
+
+
+## The same, if it is this copy's to decide.
+func _owned_at(s: int) -> Fighter:
+	var f := _on_field_at(s)
+	return f if f and f in net.owned else null
+
+
+## The copy an event from its owner is about ("slot", a seat, and "sp"): if that one left, nobody.
+func _copy_of(d: Dictionary) -> Fighter:
+	var f: Fighter = net.remotes.get(net.slot_of(int(d.get("slot", -1))))
+	return f if f and d.get("sp", f.species) == f.species else null
+
+
+## An ally's move gives "f" this: here, and on the other copies.
+func give_buff(kind: String, f: Fighter, secs: float, mult := 1.0) -> void:
+	f.take_buff(kind, secs, mult)
+	if net:
+		net.send_event({"t": "buff", "kind": kind, "to": net.seat_of(f.slot), "secs": secs, "mult": mult})
 
 
 func _start_online(mine: String, theirs: String) -> void:
@@ -752,8 +948,8 @@ func _to_selection(warn: bool) -> void:
 	if warn:
 		net.send_event({"t": "to_selection"})
 	net.in_battle = false
-	net.local = null
-	net.remote = null
+	net.owned.clear()
+	net.remotes.clear()
 	_clear_parties()
 	for l in fighters:
 		l.queue_free()
@@ -762,9 +958,7 @@ func _to_selection(warn: bool) -> void:
 	combat.clear()
 	combat.targets = []
 	vfx.clear()
-	if ai:
-		ai.queue_free()
-		ai = null
+	_clear_ais()
 	_end_t = -1.0
 	_clear_trainers()
 	hud.clear_log()
@@ -824,7 +1018,14 @@ func _physics_process(delta: float) -> void:
 	var c := player.ctrl
 	c.move_input = Input.get_vector("move_left", "move_right", "move_down", "move_up")
 	c.yaw = camera.yaw
-	c.aim_at = camera.crosshair_point() if player.free_aim() and not legacy_aim else Vector3.INF
+	# Reset first: only free aim looks for the ally, so a stale true would survive locking on.
+	c.aim_ally = false
+	c.aim_at = Vector3.INF
+	if player.free_aim() and player.state != "ko":
+		if legacy_aim:
+			c.aim_ally = player.looks_at_ally()
+		else:
+			c.aim_at = camera.crosshair_point()
 	for a in ["jump", "dodge", "lock_on", "mov1", "mov2", "mov3", "mov4", "descend", "switch1", "switch2"]:
 		if Input.is_action_just_pressed(a):
 			c.press(a)
@@ -844,11 +1045,16 @@ func _unhandled_input(ev: InputEvent) -> void:
 		return
 	if ev.is_action_pressed("first_person") and not paused and not menu.is_open:
 		camera.toggle_first_person()
+	# Out of Pokémon the camera is on the ally, whose target is not the player's to change.
+	if ev.is_action_pressed("cycle_target") and not paused and not menu.is_open and player and player.is_player and player.locked and camera.target == player:
+		player.cycle_target()
 	if ev.is_action_pressed("reset") and net == null and (mode == "training" or _end_t > 1.0):
 		rematch()
 	if ev is InputEventKey and ev.pressed and ev.physical_keycode == KEY_T and mode == "training" and ai:
-		ai.mode = "still" if ai.mode == "active" else "active"
-		ai.me.ctrl.move_input = Vector2.ZERO
+		var to := "still" if ai.mode == "active" else "active"
+		for x in ais:
+			x.mode = to
+			x.me.ctrl.move_input = Vector2.ZERO
 	if _end_t > CHOICES_AT and ev.is_action_pressed("jump"):
 		if net == null:
 			rematch()
@@ -863,9 +1069,10 @@ func _unhandled_input(ev: InputEvent) -> void:
 		Input.mouse_mode = Input.MOUSE_MODE_CAPTURED
 
 
-## HUD and jumbotron portraits for this matchup.
-func portraits(p1: String, p2: String) -> void:
-	hud.prepare_portraits([p1, p2])
+## HUD and jumbotron portraits for this matchup; "more": a 2 vs 2's other two, by slot. The
+## jumbotron shows slots 0 and 1.
+func portraits(p1: String, p2: String, more := []) -> void:
+	hud.prepare_portraits([p1, p2] + more)
 	arena.screens(hud._portraits[0].vp.get_texture(), hud._portraits[1].vp.get_texture(),
 		Roster.TYPE_COLOR[Roster.POKEMON[p1].types[0]], Roster.TYPE_COLOR[Roster.POKEMON[p2].types[0]])
 
@@ -898,12 +1105,7 @@ func back_to_menu(screen := "") -> void:
 	player = null
 	combat.clear()
 	combat.targets = []
-	if ai:
-		ai.queue_free()
-		ai = null
-	if player_ai:
-		player_ai.queue_free()
-		player_ai = null
+	_clear_ais()
 	_end_t = -1.0
 	Engine.time_scale = 1.0
 	_clear_trainers()

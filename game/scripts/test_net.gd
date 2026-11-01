@@ -10,19 +10,22 @@ extends Node
 ##   stuck_ko     seconds the rival's copy lay fainted while its owner said it was not
 ## At the end it prints a NET_FINAL line with a summary to compare both copies. In a 3 vs 3
 ## (both with --team) it has, for each battle, who came out on each side, in order, and everyone's
-## HP as this copy saw them: the owner's record of a team must match the other copy's.
+## HP as this copy saw them: the owner's record of a team must match the other copy's. In a 2 vs 2
+## (all with --doubles, the host with --guests=N to wait for them) the same goes by seat, for the
+## two to four copies. Deviation and jumps count every copy on this screen.
 
 var main: Node
 var _t := 0.0
 var _report := 0.0
 var _deviations: Array = []
 var _jumps := 0
-var _last_pos := Vector3.ZERO
+var _last_pos := {}              # slot -> where its copy was
 var _battles: Array = []
 var _hits_taken := 0
 var _hp_before := -1.0
 var _stuck_ko := 0.0
 var _counted := false            # this battle's end has been written down
+var _events := {}                # kind -> how many came from the others
 
 
 func _ready() -> void:
@@ -33,19 +36,28 @@ func _physics_process(delta: float) -> void:
 	_t += delta
 	var dur := float(main._args.get("duration", "60"))
 	var net: Net = main.net
-	if net and net.in_battle and net.local and net.remote and is_instance_valid(net.remote):
-		var r: Fighter = net.remote
-		var s: Dictionary = r.net_state
-		if not s.is_empty():
-			var age_t: float = s.outbound + (net._t - s.received)
-			var real: Vector3 = s.pos + s.speed * clampf(age_t, 0.0, 0.3)
-			_deviations.append(r.global_position.distance_to(real))
-			if r.state == "ko" and s.state != "ko":
-				_stuck_ko += delta
-		if _last_pos != Vector3.ZERO and r.global_position.distance_to(_last_pos) > 2.0:
-			_jumps += 1
-		_last_pos = r.global_position
+	if net and not net.event.is_connected(_count_event):
+		net.event.connect(_count_event)
+	# --press=N: every few seconds move N goes off, as if aimed: the AI seldom picks Ally Switch.
+	if main._args.has("press") and net and net.in_battle and net.local and int(_t * 60.0) % 240 == 0:
+		net.local.ctrl.aim_ally = true
+		net.local.ctrl.press("mov%s" % main._args.press)
+	if net and net.in_battle and net.local and not net.remotes.is_empty():
+		for r in net.remotes.values():
+			if not is_instance_valid(r):
+				continue
+			var s: Dictionary = r.net_state
+			if not s.is_empty():
+				var age_t: float = s.outbound + (net._t - s.received)
+				var real: Vector3 = s.pos + s.speed * clampf(age_t, 0.0, 0.3)
+				_deviations.append(r.global_position.distance_to(real))
+				if r.state == "ko" and s.state != "ko":
+					_stuck_ko += delta
+			if _last_pos.has(r.slot) and r.global_position.distance_to(_last_pos[r.slot]) > 2.0:
+				_jumps += 1
+			_last_pos[r.slot] = r.global_position
 		var l: Fighter = net.local
+		var r: Fighter = net.remotes.values()[0]
 		if _hp_before >= 0.0 and l.hp < _hp_before - 0.5:
 			_hits_taken += 1
 		_hp_before = l.hp
@@ -53,7 +65,7 @@ func _physics_process(delta: float) -> void:
 			_counted = false
 		if main._end_t >= 0.0 and not _counted:
 			_counted = true
-			_battles.append({"t": _t, "winner": "me" if l.state != "ko" else "rival", "my_hp": l.hp, "rival_hp": r.hp})
+			_battles.append({"t": _t, "winner": "me" if main.winning_team == 0 else "rival", "my_hp": l.hp, "rival_hp": r.hp})
 			if not main.parties.is_empty():
 				_battles.back().merge(_teams())
 				print("TEAMS ", JSON.stringify(_teams()))
@@ -69,21 +81,38 @@ func _physics_process(delta: float) -> void:
 	_report -= delta
 	if _report <= 0.0:
 		_report = 5.0
-		if net and net.local and net.remote and is_instance_valid(net.remote):
+		if net and net.local and not net.remotes.is_empty() and is_instance_valid(net.remotes.values()[0]):
+			var seen: Fighter = net.remotes.values()[0]
 			print("t=%3ds  %s  ping %d ms  me %s %d  rival %s %d  mean deviation %.2f m  jumps %d" % [int(_t),
 				"host" if net.host else "guest", net.ping_ms(), net.local.species, net.local.hp,
-				net.remote.species, net.remote.hp, _mean(_deviations.slice(-300)), _jumps])
+				seen.species, seen.hp, _mean(_deviations.slice(-300)), _jumps])
 		else:
 			print("t=%3ds  waiting for connection..." % int(_t))
 	if _t > dur:
 		_final()
 
 
+## What came from the others, by kind. An Ally Switch has to leave both where its owner said.
+func _count_event(d: Dictionary) -> void:
+	var kind: String = d.t if d.t != "buff" else "buff_" + d.kind
+	_events[kind] = int(_events.get(kind, 0)) + 1
+	if d.t == "ally_switch" and main.net:
+		get_tree().physics_frame.connect(_check_switch.bind(d), CONNECT_ONE_SHOT)
+
+
+func _check_switch(d: Dictionary) -> void:
+	var one: Fighter = main._on_field_at(int(d.by))
+	if one and one.global_position.distance_to(d.by_to) > 1.0:
+		_events["ally_switch_off"] = int(_events.get("ally_switch_off", 0)) + 1
+
+
 func _teams() -> Dictionary:
 	var out := {}
-	for k in 2:
+	for k in main.parties.size():
 		var p: Party = main.parties[k]
 		var who := "mine" if k == 0 else "rival"
+		if main.doubles:
+			who = "seat%d" % main.net.seat_of(k)
 		out[who] = p.history.duplicate()
 		out[who + "_hp"] = p.members.map(func(f): return int(f.hp))
 		out[who + "_switches"] = p.switches
@@ -122,6 +151,8 @@ func _final() -> void:
 		"hits_taken": _hits_taken,
 		"my_hp": net.local.hp if net and net.local else -1,
 		"rival_hp_seen": net.remote.hp if net and net.remote and is_instance_valid(net.remote) else -1,
+		"seat": net.seat if net else -1,
+		"events": _events,
 		"records": _battles,
 	}
 	print("NET_FINAL ", JSON.stringify(data))

@@ -1,9 +1,11 @@
 class_name Party
 extends Node
-## One side's team in a 3 vs 3 battle: its Pokémon, who is out, and the rules of switching.
-## One Pokémon per side fights at a time; main.fighters only ever holds the two out there, so
-## everything else in the game sees a 1 vs 1 as usual. The numbers are this battle's
-## (BattleRules, "rules"); what follows names them.
+## One trainer's team: its Pokémon, who is out, and the rules of switching. In a 3 vs 3 that is
+## each side's three; in a 2 vs 2, each of the four trainers' one to three (Menu.team_size), so a
+## 2 vs 2 always has four, even with one member each. One Pokémon per trainer fights at a time;
+## main.fighters only ever holds those out there, so everything else in the game sees a 1 vs 1 or
+## a plain 2 vs 2 as usual. The numbers are this battle's (BattleRules, "rules"); what follows
+## names them.
 ##
 ## A switch is a committed move, paid from a scarce resource, that refreshes nothing:
 ##   - It costs a charge (start_charges, up to max_charges, one more every recharge seconds;
@@ -22,22 +24,21 @@ extends Node
 ##
 ## After a KO the next one is free: its trainer picks within ko_choice seconds (the healthiest
 ## by default), it lands on its side of the field with ko_invuln seconds of invulnerability and
-## the team gets ko_energy energy. The stat stages of the Pokémon that made the KO go too, so a
-## single boosted Pokémon does not sweep all three.
+## the team gets ko_energy energy. The stat stages of the Pokémon that made the KO go too
+## (Main.ko_credit), so a single boosted Pokémon does not sweep all three.
 ##
 ## Online each player is in charge of their own team, as with their own Pokémon (Net). The owner
-## decides every switch and pick and tells the other copy with reliable events (_tell); "remote",
-## that copy only follows them (the net_* functions, called by main.gd) and gets the charges
+## decides every switch and pick and tells the other copies with reliable events (_tell); "remote",
+## a copy only follows them (the net_* functions, called by main.gd) and gets the charges
 ## with each state packet.
 
-const SIZE := 3
 const FLIGHT_DIST := Vector2(6.0, 24.0)  # meters from the trainer for ball_near and ball_far
 const KO_MIN := 1.0                      # the faint plays out at least this long
 const KO_FLIGHT := 0.6
 const AI_PICK := 1.2                     # how long the AI thinks over its next Pokémon
 
 var main: Node
-var side := 0                            # its index in main.fighters
+var side := 0                            # its slot: its index in main.fighters
 var members: Array = []                  # in the order they were picked; the first one leads
 var active: Fighter
 var rules := {}                          # this battle's (BattleRules)
@@ -260,16 +261,17 @@ func _send_replacement() -> void:
 	var fainted := active
 	var incoming := _chosen
 	_chosen = null
-	var foe: Fighter = fainted.rival
+	var foe: Fighter = main.ko_credit(fainted)
 	var spot := _entry_spot(fainted.start_pos)
-	var to_foe: Vector3 = foe.global_position - spot
+	var to_foe: Vector3 = fainted.rival.global_position - spot
 	var yaw := atan2(to_foe.x, to_foe.z)
-	_tell_swap("replace", incoming, spot, yaw)
+	_tell_swap("replace", incoming, spot, yaw, {"foe": main.net.seat_of(foe.slot) if main.net and foe else -1})
 	_swap(incoming, spot, yaw)
 	incoming.energy = minf(Fighter.ENERGY_MAX, incoming.energy + float(rules.ko_energy))
 	incoming.invulnerable = rules.ko_invuln
 	incoming.enter_field()
-	foe.clear_stages()
+	if foe:
+		foe.clear_stages()
 	main.session.event("replacement", {"team": side, "to": incoming.species, "left": alive_count()})
 
 
@@ -279,6 +281,7 @@ func _send_replacement() -> void:
 func _tell(d: Dictionary) -> void:
 	if main.net and not remote:
 		d.b = main.net.battle
+		d.slot = main.net.seat_of(side)
 		main.net.send_event(d)
 
 
@@ -301,9 +304,11 @@ func net_event(d: Dictionary) -> void:
 
 ## Who comes out and where, with what the copy cannot know exactly: the health and status of the
 ## one leaving and of the one coming in, which the bench has kept.
-func _tell_swap(kind: String, incoming: Fighter, pos: Vector3, yaw: float) -> void:
-	_tell({"t": kind, "to": incoming.species, "pos": pos, "yaw": yaw, "hp": incoming.hp,
-		"out_hp": active.hp, "out_status": active.status, "out_status_t": active.status_t})
+func _tell_swap(kind: String, incoming: Fighter, pos: Vector3, yaw: float, more := {}) -> void:
+	var d := {"t": kind, "to": incoming.species, "pos": pos, "yaw": yaw, "hp": incoming.hp,
+		"out_hp": active.hp, "out_status": active.status, "out_status_t": active.status_t}
+	d.merge(more)
+	_tell(d)
 
 
 func _member(sp: String) -> Fighter:
@@ -371,12 +376,14 @@ func net_replace(d: Dictionary) -> void:
 		active._die({})
 	replacing = false
 	pending = null
-	var foe: Fighter = active.rival
+	# Who made the KO, as its owner saw it: the same one's stages go on every copy.
+	var foe: Fighter = main._on_field_at(int(d.foe)) if d.has("foe") else active.rival
 	_swap(incoming, d.pos, d.yaw)
 	incoming.hp = d.hp
 	incoming.invulnerable = rules.ko_invuln
 	incoming.enter_field()
-	foe.clear_stages()
+	if foe:
+		foe.clear_stages()
 
 
 func net_bench_ko(sp: String) -> void:

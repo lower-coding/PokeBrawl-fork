@@ -101,8 +101,8 @@ func seat_free(p: Vector3) -> bool:
 	return true
 
 
-func trainer_spot(side: float) -> Vector3:
-	return Vector3(side * TRAINER_R, 0.0, 0.0)
+func trainer_spot(side: float, z := 0.0) -> Vector3:
+	return Vector3(side * TRAINER_R, 0.0, z)
 
 
 ## Inside the field as it is now (the AI keeps in).
@@ -142,7 +142,7 @@ static func radius_at(t: float) -> float:
 
 func _process(delta: float) -> void:
 	super(delta)
-	if main and main.fighters.size() == 2 and main.intro_t <= 0.0 and _win_t < 0.0:
+	if main and main.fighters.size() >= 2 and main.intro_t <= 0.0 and _win_t < 0.0:
 		zone_t += delta / main.field_pace
 	zone_r = radius_at(zone_t)
 	# The next ring, a few seconds before it closes: marked on the sand, and said.

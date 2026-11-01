@@ -44,7 +44,12 @@ func in_startup(delta: float) -> void:
 
 
 func on_active() -> void:
-	var double: bool = l.rival and is_instance_valid(l.rival) and l.rival.has_status()
+	# Against whoever it lands closest to, not whoever Gengar was after.
+	var victim: Fighter = null
+	for f in l.foes():
+		if victim == null or f.global_position.distance_to(_point) < victim.global_position.distance_to(_point):
+			victim = f
+	var double: bool = victim != null and victim.has_status()
 	hit({"shape": "sphere", "local": false, "center": _point + Vector3.UP * 0.8, "radius": d.radius,
 		"damage": d.damage * (2.0 if double else 1.0), "strength": 2 if double else d.strength, "lifetime": 0.08})
 	var vfx: Vfx = l.main.vfx

@@ -2,13 +2,14 @@ class_name Hud
 extends CanvasLayer
 ## Battle UI built from Cobblemon's battle GUI pieces, at the same pixel scale and with
 ## the same measurements (BattleOverlay.kt and BattleMoveSelection.kt):
-##   top            each Pokémon's frame with its live portrait, HP and status
+##   top            each Pokémon's frame with its live portrait, HP and status (in a 2 vs 2, your
+##                  side's on the left, you on top and your partner's smaller; the foes' on the right)
 ##   bottom left    the four moves on tiles tinted by type
 ##   above them     the player's dodges and energy; in a 3 vs 3 its switches and bench
 ##   under the top  in a 3 vs 3, each side's bench and switches; after a KO, the next one to pick
 ##   bottom right   the battle log
 ##   over the rival the lock-on arrow; with nothing locked on, a crosshair where moves go
-##                  (if turned on in the options)
+##                  (if turned on in the options) and, in a 2 vs 2, a blue or red arrow over each one
 ## Everything is measured in GUI pixels (G) and multiplied by the integer scale _s.
 
 const GUI := "res://gui/cobblemon/"
@@ -22,6 +23,8 @@ const INK := Color("f5f3ea")
 const GOLD := Color("ffc94a")
 const PANEL_DARK := Color(0.05, 0.06, 0.09, 0.85)
 const RED_MARK := Color("e0553e")
+const BLUE_MARK := Color("3e8fe0")
+const PARTNER_SCALE := 2.0 / 3.0        # a 2 vs 2 partner's frame, against yours
 const STAGE_UP := [Color("e5ffe0"), Color("33aa00")]    # Showdown's: background, text and edge
 const STAGE_DOWN := [Color("ffe5e0"), Color("ff4400")]
 const LOG_LINES := 5
@@ -32,7 +35,8 @@ var _c: Control
 var _s := 3
 var _tex := {}
 var _font: FontFile
-var _lag := [1.0, 1.0]
+var _lag := [1.0, 1.0, 1.0, 1.0]
+var outline: TeamOutline             # a 2 vs 2's, under this layer
 var _not_ready := [0.0, 0.0, 0.0, 0.0]
 var _log: Array = []                 # [{text, t}]
 var _log_t := 0.0
@@ -47,6 +51,9 @@ var _u := UiKit.new()                # the menus' kit, for the pause and the end
 func _ready() -> void:
 	layer = 5
 	process_mode = Node.PROCESS_MODE_ALWAYS
+	outline = TeamOutline.new()
+	outline.main = main
+	add_child(outline)
 	_font = load("res://gui/font/pixel.fnt")
 	_font.fixed_size_scale_mode = TextServer.FIXED_SIZE_SCALE_INTEGER_ONLY
 	for n in ["battle/battle_info_base", "battle/battle_info_base_flipped", "battle/battle_info_underlay", "battle/battle_move",
@@ -168,7 +175,7 @@ func _portrait(sp: String, i: int) -> Dictionary:
 	var esc: float = data.height / maxf(box.size.y, 0.05)
 	m.scale = Vector3.ONE * esc
 	# Three-quarter view facing the center of the screen.
-	m.rotation.y = PI + (0.55 if i == 0 else -0.55)
+	m.rotation.y = PI + (0.55 if i % 2 == 0 else -0.55)
 	vp.add_child(m)
 	m.play("battle_idle" if m.has_anim("battle_idle") else "ground_idle", 0.0)
 	var cam := Camera3D.new()
@@ -216,8 +223,8 @@ func _process(delta: float) -> void:
 	_s = maxi(1, int(_c.size.y / 300.0))
 	for i in 4:
 		_not_ready[i] = maxf(0.0, _not_ready[i] - delta)
-	for i in 2:
-		var l: Fighter = main.fighters[i] if i < main.fighters.size() else null
+	for i in main.fighters.size():
+		var l: Fighter = main.fighters[i]
 		if l:
 			var f := l.hp / l.hp_max
 			_lag[i] = f if f > _lag[i] else move_toward(_lag[i], f, delta * 0.35)
@@ -297,21 +304,27 @@ func _draw_ui() -> void:
 		_opening_cards()
 		return
 	_floating()
-	_frame_box(main.fighters[0], 0, Vector2(12, 10), false)
-	_frame_box(main.fighters[1], 1, Vector2(gw - 12 - 140, 10), true)
 	var j: Fighter = main.player
+	if main.doubles:
+		_doubles_frames(gw)
+	else:
+		_frame_box(main.fighters[0], 0, Vector2(12, 10), false)
+		_frame_box(main.fighters[1], 1, Vector2(gw - 12 - 140, 10), true)
 	if j:
 		_moves(j, Vector2(20, gh - 62))
 		_resources(j, Vector2(11, gh - 76))
 	if j:
 		_locked(j)
+		_team_arrows(j)
 	if not main.parties.is_empty():
-		_team_strip(main.parties[0], Vector2(50, 48), 1.0)
-		_team_strip(main.parties[1], Vector2(gw - 50, 48), -1.0)
+		if not main.doubles:
+			_team_strip(main.parties[0], Vector2(50, 48), 1.0)
+			_team_strip(main.parties[1], Vector2(gw - 50, 48), -1.0)
 		for p in main.parties:
 			if p.pending:
 				_recall_bar(p)
-		if j and j.party:
+		# With one Pokémon a trainer there is nothing to switch to.
+		if j and j.party and j.party.members.size() > 1:
 			_bench(j.party, Vector2(11, gh - 92))
 			if j.party.replacing:
 				_next_prompt(j.party, gw, gh)
@@ -330,7 +343,7 @@ func _draw_ui() -> void:
 		_start_banner(main.start_t)
 	if main.paused:
 		_pause_menu(gw, gh)
-	elif main._end_t > main.RESULT_AT and main.fighters.size() == 2:
+	elif main._end_t > main.RESULT_AT and main.fighters.size() >= 2:
 		_result_screen(gw, gh)
 	if debug and main.ai:
 		var p := _p_log()
@@ -339,6 +352,32 @@ func _draw_ui() -> void:
 		var r: Fighter = main.fighters[1]
 		_text(Vector2(_c.size.x - 12 * _s, 60 * _s + 12 * p), "%s, %s" % [r.state, r.action.phase if r.action else "-"], p, green, 1)
 		_text(Vector2(12 * _s, 60 * _s), "Player: %s, %s" % [j.state, j.action.phase if j and j.action else "-"], p, green)
+
+
+## A 2 vs 2's frames, by side: yours on the left with you on top and your partner's smaller under
+## it (under your bench, if you have one), the foes' on the right. Each trainer's bench, under theirs.
+func _doubles_frames(gw: float) -> void:
+	var me: Fighter = main.player if main.player else main.fighters[0]
+	var mate: Fighter = main.fighters[(me.slot + 2) % 4]
+	var teams: bool = main.parties[0].members.size() > 1
+	_frame_box(me, me.slot, Vector2(12, 10), false)
+	if teams:
+		_team_strip(main.parties[me.slot], Vector2(50, 48), 1.0)
+	var under := Vector2(12, 68 if teams else 50)
+	# Smaller, about its own corner: the transform leaves that point where it is.
+	_c.draw_set_transform(under * _s * (1.0 - PARTNER_SCALE), 0.0, Vector2.ONE * PARTNER_SCALE)
+	_frame_box(mate, mate.slot, under, false)
+	if teams:
+		_team_strip(main.parties[mate.slot], under + Vector2(38, 38), 1.0)
+	_c.draw_set_transform(Vector2.ZERO, 0.0, Vector2.ONE)
+	var x := gw - 12 - 140
+	var y := 10.0
+	for f in main.fighters:
+		if f.team != me.team:
+			_frame_box(f, f.slot, Vector2(x, y), true)
+			if teams:
+				_team_strip(main.parties[f.slot], Vector2(gw - 50, y + 38.0), -1.0)
+			y += 62.0 if teams else 42.0
 
 
 ## BattleOverlay frame: portrait, name, types, HP and status.
@@ -396,6 +435,10 @@ func stage_tags(l: Fighter) -> Array:
 	# Infatuated, with the seconds left: hearts over its head are easy to lose.
 	if l.charmed_by != "":
 		tags.append(["%s %d" % [tr("Love"), ceili(l.charmed_t)], false])
+	if l.help_t > 0.0:
+		tags.append(["%s %d" % [tr("Help"), ceili(l.help_t)], true])
+	if l.tailwind_t > 0.0:
+		tags.append(["%s %d" % [tr("Wind"), ceili(l.tailwind_t)], true])
 	return tags
 
 
@@ -446,7 +489,8 @@ func _moves(l: Fighter, g0: Vector2) -> void:
 		var move: String = l.data.moves[l.button_moves[i]]
 		var d: Dictionary = Moves.DATA[move]
 		var g := g0 + Vector2(0.0 if i % 2 == 0 else 92.0 + 13.0, 0.0 if i < 2 else 24.0 + 5.0)
-		var ready := l.ready(move)
+		# Dimmed too while it would be refused (no ally in reach or under the crosshair).
+		var ready := l.ready(move) and l.refused(move) == ""
 		var using: bool = l.action != null and l.action.id == move
 		var a := 1.0 if ready or using else 0.5
 		var type := Moves.type_for(move, l.data.passive.id)
@@ -708,7 +752,31 @@ func _log_box(g: Vector2) -> void:
 		y += 12.0 * p / _s - 0.5
 
 
+## In a 2 vs 2 with nothing locked on: a blue arrow over your ally and a red one over your foes,
+## their decoys too, or it would give away a trick. Nothing over what cannot be seen.
+func _team_arrows(j: Fighter) -> void:
+	if not main.doubles or not main.options.team_arrows or j.locked or main.paused or main._end_t >= 0.0:
+		return
+	var cam: Camera3D = main.get_viewport().get_camera_3d()
+	for o in main.combat.targets:
+		var who: Fighter = o.user if o is Decoy else o
+		if who == j or who.state == "ko" or (o is Fighter and o.out_of_sight()):
+			continue
+		var up: Vector3 = o.global_position + Vector3.UP * (o.data.height + 0.35)
+		if cam and not cam.is_position_behind(up):
+			var p := cam.unproject_position(up) / _s
+			_piece("arrow_pointer_down", Vector2(p.x - 8.5, p.y - 10), Vector2(17, 10), Rect2(), arrow_color(j, who))
+
+
+## Blue over its side, red over the other.
+static func arrow_color(j: Fighter, who: Fighter) -> Color:
+	return BLUE_MARK if who.team == j.team else RED_MARK
+
+
 func _locked(j: Fighter) -> void:
+	# Out of Pokémon and watching its ally: nothing of its own to aim.
+	if main.doubles and j.state == "ko":
+		return
 	var r: Node3D = j.aim_target()
 	if r == null or not is_instance_valid(r) or not j.locked or (r is Fighter and r.state == "ko"):
 		_crosshair(j)
@@ -743,14 +811,16 @@ func crosshair_at(j: Fighter) -> Vector2:
 
 
 ## A dot with four ticks or a ring round it (Settings), light on a dark outline so it reads on any
-## floor, red when aimed at the foe.
+## floor, red when aimed at the foe. Blue over the ally while Ally Switch is ready, when it shows even
+## with the crosshair turned off: that is how to aim it.
 func _crosshair(j: Fighter) -> void:
-	if not main.options.crosshair or j.state == "ko" or main.paused or main._end_t >= 0.0:
+	var swap_ready: bool = j.ctrl.aim_ally and "allyswitch" in j.data.moves and j.ready("allyswitch")
+	if not (main.options.crosshair or swap_ready) or j.state == "ko" or main.paused or main._end_t >= 0.0:
 		return
 	var c := crosshair_at(j)
 	if c.x < 0.0:
 		return
-	var col: Color = RED_MARK if j.aiming_at_foe() else INK
+	var col: Color = BLUE_MARK if swap_ready else (RED_MARK if j.aiming_at_foe() else INK)
 	var parts := [[c, Vector2(1, 1)]]
 	if main.options.crosshair_shape == "circle":
 		_c.draw_arc(c * _s, 5.0 * _s, 0.0, TAU, 32, PANEL_DARK, 3.0 * _s)
@@ -777,12 +847,13 @@ func _pause_menu(_gw: float, _gh: float) -> void:
 		[Controls.glyph("jump"), tr("Jump")],
 		[Controls.glyph("dodge"), tr("Dodge")],
 		[Controls.glyph("lock_on"), tr("Lock on")],
+		[Controls.glyph("cycle_target"), tr("Change target")],
 		["%s %s %s %s" % [Controls.glyph("mov1"), Controls.glyph("mov2"), Controls.glyph("mov3"), Controls.glyph("mov4")], tr("Moves")],
 	]
 	if main.no_lock:
-		rows.remove_at(2)
+		rows = rows.slice(0, 2) + rows.slice(4)
 	rows.append([Controls.glyph("first_person"), tr("First person")])
-	if not main.parties.is_empty():
+	if not main.parties.is_empty() and main.parties[0].members.size() > 1:
 		rows.append(["%s %s" % [Controls.glyph("switch1"), Controls.glyph("switch2")], tr("Switch Pokémon")])
 	var y := 360.0
 	for r in rows:
@@ -811,6 +882,9 @@ func _opening_cards() -> void:
 	_u.begin(_c)
 	var u := _u
 	var e: float = main.INTRO - main.intro_t
+	if main.doubles:
+		_opening_cards_doubles(e)
+		return
 	for side in 2:
 		var t: Trainer = main.trainers[side]
 		if not is_instance_valid(t) or not is_instance_valid(t.fighter):
@@ -847,6 +921,43 @@ func _opening_cards() -> void:
 					u.tex(mate, px + 110.0 + (i - 1) * 62.0, y + 140.0, 56.0, 56.0)
 
 
+## A 2 vs 2's four cards, two to a side, smaller and stacked: its trainer's sprite and name and the
+## Pokémon they send out, with whoever waits behind it.
+func _opening_cards_doubles(e: float) -> void:
+	var u := _u
+	for i in main.trainers.size():
+		var t: Trainer = main.trainers[i]
+		if not is_instance_valid(t) or not is_instance_valid(t.fighter):
+			continue
+		var f: Fighter = t.fighter
+		var k := UiKit.ease((e - 0.1 - 0.2 * i) / 0.35) * (1.0 - UiKit.ease((e - (main.INTRO - 0.35)) / 0.3))
+		if k <= 0.001:
+			continue
+		var left := f.team == 0
+		var col: Color = UiKit.RED if f.slot == 0 else (UiKit.BLUE if f.slot == 2 else UiKit.GREY)
+		var w := 640.0
+		var h := 130.0
+		var x := (60.0 if left else 1920.0 - 60.0 - w) + (1.0 - k) * (-900.0 if left else 900.0)
+		var y := 760.0 + (f.slot / 2) * 146.0
+		u.slant(x, y, w, h, Color(col, 0.95))
+		u.slant(x + 10.0, y + 10.0, w - 20.0, h - 20.0, col.darkened(0.3))
+		u.tex(TrainerData.texture(t.id), u.edge(x, y, h, y + h) + 12.0, y - 44.0, 170.0, 170.0)
+		var tx := u.edge(x, y, h, y + 50.0) + 184.0
+		var tag: String = "1P" if f.slot == 0 else (tr("Ally") if f.slot == 2 else "2P" if f.is_remote else "CPU")
+		u.slant(tx, y + 14.0, u.width(tag, 24.0, u.heavy) + 22.0, 34.0, UiKit.DARK)
+		u.title(tx + 11.0, y + 15.0, tag, 24.0, UiKit.INK)
+		u.title(tx + u.width(tag, 24.0, u.heavy) + 34.0, y + 10.0, t.display_name.to_upper(), 38.0, UiKit.INK, -1, w - 320.0)
+		var px := u.edge(x, y, h, y + 100.0) + 184.0
+		u.text_fit(px, y + 62.0, tr("sends out %s!") % tr(f.data.display_name), w - 240.0, 24.0, Color(UiKit.INK, 0.9), u.bold)
+		for n in f.data.types.size():
+			u.type_icon(f.data.types[n], px + n * 32.0, y + 94.0, 28.0)
+		if f.party:
+			for n in range(1, f.party.members.size()):
+				var mate := _portrait_of(f.slot, f.party.members[n].species)
+				if mate:
+					u.tex(mate, px + 74.0 + (n - 1) * 36.0, y + 90.0, 32.0, 32.0)
+
+
 ## "START" when you can move: a thin band across the upper part, gone within a second.
 func _start_banner(st: float) -> void:
 	_u.begin(_c)
@@ -869,7 +980,11 @@ func _result_screen(_gw: float, _gh: float) -> void:
 	u.full(Color(0, 0, 0, 0.5 * k))
 	var title := tr("Draw")
 	var col := UiKit.GREY
-	if winner and main.player:
+	if main.doubles and main.player:
+		var won: bool = main.winning_team == main.player.team
+		title = tr("You win!") if won else tr("You lose")
+		col = UiKit.RED if won else UiKit.GREY
+	elif winner and main.player:
 		var won: bool = winner == main.player
 		title = tr("You win!") if won else tr("You lose")
 		col = UiKit.RED if won else UiKit.GREY
@@ -880,9 +995,13 @@ func _result_screen(_gw: float, _gh: float) -> void:
 	u.slant(bx, 250.0, 2400.0, 200.0, col)
 	u.slant(bx + 200.0, 462.0, 2200.0, 16.0, UiKit.YELLOW)
 	u.title(960.0, 262.0, title.to_upper(), 150.0, UiKit.INK, 0, 1600.0)
-	if winner and main.player:
+	if main.doubles:
+		var pair: Array = main.trainers.filter(func(tn): return tn.fighter.team == main.winning_team)
+		if pair.size() == 2:
+			u.text(960.0, 500.0, tr("%s and %s win!") % [pair[0].display_name, pair[1].display_name], 36.0, Color(UiKit.INK, 0.85 * k), u.bold, 0)
+	elif winner and main.player:
 		u.text(960.0, 500.0, tr("%s wins!") % tr(winner.data.display_name), 36.0, Color(UiKit.INK, 0.85 * k), u.bold, 0)
-	if winner and winner.party:
+	if winner and winner.party and not main.doubles:
 		u.text(960.0, 546.0, tr("%d of %d still standing") % [winner.party.alive_count(), winner.party.members.size()], 28.0, Color(UiKit.INK, 0.7 * k), u.bold, 0)
 	if main._end_t < main.CHOICES_AT:
 		return

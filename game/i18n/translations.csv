@@ -163,7 +163,7 @@ Training,Training,Entrenamiento
 Quit,Quit,Salir
 Close the game.,Close the game.,Cerrar el juego.
 Host game,Host game,Crear partida
-Your friend joins with your IP. Port 7777 (UDP).,Your friend joins with your IP. Port 7777 (UDP).,Tu amigo se une con tu IP. Puerto 7777 (UDP).
+Your friends join with your IP. Port 7777 (UDP).,Your friends join with your IP. Port 7777 (UDP).,Tus amigos se unen con tu IP. Puerto 7777 (UDP).
 Type the IP of whoever hosted the game.,Type the IP of whoever hosted the game.,Escribe la IP de quien ha creado la partida.
 Back,Back,Volver
 BRN,BRN,QUEM
@@ -679,7 +679,7 @@ Rival's team: %d of %d,Rival's team: %d of %d,Equipo rival: %d de %d
 Pick or take out,Pick or take out,Elegir o quitar
 Lead,Lead,Primero
 Puts every rule back on its default.,Puts every rule back on its default.,Devuelve cada regla a su valor por defecto.
-1 vs 1 or 3 vs 3 with a friend over the internet.,1 vs 1 or 3 vs 3 with a friend over the internet.,1 contra 1 o 3 contra 3 con un amigo por internet.
+"1 vs 1, 3 vs 3 or 2 vs 2 with friends over the internet.","1 vs 1, 3 vs 3 or 2 vs 2 with friends over the internet.","1 contra 1, 3 contra 3 o 2 contra 2 con amigos por internet."
 Picking: %d of %d,Picking: %d of %d,Eligiendo: %d de %d
 Format: %s,Format: %s,Formato: %s
 The host sets the rules.,The host sets the rules.,Las reglas las pone el anfitrión.
@@ -825,3 +825,57 @@ You cannot outrun them: a dodge makes them lose you. Walls stop them too.,You ca
 "Slow and hard to wear down. Sweeps the field with wide waves, hunts with homing stars and steals health from whoever gets close.","Slow and hard to wear down. Sweeps the field with wide waves, hunts with homing stars and steals health from whoever gets close.","Lento y difícil de desgastar. Barre el campo con ondas anchas, caza con estrellas que persiguen y roba salud a quien se acerca."
 Its Normal moves become Fairy moves and hit 1.2 times as hard.,Its Normal moves become Fairy moves and hit 1.2 times as hard.,"Sus movimientos Normal pasan a ser de tipo Hada y golpean 1,2 veces más fuerte."
 "Each contact move that hits it has a 30% chance of infatuating the attacker for 8 s: half of its moves fail, unless either one leaves the field.","Each contact move that hits it has a 30% chance of infatuating the attacker for 8 s: half of its moves fail, unless either one leaves the field.","Cada movimiento de contacto que lo golpea tiene un 30% de probabilidad de enamorar al atacante durante 8 s: la mitad de sus movimientos fallan, salvo que uno de los dos deje el campo."
+No ally,No ally,Sin aliado
+Aim at your ally,Aim at your ally,Apunta a tu aliado
+Too far from your ally,Too far from your ally,Tu aliado está muy lejos
+Off the field,Off the field,Fuera del campo
+Help,Help,Ayuda
+Wind,Wind,Viento
+Ally,Ally,Aliado
+%s and %s win!,%s and %s win!,¡%s y %s ganan!
+%s is out of Pokémon!,%s is out of Pokémon!,¡A %s no le quedan Pokémon!
+%s and %s win.,%s and %s win.,%s y %s ganan.
+Ally and foe outline,Ally and foe outline,Contorno de aliado y rivales
+"In a 2 vs 2, a blue outline on your ally and a red one on your foes.","In a 2 vs 2, a blue outline on your ally and a red one on your foes.","En un 2 contra 2, un contorno azul en tu aliado y uno rojo en tus rivales."
+Ally and foe arrows,Ally and foe arrows,Flechas de aliado y rivales
+"In a 2 vs 2 with nothing locked on, a blue arrow over your ally and a red one over your foes.","In a 2 vs 2 with nothing locked on, a blue arrow over your ally and a red one over your foes.","En un 2 contra 2 sin nada fijado, una flecha azul sobre tu aliado y una roja sobre tus rivales."
+Helping Hand!,Helping Hand!,¡Refuerzo!
+Tailwind!,Tailwind!,¡Viento Afín!
+Your ally's team: %d of %d,Your ally's team: %d of %d,Equipo de tu aliado: %d de %d
+Second rival's team: %d of %d,Second rival's team: %d of %d,Equipo del segundo rival: %d de %d
+Your ally's pick,Your ally's pick,La elección de tu aliado
+"Controls, sound, screen","Controls, sound, screen","Controles, sonido, pantalla"
+Ally Switch,Ally Switch,Cambio Banda
+Helping Hand,Helping Hand,Refuerzo
+Tailwind,Tailwind,Viento Afín
+"Swaps places with its ally, wherever it is in sight. Shots on the way to one go after the other. Needs the ally under the crosshair.","Swaps places with its ally, wherever it is in sight. Shots on the way to one go after the other. Needs the ally under the crosshair.","Cambia de sitio con su aliado, esté donde esté a la vista. Los disparos que van hacia uno siguen al otro. Necesita al aliado bajo la mira."
+Cheers on a nearby ally: its next attack within 3 s hits 1.5 times as hard. Needs the ally close.,Cheers on a nearby ally: its next attack within 3 s hits 1.5 times as hard. Needs the ally close.,"Anima a un aliado cercano: su siguiente ataque en 3 s golpea 1,5 veces más fuerte. Necesita al aliado cerca."
+A gust around it: itself and an ally in reach move faster for 12 s.,A gust around it: itself and an ally in reach move faster for 12 s.,Una ráfaga a su alrededor: él y un aliado a su alcance se mueven más rápido durante 12 s.
+"It takes 8 s to come back: bait it out, then press your attack.","It takes 8 s to come back: bait it out, then press your attack.",Tarda 8 s en volver: provócalo y luego ataca.
+"It needs them together: split them up, or dodge the boosted attack and it is wasted.","It needs them together: split them up, or dodge the boosted attack and it is wasted.","Los necesita juntos: sepáralos, o esquiva el ataque reforzado y se desperdicia."
+"It is open while it calls the wind. Afterwards, wait it out or slow them down.","It is open while it calls the wind. Afterwards, wait it out or slow them down.","Queda expuesto mientras llama al viento. Después, aguanta hasta que pase o ralentízalos."
+2 vs 2,2 vs 2,2 contra 2
+"Two trainers a side, with one to three Pokémon each.","Two trainers a side, with one to three Pokémon each.","Dos entrenadores por bando, con uno a tres Pokémon cada uno."
+Doubles,Doubles,Dobles
+Pokémon per trainer,Pokémon per trainer,Pokémon por entrenador
+How many Pokémon each of the four trainers brings.,How many Pokémon each of the four trainers brings.,Cuántos Pokémon lleva cada uno de los cuatro entrenadores.
+Friendly fire,Friendly fire,Fuego amigo
+"On, your moves can hurt your ally. Your own Pokémon are always spared.","On, your moves can hurt your ally. Your own Pokémon are always spared.","Activado, tus movimientos pueden dañar a tu aliado. Tus propios Pokémon nunca reciben daño."
+Change target,Change target,Cambiar de objetivo
+Mouse sweep changes target,Mouse sweep changes target,El barrido del ratón cambia de objetivo
+"Locked on, a quick sweep of the mouse moves the lock to the next target. Off, only the Change target key does.","Locked on, a quick sweep of the mouse moves the lock to the next target. Off, only the Change target key does.","Con el objetivo fijado, un barrido rápido del ratón pasa al siguiente objetivo. Desactivado, solo lo hace la tecla de Cambiar de objetivo."
+Random AI moves,Random AI moves,Movimientos al azar de la IA
+The AI's picks,The AI's picks,Las elecciones de la IA
+V,V,V
+Seats,Seats,Asientos
+Who plays where,Who plays where,Quién juega dónde
+AI,AI,IA
+Player,Player,Jugador
+Empty seat,Empty seat,Asiento libre
+Connected,Connected,Conectado
+Swap with this one,Swap with this one,Cambiar con este
+Pick a seat,Pick a seat,Elige un asiento
+Your side,Your side,Tu lado
+The other side,The other side,El otro lado
+Waiting for the others,Waiting for the others,Esperando a los demás
+Change my team,Change my team,Cambiar mi equipo

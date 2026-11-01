@@ -9,6 +9,8 @@ const LENGTH := 36.0          # X axis
 const WIDTH := 22.0          # Z axis
 ## Collision layer only the battle camera looks at (stands it must not go into).
 const CAMERA_LAYER := 16
+## In a 2 vs 2, how far each of a side's two trainers stands from the middle.
+const TRAINER_APART := 1.4
 
 var main: Node
 var stage := ""
@@ -81,9 +83,10 @@ func on_rematch() -> void:
 	pass
 
 
-## Where the trainer of the Pokémon starting on this side (sign of its x) stands.
-func trainer_spot(side: float) -> Vector3:
-	return Vector3(side * (LENGTH * 0.5 + 2.6), 0.0, 0.0)
+## Where the trainer of the Pokémon starting on this side (sign of its x) stands; "z": apart from
+## the side's other trainer.
+func trainer_spot(side: float, z := 0.0) -> Vector3:
+	return Vector3(side * (LENGTH * 0.5 + 2.6), 0.0, z)
 
 
 func inside(p: Vector3, margin := 0.0) -> bool:
