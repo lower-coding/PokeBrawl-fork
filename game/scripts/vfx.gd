@@ -33,6 +33,23 @@ var _noise: NoiseTexture2D
 var _shaders := {}
 var _living: Array = []        # effects with their own life: {node, t, dur, step: Callable}
 var reduced := false         # accessibility option: less shaking
+## Pixilate's filter: while it is on, every effect that comes out is pink for its whole life
+## (Fx's pieces too). Texts and numbers stay as they are. Only ever on inside pink_if.
+static var pink := false
+
+
+## Runs "what" with the filter on or off, and leaves it as it was.
+static func pink_if(on: bool, what: Callable) -> void:
+	var was := pink
+	pink = on
+	what.call()
+	pink = was
+
+
+## What the filter does to a color outside the shaders (VfxShaders.PINK).
+static func pink_color(col: Color) -> Color:
+	var v: float = lerpf(col.get_luminance(), maxf(col.r, maxf(col.g, col.b)), 0.5)
+	return col.lerp(Color(v, v * 0.68, v * 0.85, col.a), 0.85)
 
 
 func _ready() -> void:
@@ -54,9 +71,11 @@ func _ready() -> void:
 
 
 func shader(key: String, source: String) -> Shader:
+	if pink:
+		key += "_pink"
 	if not _shaders.has(key):
 		var s := Shader.new()
-		s.code = source
+		s.code = VfxShaders.pink(source) if pink else source
 		_shaders[key] = s
 	return _shaders[key]
 
@@ -191,7 +210,7 @@ func _create_emitter(key: String) -> GPUParticles3D:
 		var bx := BoxMesh.new()
 		bx.size = Vector3.ONE
 		var sm := StandardMaterial3D.new()
-		sm.albedo_color = p.color
+		sm.albedo_color = pink_color(p.color) if pink else p.color
 		sm.roughness = 1.0
 		sm.vertex_color_use_as_albedo = false
 		bx.material = sm
@@ -218,20 +237,23 @@ func _create_emitter(key: String) -> GPUParticles3D:
 
 ## A burst of one material at a point, in a direction (or upward).
 func burst(key: String, pos: Vector3, dir := Vector3.UP, color := Color(0, 0, 0, 0), size_mult := 1.0) -> void:
-	if not _pools.has(key):
-		_pools[key] = []
+	# Filtered emitters keep to their own pool: their materials are built with the filter.
+	var pool_key := key + "_pink" if pink else key
+	if not _pools.has(pool_key):
+		_pools[pool_key] = []
+	var pool: Array = _pools[pool_key]
 	var free: GPUParticles3D = null
-	for e in _pools[key]:
+	for e in pool:
 		if not e.emitting:
 			free = e
 			break
 	if free == null:
-		if _pools[key].size() >= 8:
-			free = _pools[key][0]
-			_pools[key].push_back(_pools[key].pop_front())
+		if pool.size() >= 8:
+			free = pool[0]
+			pool.push_back(pool.pop_front())
 		else:
 			free = _create_emitter(key)
-			_pools[key].append(free)
+			pool.append(free)
 	free.global_position = pos
 	var d := dir.normalized() if dir.length() > 0.01 else Vector3.UP
 	free.global_basis = Basis.looking_at(d, Vector3.UP if absf(d.y) < 0.95 else Vector3.RIGHT)
@@ -293,7 +315,7 @@ func light(pos: Vector3, col: Color, energy: float, reach: float, dur: float) ->
 			l = c
 			break
 	l.light.global_position = pos
-	l.light.light_color = col
+	l.light.light_color = pink_color(col) if pink else col
 	l.light.omni_range = reach
 	l.light.visible = true
 	l.t = 0.0
@@ -371,7 +393,7 @@ func clear() -> void:
 
 ## Registers a node that lives "dur" seconds; "step" receives the progress from 0 to 1.
 func live(node: Node3D, dur: float, step := Callable()) -> void:
-	_living.append({"node": node, "t": 0.0, "dur": dur, "step": step})
+	_living.append({"node": node, "t": 0.0, "dur": dur, "step": step, "pink": pink})
 
 
 func _process(delta: float) -> void:
@@ -384,7 +406,8 @@ func _process(delta: float) -> void:
 			continue
 		var k := clampf(v.t / maxf(v.dur, 0.001), 0.0, 1.0)
 		if v.step.is_valid():
-			v.step.call(k)
+			# What it spawns as it goes (a wave's sparkles) comes out as it did.
+			pink_if(v.pink, v.step.bind(k))
 		if v.t >= v.dur:
 			v.node.queue_free()
 			_living.remove_at(i)
@@ -664,6 +687,8 @@ func mark(pos: Vector3, kind: String, radius: float, dur := 4.0) -> void:
 	d.texture_albedo = _mark_tex(kind, radius)
 	d.size = Vector3(radius * 2.0, 1.0, radius * 2.0)
 	d.albedo_mix = 1.0
+	if pink:
+		d.modulate = pink_color(Color.WHITE)
 	d.upper_fade = 0.3
 	d.lower_fade = 0.3
 	add_child(d)
@@ -856,7 +881,7 @@ func pixel_ball(key: String, frames: int, dims: float, col: Color, fps := 14.0, 
 	root.add_child(mi)
 	if glow:
 		var o := OmniLight3D.new()
-		o.light_color = col
+		o.light_color = pink_color(col) if pink else col
 		o.light_energy = 1.6
 		o.omni_range = dims * 4.0
 		root.add_child(o)
@@ -937,7 +962,7 @@ func _side_material(tint: Color) -> StandardMaterial3D:
 	var sm := StandardMaterial3D.new()
 	sm.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
 	sm.vertex_color_use_as_albedo = true
-	sm.albedo_color = Color(tint, 1.0)
+	sm.albedo_color = Color(pink_color(tint) if pink else tint, 1.0)
 	sm.cull_mode = BaseMaterial3D.CULL_DISABLED
 	return sm
 

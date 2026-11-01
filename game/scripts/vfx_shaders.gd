@@ -3,6 +3,21 @@ extends RefCounted
 ## Effect shaders (Forward+). They live in code so vfx.gd can build them with their
 ## parameters. All with HDR energy: the glow comes from there.
 
+## Pixilate's filter (see Vfx.pink), last thing in a fragment(): each color becomes the Fairy pink
+## at about its own brightness, so the bands of an effect still read, and keeps a little of itself.
+## No HDR energy above 1: it would clip every channel and come out white instead of pink.
+const PINK := """
+	vec3 pink_c = min(ALBEDO, vec3(1.0));
+	float pink_v = mix(dot(pink_c, vec3(0.2126, 0.7152, 0.0722)), max(pink_c.r, max(pink_c.g, pink_c.b)), 0.5);
+	ALBEDO = mix(pink_c, pink_v * vec3(1.0, 0.42, 0.7), 0.85);
+"""
+
+
+## The same shader with PINK added: fragment() is the last function of every effect shader.
+static func pink(source: String) -> String:
+	return source.insert(source.rfind("}"), PINK)
+
+
 ## Camera-facing particle with a frame strip (Cobblemon's textures).
 ## "add" adds light (sparks, fire); without it, normal blending (smoke, dust).
 const PARTICLE := """

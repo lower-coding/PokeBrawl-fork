@@ -2281,7 +2281,51 @@ func _pixilate_cases() -> void:
 	main.combat.deflect(p, b, 2)
 	_ok("Pixilate: a Swift sent back keeps Sylveon's numbers", p.hit.type == "fairy" and p.hit.source == a
 		and is_equal_approx(Damage.dealt(p.hit, b, b, 1.0), before * Combat.DEFLECT_BONUS), "%s %d" % [p.hit.type, before])
+	_ok("Pixilate: a Swift sent back stays pink", p.hit.pink)
 	p.age_t = p.lifetime
+	await _pink_filter_cases()
+
+
+## Pixilate's pink filter: what comes out of a turned move, and only of those.
+func _pink_filter_cases() -> void:
+	var ab: Array = await _setup("sylveon", "snorlax", Vector3(-6, 0, 0), Vector3(0, 0, 0))
+	var a: Fighter = ab[0]
+	var vfx: Vfx = main.vfx
+	var pink_mats := func() -> int:
+		var n := 0
+		for c in vfx.get_children():
+			if c is MeshInstance3D and c.material_override is ShaderMaterial and c.material_override.shader.code.contains(VfxShaders.PINK):
+				n += 1
+		return n
+	var before: int = pink_mats.call()
+	a.start("hypervoice", "mov4")
+	_ok("Pink: the filter is off again after a turned move starts", not Vfx.pink)
+	a.action.step(float(Moves.DATA.hypervoice.startup))
+	_ok("Pink: Hyper Voice's arches come out filtered", pink_mats.call() > before, "%d" % pink_mats.call())
+	_ok("Pink: Hyper Voice counts as turned", a.action.pixilated())
+	var seen := {"pink": false}
+	Vfx.pink_if(true, func(): vfx.live(Node3D.new(), 0.05, func(_k: float): seen.pink = Vfx.pink))
+	await get_tree().process_frame
+	await get_tree().process_frame
+	_ok("Pink: an effect's later steps keep the filter", seen.pink)
+	_ok("Pink: and it does not stay on", not Vfx.pink)
+	var plain: ShaderMaterial = vfx.mat("sprite", VfxShaders.SPRITE)
+	Vfx.pink_if(true, func():
+		seen.mat = vfx.mat("sprite", VfxShaders.SPRITE)
+		seen.em = main.fx.play("sing_actorwave", a.center(), null, {}))
+	_ok("Pink: the plain and the filtered shader are not mixed up", not plain.shader.code.contains(VfxShaders.PINK) and seen.mat.shader.code.contains(VfxShaders.PINK))
+	_ok("Pink: Cobblemon's pieces too", not seen.em.is_empty() and seen.em.pink)
+	var col := Vfx.pink_color(Color(1.0, 0.88, 0.4))
+	_ok("Pink: yellow turns pink", col.r > col.b and col.b > col.g, str(col))
+	a.action.finish(true)
+	a.start("moonblast", "mov1")
+	_ok("Pink: a move that was Fairy already is left alone", not a.action.pixilated())
+	a.action.finish(true)
+	a.data.passive = Loadout.ability("sylveon", "cutecharm")
+	a.start("hypervoice", "mov4")
+	_ok("Pink: without Pixilate a Normal move is left alone", not a.action.pixilated())
+	a.action.finish(true)
+	a.data.passive = Loadout.ability("sylveon", "pixilate")
 
 
 func _cute_charm_cases() -> void:

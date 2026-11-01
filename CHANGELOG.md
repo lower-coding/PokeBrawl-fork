@@ -9,7 +9,7 @@ All notable changes to this project are documented here. The format follows
 - **Sylveon**, a slow special wall: Moonblast, Swift, Draining Kiss and Hyper Voice by default, with
   Dazzling Gleam and 22 more on the Moves screen. Its legs and ribbons move with clips of ours.
 - **Pixilate** (its default ability): Normal moves become Fairy moves and hit 1.2 times as hard. The menus
-  and the HUD show them as Fairy.
+  and the HUD show them as Fairy, and a pink filter turns their effects pink.
 - **Cute Charm**: each contact move that hits it has a 30% chance of infatuating the attacker, one roll per
   second at most. Infatuated, half of the moves it tries fail for 8 s or until either one leaves the field: it is
   stunned for a moment and the move's cooldown runs, at most 4 s, but nothing is spent. It cannot come back

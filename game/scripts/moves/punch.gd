@@ -82,7 +82,7 @@ func _sonic_boom(col: Color) -> void:
 	ring.call(at - fwd * 0.5, 1.8, col, 0.32)
 	l.get_tree().create_timer(d.active * 0.45, false, true).timeout.connect(func():
 		if is_instance_valid(l):
-			ring.call(l.point("locator_hand_primary") + l.forward() * 0.3, 1.5, bright, 0.24))
+			Vfx.pink_if(pixilated(), ring.bind(l.point("locator_hand_primary") + l.forward() * 0.3, 1.5, bright, 0.24)))
 	for k in 6:
 		var off := Vector3(randf_range(-0.6, 0.6), randf_range(-0.4, 0.6), 0.0)
 		vfx.burst("sparks", l.center() + face * off, -fwd, bright, 0.5)

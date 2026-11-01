@@ -820,8 +820,9 @@ func _status_move(md: Dictionary, info: Dictionary) -> String:
 		main.vfx.text(center() + Vector3.UP * 0.9, why, Color(0.75, 0.77, 0.85))
 		return "status"
 	var at: Fighter = info.attacker if info.attacker is Fighter else null
-	for piece in md.get("fx_hit", []):
-		main.vfx.cobble(piece, center(), at.center() if at else null, data.height)
+	Vfx.pink_if(info.hit.pink, func():
+		for piece in md.get("fx_hit", []):
+			main.vfx.cobble(piece, center(), at.center() if at else null, data.height))
 	main.audio.play_sound(info.hit.move_id + "_hit", center(), -3.0)
 	return "status"
 
@@ -1467,7 +1468,10 @@ func receive(info: Dictionary) -> String:
 		if action.d.get("protects", false) and g.contact and at and is_instance_valid(at) and at.data.passive.id == "unseenfist":
 			main.vfx.text(center() + Vector3.UP * 0.9, tr("Unseen Fist"), Roster.TYPE_COLOR.fighting)
 		else:
+			var was := Vfx.pink
+			Vfx.pink = action.pixilated()
 			var r: String = action.intercept(info)
+			Vfx.pink = was
 			if r != "":
 				return r
 	var md: Dictionary = Moves.DATA.get(g.move_id, {})
@@ -1987,7 +1991,7 @@ func _process(delta: float) -> void:
 	model.set_param("flash", _flash * 0.7)
 	var tint_col := Vector3.ZERO
 	if action and action.tint_col != Color.BLACK:
-		var c := action.tint_col
+		var c := Vfx.pink_color(action.tint_col) if action.pixilated() else action.tint_col
 		tint_col = Vector3(c.r, c.g, c.b) * action.tint_k
 	if slow < 1.0:
 		tint_col += Vector3(0.1, 0.25, 0.35)
