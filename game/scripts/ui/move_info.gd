@@ -4,8 +4,9 @@ extends RefCounted
 ## ours (cooldown, energy, timings, knockback, poise...), each with a bar from 0 to 1 and
 ## the exact figure. Everything comes from Moves.DATA, so a change there shows here.
 
-## [label, bar 0-1 (or -1: no bar), figure] rows.
-static func rows(id: String) -> Array:
+## [label, bar 0-1 (or -1: no bar), figure] rows. With the ability it is used with: Prankster
+## shortens a status move's cooldown and wind-up.
+static func rows(id: String, ability := "") -> Array:
 	var d: Dictionary = Moves.DATA[id]
 	var out: Array = []
 	var power: float = d.get("power", 0)
@@ -17,10 +18,10 @@ static func rows(id: String) -> Array:
 	var acc: float = d.get("accuracy", 0)
 	out.append([TranslationServer.translate("Tracking"), 1.0 if acc <= 0.0 else pow(acc / 100.0, 2.5),
 		TranslationServer.translate("Never misses") if acc <= 0.0 else "%d%%" % acc])
-	var cd := Moves.cooldown(id)
+	var cd := Moves.cooldown(id) * Moves.time_mult(id, ability)
 	out.append([TranslationServer.translate("Cooldown"), clampf(cd / 14.0, 0.0, 1.0), "%.1f s" % cd])
 	out.append([TranslationServer.translate("Energy"), clampf(float(d.get("cost", 0.0)) / 40.0, 0.0, 1.0), "%d" % int(d.get("cost", 0.0))])
-	var startup: float = d.get("startup", 0.0)
+	var startup: float = d.get("startup", 0.0) * Moves.time_mult(id, ability)
 	out.append([TranslationServer.translate("Wind-up"), clampf(startup / 1.4, 0.0, 1.0), "%.2f s" % startup])
 	out.append([TranslationServer.translate("Recovery"), clampf(float(d.get("recovery", 0.0)) / 1.0, 0.0, 1.0), "%.2f s" % float(d.get("recovery", 0.0))])
 	if d.get("cat", "") != "status":
@@ -54,6 +55,10 @@ static func facts(id: String) -> Array:
 		out.append(TranslationServer.translate("Knocks down"))
 	if d.get("crit", false):
 		out.append(TranslationServer.translate("Always a critical hit"))
+	if d.get("power_by", "") == "weight":
+		out.append(TranslationServer.translate("Power depends on the target's weight"))
+	if d.has("target_boost") and d.get("cat", "") == "status":
+		out.append(TranslationServer.translate("Lowers the rival's stats"))
 	if d.has("secondary"):
 		var sec: Dictionary = d.secondary
 		var what := ""

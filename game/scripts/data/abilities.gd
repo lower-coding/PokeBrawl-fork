@@ -43,4 +43,6 @@ const DATA := {
 		"text": "The sandstorm does not hurt it, and powder moves do nothing to it."},
 	"cutecharm": {"display_name": "Cute Charm",
 		"text": "Each contact move that hits it has a 30% chance of infatuating the attacker for 8 s: half of its moves fail, unless either one leaves the field."},
+	"infiltrator": {"display_name": "Infiltrator",
+		"text": "Its moves go through Light Screen and a Substitute's doll, and a Substitute's user cannot hide from it."},
 }

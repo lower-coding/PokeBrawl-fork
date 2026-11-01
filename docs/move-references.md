@@ -374,3 +374,32 @@ a longer wind-up.
 
 **Tailwind** · *Now:* a pulse of wind 7 m around the caster: it and an ally inside move faster for 12 s (4 turns at 3 s a turn). Speed ×2 through the Speed formula, so about ×1.3 to ×1.5 of movement.
 - [Games] The whole side, 4 turns, Speed ×2.
+
+---
+
+## Whimsicott
+**Research still owed:** Pokkén, Smash and anime references were not researched for these five moves (Whimsicott is not in
+Pokkén or Smash as a fighter). Their looks come from the games' descriptions and Cobblemon's own pieces.
+
+**Grass Knot** · *Now:* it stamps and a line of grass runs along the ground to the rival, a tuft rising where it passes, then
+curls up under its feet for a moment and snaps shut. It keeps chasing while it curls up, so running does not help: jump or
+dodge. Special, contact, and its power goes by the target's weight.
+- [Games] 20 to 120 power by weight (20 under 10 kg, 120 from 200 kg). It hits anything, flyers too, with no range.
+
+**Charm** · *Now:* a short wiggle and a big pink heart floats out and follows the rival; on a hit, hearts burst around it and its
+Attack falls two stages. Two uses per battle, even when it misses.
+- [Games] -2 Attack, 100% accurate.
+
+**Cotton Spore** · *Now:* it shakes itself and white cotton spills out in a short, wide cone. Whoever is in it loses two Speed stages.
+Grass types and Overcoat ignore it, Sap Sipper takes it as food.
+- [Games] -2 Speed to every adjacent foe, a powder move.
+
+**Cotton Guard** · *Now:* cotton gathers until the body is wrapped in it (Cobblemon's own particles). Defense +3 at the end of the
+active phase, once per battle; a hit that cuts it costs the boost and the use.
+- [Games] +3 Defense, never misses.
+
+**Light Screen** · *Now:* a wall of light rises around it with Cobblemon's sequence. Its whole side takes half the special damage for
+15 s (×2/3 in a 2 vs 2), and a special hit on them flashes the wall. Critical hits and Infiltrator go through it, and Brick Break
+shatters it.
+- [Games] 5 turns, ×0.5 to special damage (×2/3 in doubles), the whole side; critical hits ignore it; Brick Break, Psychic Fangs
+  and Defog remove it.

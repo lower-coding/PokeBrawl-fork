@@ -16,12 +16,16 @@ extends RefCounted
 ## lowered attack and the target's raised defense. One with "hits_def" is special but measured
 ## against the target's Defense, not its Sp. Def (Psyshock). Pixilate turns the user's Normal moves
 ## into Fairy ones (Moves.type_for), for STAB and the weather too, and they hit ×1.2 (PIXILATE).
+## Light Screen halves the special damage its side takes (×2/3 in a 2 vs 2): a critical hit and
+## Infiltrator go through it (SCREEN, screen_mult). Grass Knot's power goes by the target's weight.
 
 const BATTLE_LENGTH := 4.2
 const STAB := 1.5
 const CRIT := 1.5
 const ROLL := 0.925
 const PIXILATE := 1.2
+const SCREEN := 0.5
+const SCREEN_DOUBLES := 2.0 / 3.0
 
 
 ## Damage of hit "g" from "attacker" to "target" ("affinity": type effectiveness). Without
@@ -32,8 +36,9 @@ static func dealt(g: Hit, attacker: Fighter, target: Fighter, affinity: float) -
 		attacker = g.source
 	var d: Dictionary = Moves.DATA.get(g.move_id, {})
 	var power := power_of(d, attacker, target)
+	var screen := screen_mult(g, d, attacker, target)
 	if power <= 0.0 or attacker == null or not attacker.data.has("stats") or not target.data.has("stats"):
-		return g.damage * affinity * g.bonus
+		return g.damage * affinity * g.bonus * screen
 	var physical := g.cat == "physical"
 	var crit: bool = d.get("crit", false)
 	var atk_stage: float = attacker.stage_mult("atk" if physical else "spa")
@@ -62,7 +67,16 @@ static func dealt(g: Hit, attacker: Fighter, target: Fighter, affinity: float) -
 	var share: float = g.damage / maxf(float(d.get("power_at", d.get("damage", g.damage))), 0.01)
 	if w:
 		base *= w.type_mult(type)
-	return base * affinity * ROLL * Stats.HP_MULT / BATTLE_LENGTH / float(d.get("split", 1)) * share * g.bonus
+	return base * affinity * ROLL * Stats.HP_MULT / BATTLE_LENGTH / float(d.get("split", 1)) * share * g.bonus * screen
+
+
+## Light Screen on the target's side. A critical hit and Infiltrator go through it.
+static func screen_mult(g: Hit, d: Dictionary, attacker: Fighter, target: Fighter) -> float:
+	if g.cat != "special" or d.get("crit", false) or not target.main.screen_on(target.team):
+		return 1.0
+	if attacker and attacker.data.passive.id == "infiltrator":
+		return 1.0
+	return SCREEN_DOUBLES if target.main.doubles else SCREEN
 
 
 ## The power it hits with: the games', and Pixilate's on the Normal moves of whoever has it.
@@ -73,7 +87,7 @@ static func power_of(d: Dictionary, attacker: Fighter, target: Fighter) -> float
 	return power
 
 
-## The move's power in the games; Electro Ball's depends on how much faster the user is.
+## The move's power in the games; Electro Ball's depends on how much faster the user is, and Grass Knot's on the target's weight.
 static func base_power(d: Dictionary, attacker: Fighter, target: Fighter) -> float:
 	if d.get("power_by", "") == "speed" and attacker and target and attacker.data.has("stats"):
 		var ratio: float = float(attacker.data.stats.spe) / maxf(float(target.data.stats.spe), 1.0)
@@ -86,6 +100,13 @@ static func base_power(d: Dictionary, attacker: Fighter, target: Fighter) -> flo
 		if ratio >= 1.0:
 			return 60.0
 		return 40.0
+	# Grass Knot: Showdown's thresholds, in kg.
+	if d.get("power_by", "") == "weight" and target:
+		var kg := float(target.data.get("weight_kg", 100.0))
+		for step in [[200.0, 120.0], [100.0, 100.0], [50.0, 80.0], [25.0, 60.0], [10.0, 40.0]]:
+			if kg >= step[0]:
+				return step[1]
+		return 20.0
 	# Facade: twice the power while the user is burned, poisoned or paralyzed.
 	if d.get("power_by", "") == "status" and attacker and attacker.has_status():
 		return float(d.get("power", 0)) * 2.0

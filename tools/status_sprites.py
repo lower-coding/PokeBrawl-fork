@@ -151,9 +151,25 @@ def spark(fr, f, n):
                 put(fr, x, y, (255, 150, 226, 255))
 
 
+# ---------------------------------------------------------------- Charm: a pink heart
+def heart(fr, f, n):
+    s = fr.size[0]
+    c = (s - 1) / 2
+    pulse = 1.0 + 0.1 * math.sin(f / n * math.tau)
+    for y in range(s):
+        for x in range(s):
+            hx = (x - c) / (5.8 * pulse)
+            hy = -(y - c - 0.8) / (5.8 * pulse)
+            if (hx * hx + hy * hy - 1) ** 3 - hx * hx * hy ** 3 <= 0:
+                put(fr, x, y, (255, 112, 168, 255) if hy < 0.55 or hx * hx + hy * hy > 0.8 else (255, 160, 200, 255))
+    for x, y in ((4, 4), (5, 3), (4, 5)):
+        put(fr, x, y, (255, 226, 240, 255))
+
+
 strip("toxic_bubble", 12, 4, toxic_bubble)
 strip("willowisp", 16, 6, wisp)
 strip("hypnosis_rings", 24, 6, hypno)
 strip("psy_ring", 25, 1, psy_ring)
 strip("yawn_bubble", 16, 4, bubble)
 strip("disable_spark", 10, 4, spark)
+strip("charm_heart", 16, 4, heart)

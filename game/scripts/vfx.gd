@@ -955,6 +955,20 @@ func pop(tex_path: String, frames: int, frame: int, pos: Vector3, size: float, d
 		mi.scale = Vector3.ONE * maxf(0.01, snappedf(size * sin(k * PI), size * 0.2)))
 
 
+## An opaque pixel strip facing the camera, played once over "dur". sprite_anim adds its color to
+## the scene, so a dark or saturated one washes out over a bright floor; this one paints over it.
+func solid_anim(tex_path: String, frames: int, pos: Vector3, dims: float, dur: float, tint := Color.WHITE) -> void:
+	var mi := MeshInstance3D.new()
+	mi.mesh = QuadMesh.new()
+	var m := mat("pixel_pop", VfxShaders.PIXEL_POP, {"strip": load(tex_path), "frames": float(frames), "tint": tint})
+	mi.material_override = m
+	mi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	add_child(mi)
+	mi.global_position = pos
+	mi.scale = Vector3.ONE * dims
+	live(mi, dur, func(k: float): m.set_shader_parameter("frame", float(mini(int(k * frames), frames - 1))))
+
+
 var _extrusions := {}
 
 

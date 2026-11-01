@@ -894,6 +894,25 @@ def voice_arc(px, side, f, n, rnd):
                     put(px, side, x, y, color)
 
 
+def grassknot_tuft(px, side, f, n, rnd):
+    """The tuft of grass Grass Knot raises where it passes: blades shoot up from the ground, lean over
+    and sink back (rise over the first half of the strip, fall over the second)."""
+    k = math.sin((f + 0.5) / n * math.pi)          # growing, at the top, sunk again
+    blades = [(side * 0.06, 0.5, -0.14), (side * 0.2, 0.8, -0.1), (side * 0.34, 0.65, -0.04), (side * 0.46, 1.0, 0.0),
+        (side * 0.58, 0.7, 0.06), (side * 0.72, 0.95, 0.1), (side * 0.86, 0.55, 0.16)]
+    for bx, hmax, lean in blades:
+        h = int(round(side * 0.7 * hmax * k))
+        for i in range(h):
+            t = i / max(h - 1, 1)
+            x = int(round(bx + lean * i * (1 + t)))
+            y = side - 1 - i
+            for w in (0, 1, 2):
+                col = hexc("0f7a1e") if w == 2 else hexc("2bd92b") if t < 0.7 else hexc("7dff2e")
+                if (t > 0.85 and w > 0) or (t > 0.6 and w == 2):
+                    continue
+                put(px, side, x + w, y, col)
+
+
 if __name__ == "__main__":
     os.makedirs(OUTPUT, exist_ok=True)
     strip(6, 30, electro_ball, "electroball.png", 7)
@@ -921,3 +940,4 @@ if __name__ == "__main__":
     strip(4, 16, swift_star, "swift_star.png", 107)
     strip(4, 64, gleam_band, "gleam_band.png", 109)
     strip(1, 96, voice_arc, "voice_arc.png", 113)
+    strip(6, 32, grassknot_tuft, "grassknot_tuft.png", 127)

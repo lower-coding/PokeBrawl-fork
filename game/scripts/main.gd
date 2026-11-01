@@ -34,6 +34,7 @@ var player_ai: AI               # only with --aivsai (tests)
 var net: Net                     # online only
 var fighters: Array = []          # those out on the field, by slot: two, or four in a 2 vs 2
 var parties: Array = []           # each slot's Party, same order; empty in a 1 vs 1
+var screen_t := {}                # team -> seconds left of its Light Screen
 var doubles := false              # a 2 vs 2
 var friendly_fire := false        # moves can hurt an ally (BattleRules)
 var winning_team := -1            # the side that won, once a battle is over
@@ -244,6 +245,7 @@ func start_battle(p1: String, p2: String, diff: String, rival_loadout := {}, riv
 	music.play(arena.stage, true)
 	vfx.clear()
 	weather.clear()
+	screen_t.clear()
 	_clear_parties()
 	for l in fighters:
 		l.queue_free()
@@ -609,6 +611,7 @@ func rematch() -> void:
 		p.restart()
 	var a: Fighter = fighters[0]
 	weather.clear()
+	screen_t.clear()
 	combat.clear()
 	vfx.clear()
 	for f in fighters:
@@ -908,6 +911,11 @@ func _copy_of(d: Dictionary) -> Fighter:
 	return f if f and d.get("sp", f.species) == f.species else null
 
 
+## Whether this team has a Light Screen up.
+func screen_on(team: int) -> bool:
+	return screen_t.get(team, 0.0) > 0.0
+
+
 ## An ally's move gives "f" this: here, and on the other copies.
 func give_buff(kind: String, f: Fighter, secs: float, mult := 1.0) -> void:
 	f.take_buff(kind, secs, mult)
@@ -997,6 +1005,8 @@ func shake_camera(k: float, pos: Vector3) -> void:
 # ---------------------------------------------------------------- player input
 
 func _physics_process(delta: float) -> void:
+	for team in screen_t:
+		screen_t[team] = maxf(0.0, screen_t[team] - delta)
 	if intro_t > 0.0:
 		intro_t -= delta
 		if intro_t <= 0.0:

@@ -381,7 +381,7 @@ void fragment() {
 """
 
 ## One frame of a pixel strip (frames across or down), facing the camera and tinted: the
-## fists of Close Combat popping in and out (Vfx.pop scales it).
+## fists of Close Combat popping in and out (Vfx.pop scales it), Grass Knot's tufts (Vfx.solid_anim).
 const PIXEL_POP := """
 shader_type spatial;
 render_mode unshaded, depth_draw_never, cull_disabled, blend_mix, shadows_disabled;

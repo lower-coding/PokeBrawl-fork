@@ -2,7 +2,8 @@ extends Action
 ## Substitute: Gengar leaves an identical doll where it stood and the rival locks onto
 ## the doll (its camera and its moves go there; the AI falls for it too). Gengar turns
 ## truly invisible, and faster, for "dur" or until it uses a move. The doll lasts
-## "decoy_dur" or until the first hit. Whoever plays Gengar sees it as a faint ghost.
+## "decoy_dur" or until the first hit. Whoever plays Gengar sees it as a faint ghost, and so does
+## an Infiltrator, which the doll does not fool.
 
 
 func on_start() -> void:
@@ -21,7 +22,7 @@ func on_active() -> void:
 	main.combat.targets.append(decoy)
 	l.translucent = d.dur
 	for r in l.foes():
-		if r.rival == l:
+		if r.rival == l and not r.sees_through(decoy):
 			r.fooled_by = decoy
 	main.vfx.burst("shadow", l.center(), Vector3.UP, Color(0, 0, 0, 0), 1.4)
 	main.vfx.burst("smoke", l.global_position, Vector3.UP, Color(0, 0, 0, 0), 1.0)
