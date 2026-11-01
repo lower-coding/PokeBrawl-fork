@@ -71,6 +71,10 @@ const COBBLEMON := {
 	"allyswitch": ["kinesis", "kinesis_actor"], "helpinghand": ["nastyplot", "nastyplot_actor"], "tailwind": ["quickattack", "quickattack_actor"],
 	"dazzlinggleam": ["lightscreen", "lightscreen_actor"], "dazzlinggleam_hit": ["psychic", "psychic_target"],
 	"hypervoice": ["sing", "sing_actor"], "hypervoice_hit": ["kinesis", "kinesis_target"],
+	"grassknot": ["razorleaf", "razorleaf_actor"], "grassknot_hit": ["leechseed", "leechseed_target"],
+	"charm": ["sing", "sing_actor"], "charm_hit": ["psychic", "psychic_target"],
+	"cottonspore": ["stunspore", "stunspore_actor"], "cottonspore_hit": ["stunspore", "stunspore_target"],
+	"cottonguard": ["cottonguard", "cottonguard_actor"], "lightscreen": ["lightscreen", "lightscreen_actor"],
 }
 
 var main: Node

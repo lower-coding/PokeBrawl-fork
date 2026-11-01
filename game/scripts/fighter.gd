@@ -380,9 +380,19 @@ func ally() -> Fighter:
 func lock_candidates() -> Array:
 	var out: Array = foes()
 	for o in main.combat.targets:
-		if o is Decoy and is_instance_valid(o) and is_instance_valid(o.user) and o.user.team != team and not o.is_queued_for_deletion():
+		if o is Decoy and is_instance_valid(o) and is_instance_valid(o.user) and o.user.team != team and not o.is_queued_for_deletion() and not sees_through(o):
 			out.append(o)
 	return out
+
+
+## Infiltrator: a Substitute's doll neither fools it nor stops its moves. Double Team's clones do.
+func sees_through(o: Node) -> bool:
+	return data.passive.id == "infiltrator" and o is Decoy and o.kind == "substitute"
+
+
+## A move's cooldown for this Pokémon: Prankster shortens its status moves'.
+func cooldown_of(move: String) -> float:
+	return Moves.cooldown(move) * Moves.time_mult(move, data.passive.id)
 
 
 ## Whom a lock now points at: a Fighter is the rival; a decoy, its user fooling it.
@@ -531,7 +541,7 @@ func _love_fails(button: String) -> bool:
 func _immobilized(move: String, button: String) -> bool:
 	if charmed_by == "" or not _love_fails(button):
 		return false
-	var cooldown: float = minf(Moves.cooldown(move), LOVE_CD)
+	var cooldown: float = minf(cooldown_of(move), LOVE_CD)
 	stun_target(LOVE_T)
 	cds[move] = cooldown
 	main.vfx.text(center() + Vector3.UP * 0.9, tr("Immobilized by love!"), LOVE_COLOR)
@@ -684,6 +694,10 @@ func take_buff(kind: String, secs: float, mult: float) -> void:
 		"tailwind":
 			tailwind_t = secs
 			main.vfx.text(center() + Vector3.UP * 1.0, tr("Tailwind!"), TAILWIND_COLOR)
+		"lightscreen":
+			main.screen_t[team] = secs
+			var said := tr("Light Screen!") if secs > 0.0 else tr("The screen broke!")
+			main.vfx.text(center() + Vector3.UP * 1.0, said, Roster.TYPE_COLOR.psychic)
 
 
 ## Online copy: moves toward the rival's real state (position extrapolated with the
@@ -921,6 +935,14 @@ func _status_move(md: Dictionary, info: Dictionary) -> String:
 	if md.has("disables"):
 		if not _disable_all(float(md.disables)):
 			why = tr("No effect")
+	elif md.has("target_boost"):
+		if md.get("powder", false) and ("grass" in types or data.passive.id == "overcoat"):
+			why = tr("No effect")
+		elif md.target_boost.keys().all(func(stat): return stages[stat] <= -6):
+			why = tr("It won't go any lower")
+		else:
+			for stat in md.target_boost:
+				boost(stat, int(md.target_boost[stat]))
 	elif (md.get("respects_types", false) and Roster.immune(info.hit.type, types)) \
 			or (md.get("powder", false) and ("grass" in types or data.passive.id == "overcoat")) \
 			or not Status.can_get("slp" if kind == "drowsy" else kind, types, data.passive.id):
@@ -994,7 +1016,7 @@ func _cut_cooldown() -> void:
 func _start_cooldown(move: String) -> void:
 	if action and action.id == move and action.free_of_cost:
 		return
-	var c: float = Moves.cooldown(move)
+	var c: float = cooldown_of(move)
 	if c > 0.0:
 		cds[move] = maxf(cds.get(move, 0.0), c)
 
@@ -1091,7 +1113,7 @@ func _timers(delta: float) -> void:
 func _sees_ghost() -> bool:
 	if is_player or (main.net != null and not is_remote and slot == 0):
 		return true
-	return main.player != null and main.player.is_player and main.player.team == team
+	return main.player != null and main.player.is_player and (main.player.team == team or main.player.data.passive.id == "infiltrator")
 
 
 ## Out of everyone's sight: under the ground (Dig), gone in a move or a dodge, or in its Substitute
@@ -1466,6 +1488,8 @@ func start(move: String, button: String, extra := {}) -> void:
 	if data.passive.id == "protean" and d.cat != "status" and types != [d.type]:
 		types = [d.type]
 		main.vfx.text(center() + Vector3.UP * 0.9, tr(Roster.TYPE_NAME[d.type]), Roster.TYPE_COLOR[d.type])
+	# Solar Beam sets its own startup_mult in on_start(), and is not a status move.
+	a.startup_mult = Moves.time_mult(move, data.passive.id)
 	a.start()
 	for i in lead:
 		if a.finished or action != a:
@@ -1715,6 +1739,9 @@ func receive(info: Dictionary) -> String:
 		return "absorbed"
 	if g.cat == "status":
 		return _status_move(md, info)
+	# Brick Break shatters the screen of whoever it hits, unless that one is immune to it.
+	if md.get("breaks_screens", false) and main.screen_on(team) and not Roster.immune(g.type, types):
+		main.give_buff("lightscreen", self, 0.0)
 	# A Fire hit thaws it out, as in the games.
 	if status == "frz" and g.type == "fire":
 		main.vfx.text(center() + Vector3.UP * 0.9, tr("Thawed out!"), Status.COLOR.frz)
@@ -1723,6 +1750,9 @@ func receive(info: Dictionary) -> String:
 	var damage: float = Damage.dealt(g, at if at and is_instance_valid(at) else null, self, info.affinity) * vulnerable * (2.0 if underground and g.move_id == "earthquake" else 1.0)
 	if at and is_instance_valid(at):
 		damage *= at.outgoing_mod(g, self)
+	# Light Screen: the wall flashes where a special hit was cut.
+	if not info.get("flow", false) and Damage.screen_mult(g, md, g.source if g.source is Fighter and is_instance_valid(g.source) else at, self) < 1.0:
+		main.vfx.burst("stars", info.point, Vector3.UP, Roster.TYPE_COLOR.psychic, 0.6)
 	if data.passive.id == "thickfat" and g.type in ["fire", "ice"]:
 		damage *= 0.5
 		main.vfx.text(center() + Vector3.UP * 0.9, tr("Thick Fat"), Color(0.95, 0.9, 0.8))

@@ -203,6 +203,16 @@ const POKEMON := {
 		"passive": {"id": "pixilate", "display_name": "Pixilate",
 			"text": "Its Normal moves become Fairy moves and hit 1.2 times as hard."},
 	},
+	"whimsicott": {
+		"display_name": "Whimsicott", "types": ["grass", "fairy"], "cat": "special",
+		"style": "Light as cotton and hard to pin down. It drifts out of reach, saps the rival's strength and speed, and trips the heavy ones.",
+		"height": 1.05, "radius": 0.45, "poise": 0, "hp": 880.0, "knockback": 1.3,
+		"speed": 8.4, "accel": 70.0, "turn": 18.0, "jump": 8.2, "gravity": 18.0, "air_control": 0.95,
+		"dodge": {"dist": 6.1, "dur": 0.22, "iframes": [0.03, 0.19], "recovery": 0.14, "charges": 3, "recharge": 1.0},
+		"moves": ["moonblast", "grassknot", "charm", "cottonspore"],
+		"passive": {"id": "prankster", "display_name": "Prankster",
+			"text": "Its status moves wind up 10% faster and their cooldowns are 10% shorter."},
+	},
 }
 
 ## Soft type matchups: a disadvantage matters, but it does not decide the battle on its own.

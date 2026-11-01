@@ -11,7 +11,8 @@ extends RefCounted
 ##                                 of 15, Hydro Pump 6 of 10): nobody lands them all, so a well
 ##                                 aimed stream reaches one use and holding it on longer, more
 ##   power_by                      power not fixed in the games: "speed" (Electro Ball), "status"
-##                                 (Facade), "lowered" (Lash Out: double while Fighter.lowered_t runs)
+##                                 (Facade), "lowered" (Lash Out: double while Fighter.lowered_t runs),
+##                                 "weight" (Grass Knot: 20 under 10 kg up to 120 from 200 kg)
 ##   crit                          always a critical hit (Damage.CRIT): ignores the user's lowered
 ##                                 attack and the target's raised defense
 ##   needs_attacking               only connects while the target winds up or runs a move that
@@ -21,6 +22,13 @@ extends RefCounted
 ##   disables                      seconds every move of the target not already cooling down has
 ##                                 to wait (Disable, Fighter._disable_all)
 ##   boosts                        stat -> stages it gains at the end of a self boost (selfboost.gd)
+##   target_boost                  stat -> stages the target gets. On a hit that deals damage, after
+##                                 the hit ("boost_chance"); on a status move (Charm, Cotton Spore),
+##                                 as its whole effect (Fighter._status_move)
+##   breaks_screens                its hit shatters the target side's Light Screen unless the target
+##                                 is immune to its type (Brick Break)
+##   follow, reach_up              Grass Knot: m/s the knot keeps chasing while it curls up; how many
+##                                 meters above the ring still count as touching the ground
 ##   off_edge                      it can carry the user off a stage's edge (Teleport); no other
 ##                                 move does (Fighter._edge_stop)
 ##   power_at                      the "damage" value that equals one use in the games (Aura
@@ -68,6 +76,15 @@ extends RefCounted
 static func type_for(id: String, ability: String) -> String:
 	var type: String = DATA[id].type if DATA.has(id) else "normal"
 	return "fairy" if type == "normal" and ability == "pixilate" else type
+
+
+## Prankster: a status move's wind-up and cooldown are this share of what they are.
+const PRANKSTER := 0.9
+
+
+## What an ability leaves of a move's wind-up and cooldown: Prankster shortens status moves.
+static func time_mult(id: String, ability: String) -> float:
+	return PRANKSTER if ability == "prankster" and DATA[id].get("cat", "") == "status" else 1.0
 
 
 ## Cooldown in seconds: strong moves and those with few PP take longer. A 40-power move
@@ -585,7 +602,7 @@ const DATA := {
 		"ai": {"min": 0.0, "max": 3.0, "kind": "punish", "value": 1.3},
 		"counterplay": "The turn gives it away: back off or dodge through it."},
 	"brickbreak": {"fx_hit": ["closecombat_target2", "rockslide_targetbreak"],
-		"deflects": 1, "display_name": "Brick Break", "script": "res://scripts/moves/strike.gd", "motion": "chop", "type": "fighting", "cat": "physical", "power": 75, "pp": 15, "accuracy": 100, "priority": 0,
+		"breaks_screens": true, "deflects": 1, "display_name": "Brick Break", "script": "res://scripts/moves/strike.gd", "motion": "chop", "type": "fighting", "cat": "physical", "power": 75, "pp": 15, "accuracy": 100, "priority": 0,
 		"cost": 15.0, "startup": 0.26, "active": 0.12, "recovery": 0.34, "damage": 75.0, "stun": 0.45,
 		"strength": 1, "reach": 1.5, "radius": 0.95, "advance": 2.5, "hit_height": 0.55, "sound": "brickbreak",
 		"desc": "A straight-down chop that cracks the ground.",
@@ -832,6 +849,40 @@ const DATA := {
 		"desc": "A great shout spreads across the field in waves of sound.",
 		"ai": {"min": 2.0, "max": 13.0, "kind": "projectile", "value": 1.2},
 		"counterplay": "Up close it is too tall to jump: dodge through it. Further away it is low enough to jump."},
+	# ---------------------------------------------------------------- Whimsicott
+	"grassknot": {"fx_hit": ["magicalleaf_targetspark", "leafage_target"],
+		"display_name": "Grass Knot", "script": "res://scripts/moves/grassknot.gd", "type": "grass", "cat": "special", "power": 0, "pp": 20, "accuracy": 100, "priority": 0, "power_by": "weight",
+		"cost": 16.0, "startup": 0.24, "active": 0.08, "recovery": 0.3, "damage": 80.0, "stun": 0.45,
+		"strength": 1, "speed": 19.0, "follow": 6.0, "warn": 0.25, "reach": 14.0, "radius": 1.4, "reach_up": 0.5,
+		"desc": "Grass snares the target's feet. The heavier it is, the harder it falls.",
+		"ai": {"min": 3.0, "max": 13.0, "kind": "projectile", "value": 1.0, "only_if": "rival_heavy"},
+		"counterplay": "Running does not help: jump or dodge when the grass curls up at your feet."},
+	"charm": {"fx_startup": [["disarmingvoice_actorhearts", "center"]], "fx_hit": ["disarmingvoice_targetsparks", "fairywind_targethit"],
+		"display_name": "Charm", "script": "res://scripts/moves/statusshot.gd", "type": "fairy", "cat": "status", "power": 0, "pp": 20, "accuracy": 100, "priority": 0,
+		"target_boost": {"atk": -2}, "color": Color(1.0, 0.6, 0.82), "cost": 14.0, "cd": 12.0, "uses": 2, "startup": 0.3, "active": 0.1, "recovery": 0.3,
+		"speed": 13.0, "reach": 15.0, "radius": 0.45,
+		"desc": "A charming heart that follows the target and sharply lowers its Attack. Twice per battle.",
+		"ai": {"min": 3.0, "max": 14.0, "kind": "projectile", "value": 0.9, "only_if": "rival_physical"},
+		"counterplay": "It flies slowly: sidestep late or dodge through it. It does nothing to special moves."},
+	"cottonspore": {"fx_hit": ["cottonspore_land"],
+		"display_name": "Cotton Spore", "script": "res://scripts/moves/powder.gd", "type": "grass", "cat": "status", "power": 0, "pp": 40, "accuracy": 100, "priority": 0,
+		"target_boost": {"spe": -2}, "powder": true, "cost": 12.0, "cd": 9.0, "startup": 0.3, "active": 0.5, "recovery": 0.35,
+		"length": 4.5, "angle": 0.8, "color": Color(0.95, 0.95, 0.9),
+		"desc": "Shakes out a wide cloud of cotton in front. It sharply lowers Speed. Short reach.",
+		"ai": {"min": 0.0, "max": 4.5, "kind": "punish", "value": 0.9},
+		"counterplay": "Short reach: stay away or dodge through it. Grass types ignore it."},
+	"cottonguard": {"fx_startup": [["cottonguard", "center"]],
+		"display_name": "Cotton Guard", "script": "res://scripts/moves/selfboost.gd", "type": "grass", "cat": "status", "power": 0, "pp": 10, "accuracy": 0, "priority": 0,
+		"boosts": {"def": 3}, "cost": 16.0, "cd": 12.0, "uses": 1, "startup": 0.2, "active": 0.5, "recovery": 0.3,
+		"desc": "Wraps itself in cotton, open to hits: Defense rises three stages. Once per battle.",
+		"ai": {"min": 6.0, "max": 99.0, "kind": "buff", "value": 1.0, "only_if": "rival_physical"},
+		"counterplay": "It cannot defend itself while it wraps: punish it. Afterwards, switch to special moves."},
+	"lightscreen": {
+		"display_name": "Light Screen", "script": "res://scripts/moves/lightscreen.gd", "type": "psychic", "cat": "status", "power": 0, "pp": 30, "accuracy": 0, "priority": 0,
+		"buff_dur": 15.0, "cost": 18.0, "cd": 30.0, "startup": 0.3, "active": 0.1, "recovery": 0.3,
+		"desc": "A wall of light cuts special damage to its side by half for 15 s.",
+		"ai": {"min": 6.0, "max": 99.0, "kind": "buff", "value": 0.9, "only_if": "rival_special"},
+		"counterplay": "It does nothing to physical moves, and Brick Break shatters it. Critical hits and Infiltrator go through."},
 	# ---------------------------------------------------------------- For an ally (2 vs 2)
 	"allyswitch": {
 		"display_name": "Ally Switch", "script": "res://scripts/moves/allyswitch.gd", "type": "psychic", "cat": "status", "power": 0, "pp": 15, "accuracy": 0, "priority": 2,

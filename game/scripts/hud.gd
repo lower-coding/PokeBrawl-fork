@@ -439,6 +439,8 @@ func stage_tags(l: Fighter) -> Array:
 		tags.append(["%s %d" % [tr("Help"), ceili(l.help_t)], true])
 	if l.tailwind_t > 0.0:
 		tags.append(["%s %d" % [tr("Wind"), ceili(l.tailwind_t)], true])
+	if l.main.screen_on(l.team):
+		tags.append(["%s %d" % [tr("Screen"), ceili(l.main.screen_t[l.team])], true])
 	return tags
 
 
@@ -521,14 +523,15 @@ func _moves(l: Fighter, g0: Vector2) -> void:
 			_text((g + Vector2(75, 14)) * _s, datum, pl, Color(dcol, a), 0)
 		# Cooldown and charge: a line at the bottom of the tile.
 		if missing > 0.0:
-			_rect(g + Vector2(2, 21), Vector2(87 * cooldown_done(missing, move), 1), Color(1, 1, 1, 0.55))
+			_rect(g + Vector2(2, 21), Vector2(87 * cooldown_done(missing, l.cooldown_of(move)), 1), Color(1, 1, 1, 0.55))
 		if using and d.get("chargeable", false) and l.action.phase == "startup":
 			_rect(g + Vector2(2, 21), Vector2(87 * l.action.charge, 1), INK)
 
 
-## How much of a move's cooldown has gone by; none while more is left than its own (a Disable).
-static func cooldown_done(missing: float, move: String) -> float:
-	return maxf(1.0 - missing / maxf(Moves.cooldown(move), 0.01), 0.0)
+## How much of a cooldown ("full", seconds, as the fighter has it) has gone by; none while more is left
+## than its own (a Disable).
+static func cooldown_done(missing: float, full: float) -> float:
+	return maxf(1.0 - missing / maxf(full, 0.01), 0.0)
 
 
 ## The player's dodges (diamonds) and energy, above the moves.

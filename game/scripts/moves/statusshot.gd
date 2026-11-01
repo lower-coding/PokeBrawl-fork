@@ -1,6 +1,7 @@
 extends Action
-## Status moves fired at the rival (Will-O-Wisp, Thunder Wave, Hypnosis, Yawn): no
-## damage or stun, only the status ("inflicts") if they touch (Fighter._status_move). How
+## Status moves fired at the rival (Will-O-Wisp, Thunder Wave, Hypnosis, Yawn, Charm): no
+## damage or stun, only the status ("inflicts") or the stat drop ("target_boost") if they touch
+## (Fighter._status_move). How
 ## well they follow comes from their accuracy (Combat.track_for) and a dodge breaks the
 ## lock, as with every projectile. Each one looks its own way:
 ##   willowisp    three blue flames appear around the user, hover while it winds up and
@@ -10,9 +11,11 @@ extends Action
 ##                after another from the user to a spinning spiral at the front, widening
 ##                as it comes; it follows badly (60% accuracy)
 ##   yawn         a big slow bubble that never stops following (it never misses there)
+##   charm        a pink heart that follows the rival (Attack -2)
 
 ## Pixel strip, frames, size, frames per second (fx/tex/custom, tools/status_sprites.py).
 const LOOK := {
+	"charm": ["charm_heart", 4, 0.8, 6.0],
 	"willowisp": ["willowisp", 6, 0.55, 12.0],
 	"hypnosis": ["hypnosis_rings", 6, 1.1, 8.0],
 	"yawn": ["yawn_bubble", 4, 0.95, 5.0],
@@ -33,7 +36,7 @@ func on_start() -> void:
 
 
 func in_startup(_delta: float) -> void:
-	tint_col = Status.COLOR.get(d.inflicts, Color.WHITE) if d.inflicts != "drowsy" else Color(0.8, 0.9, 1.0)
+	tint_col = d.get("color", Status.COLOR.get(d.get("inflicts", ""), Color.WHITE)) if d.get("inflicts", "") != "drowsy" else Color(0.8, 0.9, 1.0)
 	tint_k = 0.25
 	# The flames circle it while it winds up, bobbing in steps.
 	for i in _wisps.size():
@@ -101,7 +104,7 @@ func _ball() -> Node3D:
 		root.global_position = mouth()
 		return root
 	var lk: Array = LOOK[id]
-	var col: Color = WISP_COLOR if id == "willowisp" else Status.COLOR.get(d.inflicts, Color(0.8, 0.9, 1.0))
+	var col: Color = WISP_COLOR if id == "willowisp" else d.get("color", Status.COLOR.get(d.get("inflicts", ""), Color(0.8, 0.9, 1.0)))
 	var n: Node3D = l.main.vfx.pixel_ball(lk[0], lk[1], lk[2], col, lk[3], id != "yawn")
 	n.global_position = l.center()
 	return n

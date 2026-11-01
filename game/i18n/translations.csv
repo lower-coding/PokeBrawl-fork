@@ -886,3 +886,28 @@ The night stadium with three platforms over the field. Jump up through them; Des
 Movement,Movement,Movimiento
 Double jump cost,Double jump cost,Coste del doble salto
 "How much of the energy bar a double jump takes: at 1/6, a sixth of it. With less than that left, there is no double jump. Flyers take off instead, and that costs no energy.","How much of the energy bar a double jump takes: at 1/6, a sixth of it. With less than that left, there is no double jump. Flyers take off instead, and that costs no energy.","Cuánta barra de energía gasta un doble salto: con 1/6, una sexta parte. Con menos de eso no hay doble salto. Los voladores despegan en su lugar, y eso no gasta energía."
+Light Screen!,Light Screen!,¡Pantalla de Luz!
+The screen broke!,The screen broke!,¡La pantalla se rompió!
+It won't go any lower,It won't go any lower,No puede bajar más
+Power depends on the target's weight,Power depends on the target's weight,La potencia depende del peso del rival
+Grass Knot,Grass Knot,Hierba Lazo
+Charm,Charm,Encanto
+Cotton Spore,Cotton Spore,Esporagodón
+Cotton Guard,Cotton Guard,Rizo Algodón
+Light Screen,Light Screen,Pantalla de Luz
+Whimsicott,Whimsicott,Whimsicott
+Prankster,Prankster,Bromista
+Infiltrator,Infiltrator,Allanamiento
+"Grass snares the target's feet. The heavier it is, the harder it falls.","Grass snares the target's feet. The heavier it is, the harder it falls.","La hierba atrapa los pies del rival. Cuanto más pesado es, más fuerte cae."
+A charming heart that follows the target and sharply lowers its Attack. Twice per battle.,A charming heart that follows the target and sharply lowers its Attack. Twice per battle.,Un corazón encantador que sigue al rival y le baja mucho el Ataque. Dos veces por combate.
+Shakes out a wide cloud of cotton in front. It sharply lowers Speed. Short reach.,Shakes out a wide cloud of cotton in front. It sharply lowers Speed. Short reach.,Sacude una amplia nube de algodón al frente. Baja mucho la Velocidad. Poco alcance.
+"Wraps itself in cotton, open to hits: Defense rises three stages. Once per battle.","Wraps itself in cotton, open to hits: Defense rises three stages. Once per battle.","Se envuelve en algodón, expuesto a los golpes: la Defensa sube tres niveles. Una vez por combate."
+A wall of light cuts special damage to its side by half for 15 s.,A wall of light cuts special damage to its side by half for 15 s.,Un muro de luz reduce a la mitad el daño especial a su bando durante 15 s.
+Running does not help: jump or dodge when the grass curls up at your feet.,Running does not help: jump or dodge when the grass curls up at your feet.,Correr no sirve: salta o esquiva cuando la hierba se enrosque a tus pies.
+It flies slowly: sidestep late or dodge through it. It does nothing to special moves.,It flies slowly: sidestep late or dodge through it. It does nothing to special moves.,Vuela despacio: esquiva tarde o atraviésalo con una esquiva. No afecta a los movimientos especiales.
+Short reach: stay away or dodge through it. Grass types ignore it.,Short reach: stay away or dodge through it. Grass types ignore it.,Poco alcance: mantente lejos o atraviésalo con una esquiva. Los de tipo Planta lo ignoran.
+"It cannot defend itself while it wraps: punish it. Afterwards, switch to special moves.","It cannot defend itself while it wraps: punish it. Afterwards, switch to special moves.","No puede defenderse mientras se envuelve: castígalo. Después, cambia a movimientos especiales."
+"It does nothing to physical moves, and Brick Break shatters it. Critical hits and Infiltrator go through.","It does nothing to physical moves, and Brick Break shatters it. Critical hits and Infiltrator go through.","No afecta a los movimientos físicos, y Demolición lo rompe. Los golpes críticos y Allanamiento lo atraviesan."
+"Light as cotton and hard to pin down. It drifts out of reach, saps the rival's strength and speed, and trips the heavy ones.","Light as cotton and hard to pin down. It drifts out of reach, saps the rival's strength and speed, and trips the heavy ones.","Ligero como el algodón y difícil de atrapar. Se escabulle, debilita la fuerza y la velocidad del rival y hace tropezar a los pesados."
+Its status moves wind up 10% faster and their cooldowns are 10% shorter.,Its status moves wind up 10% faster and their cooldowns are 10% shorter.,Sus movimientos de estado se preparan un 10% más rápido y se recargan un 10% antes.
+"Its moves go through Light Screen and a Substitute's doll, and a Substitute's user cannot hide from it.","Its moves go through Light Screen and a Substitute's doll, and a Substitute's user cannot hide from it.","Sus movimientos atraviesan Pantalla de Luz y el muñeco de Sustituto, y quien use Sustituto no puede esconderse de él."

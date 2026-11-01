@@ -5,7 +5,8 @@ extends RefCounted
 ##   sphere   center, radius
 ##   capsule  a, b, radius (a segment with thickness: sweeps, streams)
 ##   cone     origin, dir, length, angle (Flamethrower)
-##   ring     center, r_in, r_out, only hits whoever touches the ground (Earthquake: jump it)
+##   ring     center, r_in, r_out, only hits whoever touches the ground (Earthquake: jump it), or
+##            whoever is lower than reach_up above it (Grass Knot: a levitating Gengar still is)
 ## With "local", positions are in the user's space (x right, y up, z forward) and
 ## follow its body; otherwise they are in world space.
 
@@ -22,6 +23,7 @@ var angle := 0.4
 var r_in := 0.0
 var r_out := 1.0
 var ground_only := false
+var reach_up := 0.0            # ring: catches what is lower than this above it, levitating or not (Grass Knot)
 
 var damage := 50.0
 var type := "normal"
@@ -63,7 +65,7 @@ func hit_share() -> float:
 func copy() -> Hit:
 	var h := Hit.new()
 	for k in ["user", "shape", "local", "center", "a", "b", "radius", "dir", "length", "angle", "r_in", "r_out",
-			"ground_only", "damage", "type", "cat", "contact", "knock", "push", "push_dir", "lift", "stun",
+			"ground_only", "reach_up", "damage", "type", "cat", "contact", "knock", "push", "push_dir", "lift", "stun",
 			"knocks_down", "hitstop", "strength", "effect", "interval", "lifetime", "move_id", "source", "bonus", "help", "quiet", "pink"]:
 		h.set(k, get(k))
 	return h

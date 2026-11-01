@@ -13,6 +13,19 @@ All notable changes to this project are documented here. The format follows
   one in the middle. You jump up through them and land on top, **Descend** drops through, shots and the camera
   ignore them, and the AI follows you up and down. Ground waves pass underneath whoever stands on one.
 - The energy bar shows its numbers next to it (current/max), and so does a flyer's flight bar.
+- **Whimsicott** (Grass / Fairy), a fast, frail nuisance that wins by making the rival worse: Moonblast, **Grass Knot**,
+  **Charm** and **Cotton Spore** by default, with **Cotton Guard**, **Light Screen** and 17 more on the Moves screen.
+  Its abilities: **Prankster** (status moves wind up and cool down 10% faster), **Infiltrator** (its moves go through
+  Light Screen and a Substitute's doll, and a Substitute's user cannot hide from it) and Chlorophyll. It floats
+  (gravity 18) and has the highest air control on the roster.
+- Five new moves: **Grass Knot** (a knot of grass runs along the ground and keeps chasing while it curls up, so only a jump or
+  a dodge avoids it; its power goes by the target's weight, 20 to 120), **Charm** (a heart that lowers Attack two stages, twice per
+  battle), **Cotton Spore** (a short, wide cone that lowers Speed two stages), **Cotton Guard** (Defense +3, once per battle)
+  and **Light Screen** (15 s, special damage to its whole side ×0.5, or ×2/3 in a 2 vs 2; Brick Break shatters it, and critical hits
+  and Infiltrator go through it; its side's HUD tag counts the seconds). Charm and Grass Knot reach Pikachu, Venusaur, Sylveon and others
+  that learn them in the games.
+- Status moves can lower the target's stats (`target_boost` on a status move), and Light Screen is the first state that belongs to
+  a side rather than a Pokémon.
 
 ### Changed
 - Greninja's double jump is no longer free: it pays like everybody else's.

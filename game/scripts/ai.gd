@@ -44,6 +44,7 @@ const PROFILE := {
 	"urshifurapidstrike": {"dist": [2.0, 6.0], "aggression": 0.65, "circle_around": 0.6},
 	"mewtwo": {"dist": [4.0, 9.0], "aggression": 0.6, "circle_around": 0.7},
 	"sylveon": {"dist": [4.0, 9.0], "aggression": 0.5, "circle_around": 0.5},
+	"whimsicott": {"dist": [5.0, 10.0], "aggression": 0.35, "circle_around": 0.9},
 }
 
 var main: Node
@@ -346,7 +347,7 @@ func _record_foe(foe: Fighter) -> void:
 		s.decoy = decoy
 		# Substitute's doll always fools it (Gengar is invisible); Double Team's clones,
 		# depending on the difficulty.
-		s.fooled = decoy.kind == "substitute" or randf() < BELIEVES_DECOY[difficulty]
+		s.fooled = (decoy.kind == "substitute" or randf() < BELIEVES_DECOY[difficulty]) and not me.sees_through(decoy)
 	if decoy != null and s.fooled:
 		s.history.append({"t": _t, "pos": decoy.global_position, "speed": Vector3.ZERO, "state": "free",
 			"action": "", "phase": "", "charge": 0.0, "on_ground": true, "hp": foe.hp})
@@ -686,7 +687,27 @@ func _only_if(ai: Dictionary, seen: Dictionary) -> bool:
 			return me.lowered_t > 0.0
 		"rival_ready":
 			return rival.data.moves.filter(func(m): return rival.cd(m) <= 0.0).size() >= 2
+		"rival_physical":
+			return _rival_leans("physical")
+		"rival_special":
+			return _rival_leans("special") and not main.screen_on(me.team)
+		"rival_heavy":
+			return float(rival.data.get("weight_kg", 100.0)) >= 10.0
 	return true
+
+
+## Most of the rival's attacks are of this category (Charm and Cotton Guard against physical ones,
+## Light Screen against special ones).
+func _rival_leans(cat: String) -> bool:
+	var mine := 0
+	var other := 0
+	for m in rival.data.moves:
+		var c: String = Moves.DATA[m].get("cat", "status")
+		if c == cat:
+			mine += 1
+		elif c != "status":
+			other += 1
+	return mine > other
 
 
 ## With friendly fire on: this move would catch its ally, who stands in its line to the rival or
@@ -889,6 +910,13 @@ func _clear_line(target_point: Vector3) -> bool:
 ## drowsy, or is immune by type or ability).
 func _status_useless(move: String) -> bool:
 	var d: Dictionary = Moves.DATA[move]
+	if d.has("target_boost"):
+		var t = me.rival
+		if not (t is Fighter) or not is_instance_valid(t):
+			return true
+		if d.get("powder", false) and ("grass" in t.types or t.data.passive.id == "overcoat"):
+			return true
+		return d.target_boost.keys().all(func(stat): return t.stages[stat] <= -4)
 	if not d.has("inflicts"):
 		return false
 	var o = me.rival

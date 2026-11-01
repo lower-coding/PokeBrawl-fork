@@ -71,6 +71,9 @@ func same_side(a, b) -> bool:
 func spares(user, o) -> bool:
 	if o == user:
 		return true
+	# Infiltrator: a Substitute's doll neither stops nor takes its moves.
+	if user is Fighter and is_instance_valid(user) and user.sees_through(o):
+		return true
 	var who = o.user if o is Decoy else o
 	if who == user or not same_side(user, who):
 		return false
@@ -611,7 +614,10 @@ func _touches(g: Hit, o: Node):
 					return s
 		"ring":
 			var c := m * g.center
-			if g.ground_only and not o.on_floor():
+			if g.reach_up > 0.0:
+				if o.global_position.y - c.y >= g.reach_up:
+					return null
+			elif g.ground_only and not o.on_floor():
 				return null
 			var h := Vector2(o.global_position.x - c.x, o.global_position.z - c.z).length()
 			if h >= g.r_in - r and h <= g.r_out + r and absf(o.global_position.y - c.y) < 1.5:

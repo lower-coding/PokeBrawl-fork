@@ -204,7 +204,7 @@ non-commercial use can come in with its credit (`tools/import_pokemans.py`); its
 (Mewtwo). **A model with no attack clips** gets ours in `sources/cobblemon/<id>/moves.animation.json`, which
 `convert()` merges so the source's own file stays untouched; so does **one whose walk lives in Cobblemon's
 poser code** (Sylveon's `q.quadruped_walk`: `tools/sylveon_walk.py`). A species outside generation 1 needs its
-generation named: `import_cobblemon.py <clone> 6 --only=sylveon`. Mewtwo keeps its real stats (680 in all, the
+generation named: `import_cobblemon.py <clone> 6 --only=sylveon`. Whimsicott is generation 5 (`import_cobblemon.py <clone> 5 --only=whimsicott`), and its Cobblemon file has a real walk. Mewtwo keeps its real stats (680 in all, the
 highest here) and pays in its kit: expect it on top until playtesting says otherwise.
 
 ---

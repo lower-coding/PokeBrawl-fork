@@ -201,6 +201,8 @@ func _ready() -> void:
 			_mewtwo_test()
 		"sylveon":
 			_sylveon_test()
+		"whimsicott":
+			_whimsicott_test()
 		"prep":
 			_prep_test()
 		"loadouts":
@@ -2359,6 +2361,7 @@ func _mechanics() -> void:
 	await _urshifu_cases()
 	await _mewtwo_cases()
 	await _sylveon_cases()
+	await _whimsicott_cases()
 	var fails := _results.filter(func(r): return not r[1]).size()
 	print("RESULT: %d of %d" % [_results.size() - fails, _results.size()])
 	get_tree().quit()
@@ -2417,6 +2420,399 @@ func _kiss(sp: String, dist: float, ready_up := Callable()) -> Array:
 	a.ctrl.release("mov3")
 	await _wait(0.5)
 	return [a.hp - hp0, target0 - b.hp]
+
+
+
+## Only Whimsicott's cases (--test=whimsicott), without the rest of the mechanics.
+func _whimsicott_test() -> void:
+	await get_tree().physics_frame
+	await _whimsicott_cases()
+	var fails := _results.filter(func(r): return not r[1]).size()
+	print("RESULT: %d of %d" % [_results.size() - fails, _results.size()])
+	get_tree().quit()
+
+
+## --only=prankster (and so on) runs one group of them.
+func _whimsicott_cases() -> void:
+	var groups := {"prankster": _prankster_cases, "charm": _stat_drop_cases, "spore": _cotton_spore_cases, "guard": _cotton_guard_cases,
+		"knot": _grass_knot_cases, "screen": _light_screen_cases, "infiltrator": _infiltrator_cases, "misc": _whimsicott_misc_cases}
+	var only := str(main._args.get("only", ""))
+	for name in groups:
+		if only == "" or only == name:
+			await groups[name].call()
+
+
+## After a 2 vs 2 case: the picks it left in the menu would still be played by the next 1 vs 1.
+func _back_to_one_on_one() -> void:
+	main.menu.choice.format = "1v1"
+	main.menu.choice.rules = BattleRules.defaults()
+	main.menu.choice.loadouts = [{}, {}, {}, {}]
+
+
+## A hit with just what receive() reads, straight at "on".
+func _plain_hit(by: Fighter, on: Fighter, id: String, cat := "physical", type := "normal", strength := 2) -> String:
+	var g := Hit.new()
+	g.user = by
+	g.local = false
+	g.move_id = id
+	g.type = type
+	g.cat = cat
+	g.damage = 20.0
+	g.strength = strength
+	g.stun = 0.3
+	return on.receive({"hit": g, "attacker": by, "point": on.center(), "affinity": 1.0, "flow": false})
+
+
+func _said(text: String) -> bool:
+	return main.vfx.texts.any(func(x): return x.s == tr(text))
+
+
+## What "by" would deal "on" with this move, with the target's defense stage set to "stage".
+func _damage_at_def(by: Fighter, on: Fighter, move: String, stage: int) -> float:
+	var was: int = on.stages.def
+	on.stages.def = stage
+	var v := _move_damage(by, on, move)
+	on.stages.def = was
+	return v
+
+
+func _prankster_cases() -> void:
+	var ab: Array = await _setup("whimsicott", "snorlax", Vector3(-6, 0, 0), Vector3(0, 0, 0))
+	var a: Fighter = ab[0]
+	_ok("Prankster: it is Whimsicott's default", a.data.passive.id == "prankster" and Loadout.default_for("whimsicott").ability == "prankster")
+	_ok("Prankster: a status move's cooldown is 90%", is_equal_approx(a.cooldown_of("charm"), Moves.cooldown("charm") * 0.9)
+		and is_equal_approx(a.cooldown_of("cottonspore"), Moves.cooldown("cottonspore") * 0.9), "%.2f" % a.cooldown_of("charm"))
+	_ok("Prankster: an attack's stays whole", is_equal_approx(a.cooldown_of("moonblast"), Moves.cooldown("moonblast")) and is_equal_approx(a.cooldown_of("grassknot"), Moves.cooldown("grassknot")))
+	var shown := func(ability: String, label: String) -> String:
+		return MoveInfo.rows("charm", ability).filter(func(r): return r[0] == label)[0][2]
+	_ok("Prankster: the menus show it", is_equal_approx(Moves.time_mult("charm", "prankster"), 0.9) and shown.call("prankster", "Cooldown") == "%.1f s" % (Moves.cooldown("charm") * 0.9)
+		and shown.call("", "Cooldown") == "%.1f s" % Moves.cooldown("charm") and shown.call("prankster", "Wind-up") == "0.27 s" and shown.call("", "Wind-up") == "0.30 s")
+	_ok("Prankster: the HUD's bar counts the full cooldown it has", is_equal_approx(Hud.cooldown_done(5.4, 10.8), 0.5))
+	var energy: float = a.energy
+	await _tap_move(a, "mov3")
+	await _wait(0.05)
+	_ok("Prankster: the wind-up is 90%", a.action != null and is_equal_approx(a.action.startup_len(), 0.27), "%.3f" % (a.action.startup_len() if a.action else -1.0))
+	_ok("Prankster: energy and uses do not change", is_equal_approx(energy - a.energy, 14.0) and a.uses.get("charm", 2) == 1, "%.1f, uses %s" % [energy - a.energy, a.uses.get("charm")])
+	await _wait(1.2)
+	_ok("Prankster: the cooldown it starts with is 90%", a.cd("charm") > 9.2 and a.cd("charm") <= 10.8, "%.2f" % a.cd("charm"))
+	a.data.passive = Loadout.ability("whimsicott", "infiltrator")
+	_ok("Prankster: without the ability nothing changes", is_equal_approx(a.cooldown_of("charm"), Moves.cooldown("charm")) and is_equal_approx(Moves.time_mult("charm", "infiltrator"), 1.0))
+	a.data.passive = Loadout.ability("whimsicott", "prankster")
+	# Infatuated, a failed status move's cooldown is at most LOVE_CD, and nothing is spent.
+	a.cds.clear()
+	a.infatuate("snorlax")
+	Fighter.force_roll = 0.0
+	await _tap_move(a, "mov4")
+	await _wait(0.05)
+	Fighter.force_roll = -1.0
+	_ok("Prankster: a failed status move out of love keeps the shorter cooldown", a.cd("cottonspore") > 0.0 and a.cd("cottonspore") <= Fighter.LOVE_CD and a.uses.get("cottonspore", 1) > 0, "%.2f" % a.cd("cottonspore"))
+
+
+## Charm: a status move that lowers a stat.
+func _stat_drop_cases() -> void:
+	var ab: Array = await _setup("whimsicott", "snorlax", Vector3(-5, 0, 0), Vector3(0, 0, 0))
+	var a: Fighter = ab[0]
+	var b: Fighter = ab[1]
+	var before := _move_damage(b, a, "bodyslam")
+	await _tap_move(a, "mov3")
+	await _wait(1.6)
+	_ok("Charm: -2 Attack", b.stages.atk == -2, "Attack %+d" % b.stages.atk)
+	_ok("Charm: its stat tag shows", main.hud.stage_tags(b).any(func(tag): return not tag[1] and tag[0].contains("Atk")), str(main.hud.stage_tags(b)))
+	_ok("Charm: physical damage really falls by the stage (the formula's +2 stays)", is_equal_approx(b.stage_mult("atk"), 0.5) and _move_damage(b, a, "bodyslam") < before * 0.56, "%d vs %d" % [_move_damage(b, a, "bodyslam"), before])
+	a.cds.erase("charm")
+	a.energy = 100.0
+	await _tap_move(a, "mov3")
+	await _wait(1.6)
+	_ok("Charm: a second one gives -4", b.stages.atk == -4, "Attack %+d" % b.stages.atk)
+	_ok("Charm: twice per battle", a.uses.get("charm", 2) == 0 and not a.ready("charm"))
+	b.stages.atk = -6
+	var res := _plain_hit(a, b, "charm", "status", "fairy", 0)
+	_ok("Charm: at -6 it says so and changes nothing", res == "status" and b.stages.atk == -6 and _said("It won't go any lower"), res)
+	b.stages.atk = 0
+	b.invulnerable = 1.0
+	_ok("Charm: a dodge stops it", _plain_hit(a, b, "charm", "status", "fairy", 0) == "dodged" and b.stages.atk == 0)
+	b.invulnerable = 0.0
+	# A miss still spends a use.
+	ab = await _setup("whimsicott", "snorlax", Vector3(-5, 0, 0), Vector3(0, 0, 0))
+	a = ab[0]
+	b = ab[1]
+	b.invulnerable = 3.0
+	await _tap_move(a, "mov3")
+	await _wait(1.6)
+	_ok("Charm: a dodged one still spends a use", b.stages.atk == 0 and a.uses.get("charm", 2) == 1, "uses %s" % a.uses.get("charm"))
+
+
+func _cotton_spore_cases() -> void:
+	var loadout := "cottonspore,moonblast,charm,grassknot"
+	var b := await _use("whimsicott", loadout, "snorlax", 2.5)
+	_ok("Cotton Spore: -2 Speed in the cone", b.stages.spe == -2, "Speed %+d" % b.stages.spe)
+	_ok("Cotton Spore: it is slower for it", main.fighters[1].speed_stage() < 1.0, "%.2f" % main.fighters[1].speed_stage())
+	b = await _use("whimsicott", loadout, "snorlax", 7.0)
+	_ok("Cotton Spore: nothing outside it", b.stages.spe == 0, "Speed %+d" % b.stages.spe)
+	b = await _use("whimsicott", loadout, "venusaur", 2.5, 0.7)
+	_ok("Cotton Spore: Grass types ignore it, and it says so", b.stages.spe == 0 and _said("No effect"), "Speed %+d" % b.stages.spe)
+	main._args["moves"] = loadout
+	var ab: Array = await _setup("whimsicott", "goodra", Vector3(-2.5, 0, 0), Vector3(0, 0, 0))
+	main._args.erase("moves")
+	ab[1].data.passive = Loadout.ability("goodra", "overcoat")
+	await _tap_move(ab[0], "mov1")
+	await _wait(1.4)
+	_ok("Cotton Spore: Overcoat ignores it", ab[1].stages.spe == 0, "Speed %+d" % ab[1].stages.spe)
+	main._args["moves"] = loadout
+	ab = await _setup("whimsicott", "goodra", Vector3(-2.5, 0, 0), Vector3(0, 0, 0))
+	main._args.erase("moves")
+	ab[1].data.passive = Loadout.ability("goodra", "sapsipper")
+	await _tap_move(ab[0], "mov1")
+	await _wait(1.4)
+	_ok("Cotton Spore: Sap Sipper takes it as food", ab[1].stages.spe == 0 and ab[1].stages.atk == 1, "Speed %+d, Attack %+d" % [ab[1].stages.spe, ab[1].stages.atk])
+	# A 2 vs 2: both foes in the cone.
+	var f: Array = await _doubles(["whimsicott", "snorlax", "pikachu", "lucario"], {}, {0: ["cottonspore", "moonblast", "charm", "grassknot"]})
+	f[1].global_position = f[0].global_position + Vector3(2.5, 0, 0.9)
+	f[3].global_position = f[0].global_position + Vector3(2.5, 0, -0.9)
+	f[2].global_position = f[0].global_position + Vector3(0, 0, -15)
+	await get_tree().physics_frame
+	await _tap_move(f[0], "mov1")
+	await _wait(1.4)
+	_ok("Cotton Spore: it catches both foes in a 2 vs 2", f[1].stages.spe == -2 and f[3].stages.spe == -2, "%+d %+d" % [f[1].stages.spe, f[3].stages.spe])
+	_back_to_one_on_one()
+
+
+func _cotton_guard_cases() -> void:
+	var loadout := "cottonguard,moonblast,charm,grassknot"
+	await _use("whimsicott", loadout, "snorlax", 6.0, 1.2)
+	var a: Fighter = main.fighters[0]
+	var b: Fighter = main.fighters[1]
+	_ok("Cotton Guard: +3 Defense at the end", a.stages.def == 3, "Defense %+d" % a.stages.def)
+	_ok("Cotton Guard: once per battle", a.uses.get("cottonguard", 1) == 0 and not a.ready("cottonguard"))
+	_ok("Cotton Guard: physical damage drops", _damage_at_def(b, a, "bodyslam", 3) < _damage_at_def(b, a, "bodyslam", 0) * 0.45)
+	_ok("Cotton Guard: a critical hit ignores it", is_equal_approx(_damage_at_def(b, a, "wickedblow", 3), _damage_at_def(b, a, "wickedblow", 0)))
+	# A hit that cuts it costs the boost and the use.
+	main._args["moves"] = loadout
+	var ab: Array = await _setup("whimsicott", "snorlax", Vector3(-6, 0, 0), Vector3(0, 0, 0))
+	main._args.erase("moves")
+	a = ab[0]
+	await _tap_move(a, "mov1")
+	await _wait(0.3)
+	_plain_hit(ab[1], a, "bodyslam", "physical", "normal", 2)
+	await _wait(1.4)
+	_ok("Cotton Guard: a cut gives nothing and spends the use", a.stages.def == 0 and a.uses.get("cottonguard", 1) == 0, "Defense %+d, uses %s" % [a.stages.def, a.uses.get("cottonguard")])
+
+
+func _grass_knot_cases() -> void:
+	var ab: Array = await _setup("whimsicott", "snorlax", Vector3(-6, 0, 0), Vector3(0, 0, 0))
+	var a: Fighter = ab[0]
+	var b: Fighter = ab[1]
+	var d: Dictionary = Moves.DATA.grassknot
+	var steps := [[9.9, 20.0], [10.0, 40.0], [24.9, 40.0], [25.0, 60.0], [49.9, 60.0], [50.0, 80.0], [99.9, 80.0], [100.0, 100.0], [199.9, 100.0], [200.0, 120.0]]
+	var all_ok := true
+	for st in steps:
+		b.data.weight_kg = st[0]
+		all_ok = all_ok and Damage.base_power(d, a, b) == st[1]
+	_ok("Grass Knot: power for each weight, just under and just over", all_ok)
+	b.data.weight_kg = float(Species.DATA.scizor.weight_kg) * 0.5
+	_ok("Grass Knot: Light Metal counts half", Damage.base_power(d, a, b) == 80.0, "%d" % Damage.base_power(d, a, b))
+	b.data.weight_kg = 460.0
+	var g := Hit.new()
+	g.user = a
+	g.move_id = "grassknot"
+	g.type = "grass"
+	g.cat = "special"
+	g.damage = d.damage
+	var with_stab := Damage.dealt(g, a, b, 1.0)
+	a.types = ["normal"]
+	var without := Damage.dealt(g, a, b, 1.0)
+	a.types = ["grass", "fairy"]
+	_ok("Grass Knot: special, with STAB", absf(with_stab / without - 1.5) < 0.01 and with_stab > 0.0, "%d vs %d" % [with_stab, without])
+	# End to end: Snorlax is on the ground.
+	var dmg := await _one_hit("whimsicott", "snorlax", "mov2", 6.0)
+	_ok("Grass Knot: it lands on a rival on the ground", dmg > 0.0, "damage %d" % dmg)
+	# Jumping as it curls up avoids it.
+	ab = await _setup("whimsicott", "snorlax", Vector3(-6, 0, 0), Vector3(0, 0, 0))
+	await _tap_move(ab[0], "mov2")
+	await _wait(0.62)
+	ab[1].ctrl.press("jump")
+	await _wait(0.1)
+	ab[1].ctrl.release("jump")
+	await _wait(1.3)
+	_ok("Grass Knot: jumping on the warning avoids it", ab[1].hp == ab[1].hp_max, "HP %d of %d" % [ab[1].hp, ab[1].hp_max])
+	# Running does not lose it.
+	ab = await _setup("whimsicott", "snorlax", Vector3(-6, 0, 0), Vector3(0, 0, 0))
+	await _tap_move(ab[0], "mov2")
+	await _wait(0.5)
+	ab[1].ctrl.move_input = Vector2(1, 0)
+	await _wait(1.2)
+	ab[1].ctrl.move_input = Vector2.ZERO
+	_ok("Grass Knot: running during the warning does not lose it", ab[1].hp < ab[1].hp_max, "HP %d of %d" % [ab[1].hp, ab[1].hp_max])
+	# A rival above the floor (on a platform) is out of its ring; one on the floor is caught.
+	ab = await _setup("whimsicott", "snorlax", Vector3(-6, 0, 0), Vector3(0, 0, 0))
+	var ring := Hit.new()
+	ring.user = ab[0]
+	ring.shape = "ring"
+	ring.local = false
+	ring.center = Vector3(ab[1].global_position.x, main.ground_y, ab[1].global_position.z)
+	ring.r_out = 2.0
+	ring.reach_up = 0.5
+	var low = main.combat._touches(ring, ab[1])
+	ab[1].global_position.y = main.ground_y + 2.0
+	_ok("Grass Knot: a rival above the floor is out of its ring, one on it is caught", low != null and main.combat._touches(ring, ab[1]) == null)
+	# A levitating Gengar is low enough to be caught.
+	ab = await _setup("whimsicott", "gengar", Vector3(-6, 0, 0), Vector3(0, 0, 0))
+	await _tap_move(ab[0], "mov2")
+	await _wait(1.6)
+	_ok("Grass Knot: it catches a levitating Gengar", ab[1].hp < ab[1].hp_max, "HP %d of %d" % [ab[1].hp, ab[1].hp_max])
+	# Contact: Rough Skin answers it from across the field.
+	await _one_hit("whimsicott", "garchomp", "mov2", 6.0, "", "roughskin")
+	_ok("Grass Knot: a contact move, so Rough Skin answers it", main.fighters[0].hp < main.fighters[0].hp_max, "HP %d of %d" % [main.fighters[0].hp, main.fighters[0].hp_max])
+	var absorbed := await _one_hit("whimsicott", "goodra", "mov2", 6.0, "", "sapsipper")
+	_ok("Grass Knot: Sap Sipper absorbs it", absorbed == 0.0 and main.fighters[1].stages.atk == 1, "damage %d, Attack %+d" % [absorbed, main.fighters[1].stages.atk])
+
+
+func _light_screen_cases() -> void:
+	var ab: Array = await _setup("pikachu", "whimsicott", Vector3(-6, 0, 0), Vector3(0, 0, 0))
+	var a: Fighter = ab[0]
+	var b: Fighter = ab[1]
+	var special := _move_damage(a, b, "thunderbolt")
+	var physical := _move_damage(a, b, "irontail")
+	var shock := _move_damage(a, b, "psyshock")
+	main.screen_t[b.team] = 15.0
+	_ok("Light Screen: special damage x0.5", absf(_move_damage(a, b, "thunderbolt") / special - 0.5) < 0.001, "%d vs %d" % [_move_damage(a, b, "thunderbolt"), special])
+	_ok("Light Screen: physical damage whole", is_equal_approx(_move_damage(a, b, "irontail"), physical))
+	_ok("Light Screen: Psyshock is cut, it is special", absf(_move_damage(a, b, "psyshock") / shock - 0.5) < 0.001)
+	var g := Hit.new()
+	g.cat = "special"
+	_ok("Light Screen: a critical hit goes through", Damage.screen_mult(g, {"crit": true}, a, b) == 1.0 and Damage.screen_mult(g, {}, a, b) == 0.5)
+	main.doubles = true
+	_ok("Light Screen: x2/3 in a 2 vs 2", absf(_move_damage(a, b, "thunderbolt") / special - 2.0 / 3.0) < 0.001)
+	main.doubles = false
+	_ok("Light Screen: its side's tag", main.hud.stage_tags(b).any(func(tag): return tag[0].begins_with("Screen")))
+	_ok("Light Screen: the other side has none", not main.screen_on(a.team))
+	main.screen_t[b.team] = 0.05
+	await _wait(0.2)
+	_ok("Light Screen: it ends", not main.screen_on(b.team))
+	# Cast by Whimsicott.
+	await _use("whimsicott", "lightscreen,moonblast,charm,grassknot", "snorlax", 6.0, 1.0)
+	a = main.fighters[0]
+	_ok("Light Screen: casting it gives 15 s to its side", main.screen_on(a.team) and main.screen_t[a.team] > 13.0 and main.screen_t[a.team] <= 15.0, str(main.screen_t))
+	_ok("Light Screen: its cooldown is 27 s with Prankster", a.cd("lightscreen") > 25.0 and a.cd("lightscreen") <= 27.0, "%.1f" % a.cd("lightscreen"))
+	_ok("Light Screen: not on the rival's side", not main.screen_on(main.fighters[1].team))
+	# Brick Break shatters it, unless the target is immune to it.
+	var brick := _plain_hit(main.fighters[1], a, "brickbreak", "physical", "fighting", 1)
+	_ok("Light Screen: Brick Break shatters it", not main.screen_on(a.team), brick)
+	ab = await _setup("lucario", "gengar", Vector3(-3, 0, 0), Vector3(0, 0, 0))
+	main.screen_t[ab[1].team] = 15.0
+	_plain_hit(ab[0], ab[1], "brickbreak", "physical", "fighting", 1)
+	_ok("Light Screen: Brick Break does not shatter it on a Ghost type", main.screen_on(ab[1].team))
+	# A new battle clears it.
+	await _setup("pikachu", "whimsicott", Vector3(-6, 0, 0), Vector3(0, 0, 0))
+	_ok("Light Screen: a new battle clears it", main.screen_t.is_empty())
+	# A startup cut by a hit gives nothing.
+	main._args["moves"] = "lightscreen,moonblast,charm,grassknot"
+	ab = await _setup("whimsicott", "snorlax", Vector3(-6, 0, 0), Vector3(0, 0, 0))
+	main._args.erase("moves")
+	await _tap_move(ab[0], "mov1")
+	await _wait(0.1)
+	_plain_hit(ab[1], ab[0], "bodyslam", "physical", "normal", 2)
+	await _wait(0.8)
+	_ok("Light Screen: a startup cut by a hit gives nothing", not main.screen_on(ab[0].team))
+	# Draining Kiss heals from the reduced damage.
+	var gain := []
+	for screen in [false, true]:
+		ab = await _setup("sylveon", "whimsicott", Vector3(-1.2, 0, 0), Vector3(0, 0, 0))
+		ab[0].hp = ab[0].hp_max * 0.5
+		if screen:
+			main.screen_t[ab[1].team] = 15.0
+		var hp0: float = ab[0].hp
+		await _tap_move(ab[0], "mov3")
+		await _wait(0.9)
+		gain.append(ab[0].hp - hp0)
+	_ok("Light Screen: Draining Kiss heals from the reduced damage", gain[0] > 0.0 and absf(gain[1] / gain[0] - 0.5) < 0.05, str(gain))
+	# A 2 vs 2: it covers an ally, friendly fire is cut, and it stays when the caster is gone.
+	var f: Array = await _doubles(["whimsicott", "snorlax", "pikachu", "lucario"], {}, {0: ["lightscreen", "moonblast", "charm", "grassknot"]})
+	await _tap_move(f[0], "mov1")
+	await _wait(1.0)
+	_ok("Light Screen: it covers the ally in a 2 vs 2", main.screen_on(f[0].team) and f[2].team == f[0].team and not main.screen_on(f[1].team))
+	var from_foe := _move_damage(f[1], f[2], "thunderbolt")
+	var from_ally := _move_damage(f[0], f[2], "thunderbolt")
+	main.screen_t.clear()
+	_ok("Light Screen: it cuts a foe's and a friend's alike", absf(_move_damage(f[1], f[2], "thunderbolt") / from_foe - 1.5) < 0.001 and absf(_move_damage(f[0], f[2], "thunderbolt") / from_ally - 1.5) < 0.001)
+	main.screen_t[f[0].team] = 15.0
+	f[0]._die({})
+	await _wait(0.2)
+	_ok("Light Screen: it stays when the caster faints", main.screen_on(f[2].team), str(main.screen_t))
+	_back_to_one_on_one()
+
+
+func _infiltrator_cases() -> void:
+	var ab: Array = await _setup("pikachu", "whimsicott", Vector3(-6, 0, 0), Vector3(0, 0, 0))
+	var a: Fighter = ab[0]
+	var b: Fighter = ab[1]
+	main.screen_t[a.team] = 15.0
+	main.screen_t[b.team] = 15.0
+	var plain := _move_damage(b, a, "moonblast")
+	b.data.passive = Loadout.ability("whimsicott", "infiltrator")
+	var through := _move_damage(b, a, "moonblast")
+	_ok("Infiltrator: a screen does nothing to its hits", absf(through / plain - 2.0) < 0.001, "%d vs %d" % [through, plain])
+	var special := Hit.new()
+	special.cat = "special"
+	_ok("Infiltrator: a hit from anyone else is cut", Damage.screen_mult(special, {}, a, b) == 0.5 and Damage.screen_mult(special, {}, b, a) == 1.0)
+	main.screen_t.clear()
+	# Substitute: the doll does not fool it.
+	for who in ["prankster", "infiltrator"]:
+		ab = await _setup("gengar", "whimsicott", Vector3(-6, 0, 0), Vector3(0, 0, 0))
+		ab[1].data.passive = Loadout.ability("whimsicott", who)
+		ab[1].rival = ab[0]
+		await _tap_move(ab[0], "mov4")
+		await _wait(1.0)
+		var doll: Decoy = null
+		for o in main.combat.targets:
+			if o is Decoy and o.user == ab[0]:
+				doll = o
+		if doll == null:
+			_ok("Substitute (%s): the doll is there" % who, false)
+			continue
+		if who == "prankster":
+			_ok("Substitute: it fools whoever does not have Infiltrator", ab[1].fooled_by == doll and doll in ab[1].lock_candidates() and not main.combat.spares(ab[1], doll))
+		else:
+			_ok("Infiltrator: Substitute does not set fooled_by on it", ab[1].fooled_by == null)
+			_ok("Infiltrator: the doll is not among what it can lock on", not (doll in ab[1].lock_candidates()) and ab[1].sees_through(doll))
+			_ok("Infiltrator: its hits and shots go through the doll, which stays", main.combat.spares(ab[1], doll) and is_instance_valid(doll) and not doll.is_queued_for_deletion())
+			_ok("Infiltrator: the Substitute's user is still invisible to others", ab[0].translucent > 0.0)
+			_ok("Infiltrator: the AI is not fooled", not main.ai._watch(ab[0]).fooled, str(main.ai._watch(ab[0]).fooled))
+	# Double Team's clones still fool it: they are a different thing.
+	var clone := Decoy.new()
+	main.add_child(clone)
+	clone.setup(main, ab[0], 4.0)
+	clone.kind = "clone"
+	main.combat.targets.append(clone)
+	_ok("Infiltrator: a Double Team clone is still a candidate and still stops its moves", clone in ab[1].lock_candidates() and not ab[1].sees_through(clone) and not main.combat.spares(ab[1], clone))
+	main.combat.targets.erase(clone)
+	clone.queue_free()
+	_ok("Infiltrator: it sees through a doll, never a Fighter", not ab[1].sees_through(ab[0]))
+
+
+func _whimsicott_misc_cases() -> void:
+	# Chlorophyll, hidden: Speed in the sun, and with Tailwind on top.
+	var ab: Array = await _setup("whimsicott", "snorlax", Vector3(-6, 0, 0), Vector3(0, 0, 0))
+	var a: Fighter = ab[0]
+	a.data.passive = Loadout.ability("whimsicott", "chlorophyll")
+	var spe: float = a.data.stats.spe
+	var plain := a.speed_stage()
+	main.weather.start("sun")
+	var sun := a.speed_stage()
+	a.tailwind_t = 10.0
+	var both := a.speed_stage()
+	_ok("Chlorophyll: x2 Speed in the sun", is_equal_approx(sun, (4.0 + 0.032 * spe * 2.0) / (4.0 + 0.032 * spe)) and plain == 1.0, "%.2f" % sun)
+	_ok("Chlorophyll: with Tailwind on top, x4", is_equal_approx(both, (4.0 + 0.032 * spe * 4.0) / (4.0 + 0.032 * spe)), "%.2f" % both)
+	main.weather.clear()
+	# Loadouts.
+	var moves: Array = Roster.POKEMON.whimsicott.moves
+	_ok("Loadouts: Infiltrator and Chlorophyll are valid for Whimsicott", Loadout.valid("whimsicott", {"moves": moves, "ability": "infiltrator"}).ability == "infiltrator"
+		and Loadout.valid("whimsicott", {"moves": moves, "ability": "chlorophyll"}).ability == "chlorophyll")
+	_ok("Loadouts: and rejected for others", Loadout.valid("pikachu", {"moves": Roster.POKEMON.pikachu.moves, "ability": "infiltrator"}).ability == "static"
+		and Loadout.valid("snorlax", {"moves": Roster.POKEMON.snorlax.moves, "ability": "prankster"}).ability == "thickfat")
+	_ok("Loadouts: Cotton Guard and Light Screen are on its Moves screen", "cottonguard" in Loadout.moves_for("whimsicott") and "lightscreen" in Loadout.moves_for("whimsicott"))
+	_ok("Loadouts: the new moves reach those who learn them", "charm" in Loadout.moves_for("sylveon") and "grassknot" in Loadout.moves_for("greninja")
+		and "lightscreen" in Loadout.moves_for("scizor") and not "cottonspore" in Loadout.moves_for("venusaur") and not "cottonguard" in Loadout.moves_for("pikachu"))
 
 
 ## Sylveon: Pixilate, Cute Charm and infatuation, and its five moves.
@@ -3401,7 +3797,7 @@ func _mewtwo_pressure() -> void:
 	_ok("Pressure 3 vs 3: slower again when it returns", party.active == a and absf(again - 1.0 / Fighter.PRESSURE) < 0.05, "%.2f, Mewtwo out: %s" % [again, party.active == a])
 	main.menu.choice.format = "1v1"
 	# A cooldown longer than the move's own (a Disable) draws no negative line.
-	_ok("HUD: more cooldown left than its own is not negative", Hud.cooldown_done(3.0, "quickattack") == 0.0 and Hud.cooldown_done(0.0, "quickattack") == 1.0)
+	_ok("HUD: more cooldown left than its own is not negative", Hud.cooldown_done(3.0, Moves.cooldown("quickattack")) == 0.0 and Hud.cooldown_done(0.0, Moves.cooldown("quickattack")) == 1.0)
 
 
 func _mewtwo_disable() -> void:

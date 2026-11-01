@@ -985,7 +985,7 @@ func _slots(lo: Dictionary) -> void:
 			var pw: String = "%d" % d.power if d.get("power", 0) > 0 else "-"
 			u.text(x + RW - 180.0, y + 22.0, pw, 46.0, UiKit.INK, u.heavy, 1)
 			u.text(x + RW - 180.0, y + 78.0, tr("Power"), 18.0, Color(UiKit.INK, 0.6), u.bold, 1)
-			u.text(x + RW - 50.0, y + 22.0, "%.1f" % Moves.cooldown(id), 46.0, UiKit.INK, u.heavy, 1)
+			u.text(x + RW - 50.0, y + 22.0, "%.1f" % (Moves.cooldown(id) * Moves.time_mult(id, lo.ability)), 46.0, UiKit.INK, u.heavy, 1)
 			u.text(x + RW - 50.0, y + 78.0, tr("Cooldown"), 18.0, Color(UiKit.INK, 0.6), u.bold, 1)
 		else:
 			var ab: Dictionary = Loadout.ability(m.edit_sp, lo.ability)
@@ -1051,7 +1051,7 @@ func _details(id: String, ability: String) -> void:
 	u.title(u.edge(hx, 166.0, 104.0, 230.0) + 116.0, 178.0, tr(d.display_name).to_upper(), 54.0, UiKit.INK, -1, RW - 260.0)
 	u.text_fit(u.edge(hx, 166.0, 104.0, 250.0) + 120.0, 236.0, ", ".join(MoveInfo.facts(id).slice(0, 2)), RW - 260.0, 20.0, Color(UiKit.INK, 0.85), u.bold)
 	var y := 296.0
-	for r in MoveInfo.rows(id):
+	for r in MoveInfo.rows(id, ability):
 		u.text_fit(RX + 50.0, y, r[0], 230.0, 24.0, UiKit.SOFT, u.bold)
 		if r[1] >= 0.0:
 			u.meter(RX + 300.0, y + 5.0, 360.0, 18.0, r[1], tc, 12)
