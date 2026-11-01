@@ -77,7 +77,7 @@ godot --path game -- --p1=charizard --p2=pikachu --diff=hard --stage=league
 
 | Action | Xbox | PlayStation | Keyboard and mouse |
 |---|---|---|---|
-| Move | Left stick | Left stick | WASD |
+| Move | Left stick | Left stick | WASD (can be changed in Options) or arrows |
 | Camera | Right stick | Right stick | Mouse |
 | Jump | A | ✕ | Space |
 | Dodge | B | ○ | Shift |
@@ -96,9 +96,10 @@ godot --path game -- --p1=charizard --p2=pikachu --diff=hard --stage=league
 
 In the menus: A / ✕ / Space or left click picks, B / ○ / Backspace or right click goes back,
 Y / △ / X shows a move's details, and X / □ / R restores the defaults in the Moves screen. The
-mouse wheel scrolls. The Moves menu sets each Pokémon's defaults; **Edit Pokémon**, once the
-Pokémon are picked, changes the moves and ability of just those picks, for that battle. Y / △ / X
-picks a random Pokémon on the selection, and RB / R1 / E rolls random moves before the battle.
+mouse wheel scrolls. The Moves menu sets each Pokémon's moves and ability; **Edit Pokémon**, once
+the Pokémon are picked, does the same for just those picks, and it is saved too (the AI's picks
+have their own). Y / △ / X picks a random Pokémon on the selection, and RB / R1 / E rolls random
+moves before the battle, which last for that battle unless you then change one by hand.
 
 ## How battles work
 

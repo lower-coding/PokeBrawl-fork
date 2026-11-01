@@ -5,6 +5,21 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+### Added
+- **Options > Controls**: the keys that move (WASD) can be changed. The arrow keys, the stick and the
+  D-pad always move too, so the menus can always be used. On these rows a gamepad button cancels.
+- **Options > Controls** marks in red a key or button that two actions share, and says which ones.
+- **Options > Hit sound** (off by default): a short ping when you hit the foe, with a short cooldown
+  so a burst of hits is one ping. Online it plays when the rival confirms the hit.
+
+### Changed
+- What you choose in **Edit Pokémon** before a battle is now saved, like in the Moves menu, instead
+  of lasting for that battle. What you set for the AI's picks is saved apart from your own, and
+  **Restore defaults** there puts the roster's back. Random moves still last for that battle, so a
+  roll never overwrites a saved set, unless you then change one of its moves by hand.
+- The cries on the menus are quieter: 8 dB on choosing a Pokémon, 10 dB on the VS screen.
+- Tests never touch the player's saved moves: they all use a file of their own.
+
 ## [demo-aim] - 2026-10-31
 
 ### Added

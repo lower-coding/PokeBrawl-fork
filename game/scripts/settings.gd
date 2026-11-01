@@ -2,7 +2,7 @@ class_name Settings
 extends Node
 ## The player's options, saved in user://settings.cfg and applied when loaded and on every
 ## change: the battle controls (each action on keyboard and on gamepad), music and effects
-## volume, window mode, vertical sync and frame cap, camera shake, rumble, crosshair and its shape,
+## volume, the sound of landing a hit, window mode, vertical sync and frame cap, camera shake, rumble, crosshair and its shape,
 ## and language.
 ## The Options screen (Menu, drawn by MenuDraw) works through items(), menu_input() and
 ## menu_event(). Tests start from the defaults and never save, so a player's settings
@@ -10,7 +10,7 @@ extends Node
 
 const PATH := "user://settings.cfg"
 const ROWS := 12                     # rows shown at once on the screen (it scrolls)
-const BINDABLE := ["jump", "dodge", "lock_on", "mov1", "mov2", "mov3", "mov4", "descend", "switch1", "switch2", "first_person", "pause"]
+const BINDABLE := ["move_up", "move_down", "move_left", "move_right", "jump", "dodge", "lock_on", "mov1", "mov2", "mov3", "mov4", "descend", "switch1", "switch2", "first_person", "pause"]
 const FPS_CAPS := [0, 60, 120, 144, 240]
 const LANGUAGES := ["", "en", "es"]
 const CROSSHAIR_SHAPES := ["cross", "circle"]
@@ -22,6 +22,7 @@ var crosshair := false
 var crosshair_shape := "cross"
 var music := 0.5
 var sfx := 1.0
+var hit_ping := false
 var fullscreen := true
 var vsync := true
 var fps_cap := 0
@@ -58,6 +59,7 @@ func load_saved() -> void:
 	player_name = str(cf.get_value("profile", "name", player_name)).substr(0, Menu.NAME_MAX)
 	music = cf.get_value("sound", "music", music)
 	sfx = cf.get_value("sound", "sfx", sfx)
+	hit_ping = cf.get_value("sound", "hit_ping", hit_ping)
 	fullscreen = cf.get_value("screen", "fullscreen", fullscreen)
 	vsync = cf.get_value("screen", "vsync", vsync)
 	fps_cap = cf.get_value("screen", "fps_cap", fps_cap)
@@ -78,6 +80,7 @@ func save() -> void:
 	cf.set_value("profile", "name", player_name)
 	cf.set_value("sound", "music", music)
 	cf.set_value("sound", "sfx", sfx)
+	cf.set_value("sound", "hit_ping", hit_ping)
 	cf.set_value("screen", "fullscreen", fullscreen)
 	cf.set_value("screen", "vsync", vsync)
 	cf.set_value("screen", "fps_cap", fps_cap)
@@ -112,16 +115,34 @@ func apply(screen := false) -> void:
 func items() -> Array:
 	var out: Array = []
 	out.append({"id": "h_controls", "kind": "header", "label": tr("Controls")})
+	var users := _key_users()
 	for a in BINDABLE:
 		var kb := ""
 		var pad := ""
+		var kb_clash := false
+		var pad_clash := false
+		var clashes: Array = []
 		for ev in InputMap.action_get_events(a):
+			var key_name := Controls.event_name(ev, "playstation" if Controls.last_device == "playstation" else "xbox")
+			var others: Array = users[str(Controls.to_data(ev))].filter(func(o): return o != a)
+			if not others.is_empty():
+				clashes.append(tr("%s also does: %s") % [key_name, ", ".join(others.map(_action_name))])
+				if Controls.is_pad(ev):
+					pad_clash = true
+				else:
+					kb_clash = true
 			if Controls.is_pad(ev):
-				pad = Controls.event_name(ev, "playstation" if Controls.last_device == "playstation" else "xbox")
-			else:
-				kb = Controls.event_name(ev)
-		out.append({"id": a, "kind": "bind", "label": _action_name(a), "value": "%s  /  %s" % [kb, pad],
-			"help": tr("Press to change it, then press the new key or button: a key changes the keyboard's, a button the gamepad's. Esc cancels.")})
+				pad = key_name
+			elif kb == "" or not Controls.is_arrow(a, ev):
+				kb = key_name
+		var row := {"id": a, "kind": "bind", "label": _action_name(a), "kb": kb, "pad": pad, "kb_clash": kb_clash, "pad_clash": pad_clash, "clashes": clashes}
+		if Controls.MOVE_ARROWS.has(a):
+			row.value = kb
+			row.help = tr("Press to change it, then press the new key. Esc cancels. The arrow keys, the stick and the D-pad always move too.")
+		else:
+			row.value = "%s  /  %s" % [kb, pad]
+			row.help = tr("Press to change it, then press the new key or button: a key changes the keyboard's, a button the gamepad's. Esc cancels.")
+		out.append(row)
 	out.append({"id": "reset_controls", "kind": "action", "label": tr("Default controls"), "value": "",
 		"help": tr("Puts every action back on its usual key and button.")})
 	out.append({"id": "h_sound", "kind": "header", "label": tr("Sound")})
@@ -129,6 +150,8 @@ func items() -> Array:
 		"help": tr("Volume of the music in the menus and battles.")})
 	out.append({"id": "sfx", "kind": "slider", "label": tr("Effects"), "value": "%d%%" % roundi(sfx * 100.0),
 		"help": tr("Volume of moves, hits, cries and the crowd.")})
+	out.append({"id": "hit_ping", "kind": "toggle", "label": tr("Hit sound"),
+		"value": tr("On") if hit_ping else tr("Off"), "help": tr("A short ping when you hit the foe, just one for a quick burst of hits.")})
 	out.append({"id": "h_screen", "kind": "header", "label": tr("Screen")})
 	out.append({"id": "fullscreen", "kind": "toggle", "label": tr("Full screen"),
 		"value": tr("On") if fullscreen else tr("Off"), "help": tr("Full screen or a window.")})
@@ -150,8 +173,21 @@ func items() -> Array:
 	return out
 
 
+## Which of the actions each key or button is on (by its Controls.to_data): two on one clash.
+func _key_users() -> Dictionary:
+	var users := {}
+	for a in BINDABLE:
+		for ev in InputMap.action_get_events(a):
+			users.get_or_add(str(Controls.to_data(ev)), []).append(a)
+	return users
+
+
 func _action_name(a: String) -> String:
 	match a:
+		"move_up": return tr("Move forward")
+		"move_down": return tr("Move back")
+		"move_left": return tr("Move left")
+		"move_right": return tr("Move right")
 		"jump": return tr("Jump")
 		"dodge": return tr("Dodge")
 		"lock_on": return tr("Lock on")
@@ -228,6 +264,11 @@ func _change(id: String, step: int) -> void:
 			music = clampf(snappedf(music + 0.1 * step, 0.1), 0.0, 1.0)
 		"sfx":
 			sfx = clampf(snappedf(sfx + 0.1 * step, 0.1), 0.0, 1.0)
+		"hit_ping":
+			hit_ping = not hit_ping
+			# Turned on, a sample of what it sounds like.
+			if hit_ping:
+				main.audio.ping()
 		"shake":
 			shake = clampf(snappedf(shake + 0.25 * step, 0.25), 0.0, 1.0)
 		"rumble":
@@ -270,6 +311,14 @@ func menu_event(menu: Menu, ev: InputEvent) -> void:
 	elif ev is InputEventJoypadMotion and ev.axis in [JOY_AXIS_TRIGGER_LEFT, JOY_AXIS_TRIGGER_RIGHT] and absf(ev.axis_value) > 0.6:
 		take = ev
 	if take == null:
+		return
+	# The directions stay on the stick and D-pad: a button only cancels, or a player with just a
+	# gamepad would be stuck here.
+	if Controls.is_pad(take) and Controls.MOVE_ARROWS.has(waiting):
+		waiting = ""
+		_guard = 0.3
+		menu._sound("back")
+		menu.get_viewport().set_input_as_handled()
 		return
 	Controls.rebind(waiting, take)
 	var b: Dictionary = bindings.get(waiting, {})

@@ -45,6 +45,10 @@ var _strip: Array = []           # moves --sequence: frames of the current move
 func _ready() -> void:
 	process_mode = Node.PROCESS_MODE_ALWAYS
 	DirAccess.make_dir_recursive_absolute(_dir())
+	# Never the player's own save: what a test sets goes to a file of its own, empty at the start.
+	Loadout.path = "user://loadouts_test.json"
+	Loadout.restore()
+	Loadout.restore("", 1)
 	for l in main.fighters:
 		l.hit_taken.connect(func(_q, info):
 			_hits += 1
@@ -178,7 +182,7 @@ func _ready() -> void:
 				[2.6, "", ""], [2.9, "menu_accept", ""], [3.6, "", "options_top"], [3.8, "move_down", ""],
 				[4.0, "move_down", ""], [4.2, "move_down", ""], [4.4, "move_down", ""], [4.6, "move_down", ""],
 				[4.8, "move_down", ""], [5.0, "move_down", ""], [5.2, "move_down", ""], [5.4, "move_down", ""], [5.6, "move_down", ""],
-				[6.0, "", "options_sound"]]
+				[6.0, "", "options_sound"], [6.8, "", "options_clash"]]
 		"combat":
 			_shots = [2.0, 4.0, 6.0, 8.0, 10.0, 12.5, 15.0, 18.0, 22.0]
 		"mechanics":
@@ -510,7 +514,17 @@ func _physics_process(delta: float) -> void:
 			if test_name == "menu_rules" and t > 14.5:
 				_rules_outcome()
 				get_tree().quit()
-			if test_name == "menu_options" and t > 6.8:
+			# Back at the top, with a key and a button that two actions share.
+			if test_name == "menu_options" and t >= 6.2 and t - delta < 6.2:
+				main.options.cursor = 1
+				main.options.top = 0
+				var w_key := InputEventKey.new()
+				w_key.physical_keycode = KEY_W
+				Controls.rebind("jump", w_key)
+				var b_button := InputEventJoypadButton.new()
+				b_button.button_index = JOY_BUTTON_B
+				Controls.rebind("mov1", b_button)
+			if test_name == "menu_options" and t > 7.2:
 				get_tree().quit()
 			if test_name == "menu_forms_team" and t >= 6.4 and t - delta < 6.4:
 				var team: Array = main.menu.choice.team
@@ -744,7 +758,7 @@ func _ok(case_name: String, passes: bool, detail := "") -> void:
 	print("%s  %s  %s" % ["OK   " if passes else "FAIL ", case_name, detail])
 
 
-## The selection's random picks and random moves, each battle's moves over the defaults, and the
+## The selection's random picks and random moves, what is set before a battle being saved, and the
 ## groups of the Moves screen's list.
 func _prep_test() -> void:
 	await get_tree().physics_frame
@@ -811,7 +825,8 @@ func _prep_test() -> void:
 	_ok("3 vs 3: the Moves screen lists just the six picks", m.edit_entries().size() == 6 and m.edit_phase == "pokemon" and m.edit_side == 0)
 	m._leave_moves()
 
-	# This battle's moves: over the defaults, for that side only, gone with the pick.
+	# Set before a battle: saved, for that side only, and it stays when the pick changes. A roll is
+	# just for the battle.
 	m.choice.format = "1v1"
 	m.choice.team = []
 	m.choice.team2 = []
@@ -823,23 +838,113 @@ func _prep_test() -> void:
 	m._edit_pick(1)
 	var set_moves: Array = ["airslash", "dragonclaw", "flareblitz", "earthquake"]
 	m._store_edit({"moves": set_moves, "ability": "solarpower"})
-	_ok("Set for the battle: the rival's pick has it", m.battle_loadout(1, "charizard").moves == set_moves and m.battle_loadout(1, "charizard").ability == "solarpower")
-	_ok("Set for the battle: my same Pokémon does not", Loadout.is_default("charizard") and m.battle_loadout(0, "charizard") == Loadout.default_for("charizard"))
+	_ok("Set for the rival's pick: it has it", m.battle_loadout(1, "charizard").moves == set_moves and m.battle_loadout(1, "charizard").ability == "solarpower")
+	_ok("Set for the rival's pick: saved, not just for this battle", Loadout.saved("charizard", 1).moves == set_moves and m.choice.loadouts[1].is_empty())
+	_ok("Set for the rival's pick: my same Pokémon does not", Loadout.is_default("charizard") and m.battle_loadout(0, "charizard") == Loadout.default_for("charizard"))
 	m._leave_moves()
 	main.start_battle("charizard", "charizard", "normal")
-	_ok("Set for the battle: it fights with it", main.fighters[1].data.moves == set_moves and main.fighters[1].data.passive.id == "solarpower" \
+	_ok("Set for the rival's pick: it fights with it", main.fighters[1].data.moves == set_moves and main.fighters[1].data.passive.id == "solarpower" \
 		and main.fighters[0].data.moves == Roster.POKEMON["charizard"].moves, "%s" % [main.fighters[1].data.moves])
-	_ok("Set for the battle: the defaults stay saved as they were", Loadout.is_default("charizard"))
 	m._store_edit(Loadout.default_for("charizard"))
-	_ok("Set back to the default, nothing is left to restore", m.choice.loadouts[1].is_empty())
+	_ok("Set back to the default, nothing is left to restore", not m._pick_changed(1, "charizard"))
 	m._store_edit({"moves": set_moves, "ability": "solarpower"})
+	m._edit_pick(0)
+	var my_moves: Array = ["dragonclaw", "airslash", "earthquake", "flareblitz"]
+	m._store_edit({"moves": my_moves, "ability": Roster.POKEMON["charizard"].passive.id})
+	_ok("Set for my pick: it is what the Moves menu shows", Loadout.saved("charizard").moves == my_moves and m.battle_loadout(0, "charizard").moves == my_moves)
+	_ok("Set for my pick: the rival's stays its own", Loadout.saved("charizard", 1).moves == set_moves)
+	# As when the game opens again: read back from the file.
+	Loadout._loaded = false
+	Loadout._saved = {}
+	Loadout._saved_ai = {}
+	_ok("Saved: both sides are still there from the file", Loadout.saved("charizard").moves == my_moves and Loadout.saved("charizard", 1).moves == set_moves)
 	m.choice.p2 = "snorlax"
 	m._to_setup()
-	_ok("Another pick drops what was set for the old one", m.choice.loadouts[1].is_empty() and m.battle_loadout(1, "snorlax") == Loadout.default_for("snorlax"))
+	_ok("Another pick keeps what was saved for the old one", Loadout.saved("charizard", 1).moves == set_moves and m.battle_loadout(1, "snorlax") == Loadout.default_for("snorlax"))
 	m._random_battle_moves()
 	_ok("Random moves from the options: for both sides", m.choice.loadouts[0].has("charizard") or m.choice.loadouts[1].has("snorlax"))
+	_ok("Random moves: nothing saved is overwritten", Loadout.saved("charizard").moves == my_moves and Loadout.is_default("snorlax", 1))
 	main.start_battle("charizard", "snorlax", "normal")
 	_ok("Random moves: they reach the fighters", main.fighters[1].data.moves == m.battle_loadout(1, "snorlax").moves)
+	m._roll_moves(1, "snorlax")
+	var rolled: Dictionary = m.battle_loadout(1, "snorlax")
+	m._edit_pick(1)
+	m._store_edit(rolled)
+	_ok("Changed by hand, a roll is saved like anything else", Loadout.saved("snorlax", 1).moves == rolled.moves and not m.choice.loadouts[1].has("snorlax"))
+	m._restore_pick(1, "snorlax")
+	_ok("Restored: back to its default", Loadout.is_default("snorlax", 1) and m.battle_loadout(1, "snorlax") == Loadout.default_for("snorlax"))
+
+	# Options: the keys that move, and the hit sound.
+	var keys := func(action: String) -> Array:
+		return InputMap.action_get_events(action).filter(func(ev): return ev is InputEventKey).map(func(ev): return ev.physical_keycode)
+	var opts: Settings = main.options
+	var up_row := func() -> Dictionary:
+		return opts.items().filter(func(it): return it.id == "move_up")[0]
+	_ok("Keys: the directions are listed", up_row.call().kind == "bind", str(up_row.call()))
+	var new_key := InputEventKey.new()
+	new_key.physical_keycode = KEY_I
+	Controls.rebind("move_up", new_key)
+	_ok("Keys: a new one replaces W and leaves the arrow", keys.call("move_up") == [KEY_UP, KEY_I], str(keys.call("move_up")))
+	var stick_kept := InputMap.action_get_events("move_up").filter(Controls.is_pad).size()
+	var button := InputEventJoypadButton.new()
+	button.button_index = JOY_BUTTON_A
+	Controls.rebind("move_up", button)
+	_ok("Keys: a pad button does not take the stick and D-pad's place", InputMap.action_get_events("move_up").filter(Controls.is_pad).size() == stick_kept and stick_kept == 2)
+	opts.bindings = {"move_left": {"kb": Controls.to_data(new_key)}}
+	opts.apply()
+	_ok("Keys: the saved ones come back on loading", keys.call("move_left") == [KEY_LEFT, KEY_I] and keys.call("move_up") == [KEY_W, KEY_UP], str(keys.call("move_left")))
+	opts.bindings = {}
+	opts.apply()
+	_ok("Keys: the defaults are back", keys.call("move_left") == [KEY_A, KEY_LEFT])
+	var clashing := func() -> Array:
+		return opts.items().filter(func(it): return it.get("kb_clash", false) or it.get("pad_clash", false)).map(func(it): return it.id)
+	_ok("Clashes: none by default", clashing.call().is_empty(), str(clashing.call()))
+	var w_key := InputEventKey.new()
+	w_key.physical_keycode = KEY_W
+	Controls.rebind("jump", w_key)
+	var jump_row: Dictionary = opts.items().filter(func(it): return it.id == "jump")[0]
+	_ok("Clashes: a key on two actions marks both, and just them", clashing.call() == ["move_up", "jump"], str(clashing.call()))
+	_ok("Clashes: the keyboard's side, not the gamepad's", jump_row.kb_clash and not jump_row.pad_clash)
+	_ok("Clashes: it says who else uses it", jump_row.clashes.size() == 1 and jump_row.clashes[0].contains(tr("Move forward")), str(jump_row.clashes))
+	var b_button := InputEventJoypadButton.new()
+	b_button.button_index = JOY_BUTTON_B
+	Controls.rebind("mov1", b_button)
+	var mov1_row: Dictionary = opts.items().filter(func(it): return it.id == "mov1")[0]
+	_ok("Clashes: a button on two actions, the gamepad's side", mov1_row.pad_clash and not mov1_row.kb_clash and "dodge" in clashing.call())
+	var up_key := InputEventKey.new()
+	up_key.physical_keycode = KEY_UP
+	Controls.rebind("mov2", up_key)
+	_ok("Clashes: a direction's arrow counts too", "mov2" in clashing.call())
+	opts.apply()
+	_ok("Clashes: gone with the defaults", clashing.call().is_empty(), str(clashing.call()))
+
+	var pa: Fighter = main.fighters[0]
+	var pb: Fighter = main.fighters[1]
+	var heard: int = main.audio.pings
+	var hit := Hit.new()
+	hit.user = pa
+	hit.move_id = "tackle"
+	var blow := func(from: Fighter, to: Fighter) -> void:
+		hit.user = from
+		to.invulnerable = 0.0
+		to.hp = to.hp_max
+		to.receive({"hit": hit, "attacker": from, "affinity": 1.0, "point": to.center()})
+	blow.call(pa, pb)
+	_ok("Hit sound: off by default, no ping", main.audio.pings == heard)
+	opts.hit_ping = true
+	blow.call(pa, pb)
+	_ok("Hit sound: on, my hit pings", main.audio.pings == heard + 1, str(main.audio.pings - heard))
+	blow.call(pa, pb)
+	blow.call(pa, pb)
+	_ok("Hit sound: a burst of hits is one ping", main.audio.pings == heard + 1, str(main.audio.pings - heard))
+	var until := Time.get_ticks_msec() + Audio.PING_GAP + 20
+	while Time.get_ticks_msec() < until:
+		await get_tree().process_frame
+	blow.call(pb, pa)
+	_ok("Hit sound: being hit does not ping", main.audio.pings == heard + 1, str(main.audio.pings - heard))
+	blow.call(pa, pb)
+	_ok("Hit sound: after the cooldown, it pings again", main.audio.pings == heard + 2, str(main.audio.pings - heard))
+	opts.hit_ping = false
 	var fails := _results.filter(func(r): return not r[1]).size()
 	print("RESULT: %d of %d" % [_results.size() - fails, _results.size()])
 	get_tree().quit()

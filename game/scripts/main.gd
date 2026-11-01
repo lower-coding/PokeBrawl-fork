@@ -180,14 +180,29 @@ func set_stage(stage_id: String) -> void:
 		portraits(fighters[0].species, fighters[1].species)
 
 
-## My Pokémon's moves and ability: what I saved in the Moves menu. Tests and AI against AI
-## use the defaults (or --moves=a,b,c,d for p1), so they always play the same.
+## My Pokémon's moves and ability: what I saved, in the Moves menu or before a battle. Tests and
+## AI against AI use the defaults (or --moves=a,b,c,d for p1), so they always play the same.
 func my_loadout(sp: String) -> Dictionary:
 	if _args.has("moves"):
 		return Loadout.valid(sp, {"moves": Array(str(_args.moves).split(",")), "ability": Roster.POKEMON[sp].passive.id})
-	if _args.has("test") or _args.has("aivsai"):
-		return Loadout.default_for(sp)
-	return Loadout.saved(sp)
+	return Loadout.saved(sp) if _plays_saved() else Loadout.default_for(sp)
+
+
+## The AI's Pokémon's: what I saved for it before a battle, apart from my own.
+func ai_loadout(sp: String) -> Dictionary:
+	return Loadout.saved(sp, 1) if _plays_saved() else Loadout.default_for(sp)
+
+
+## Whether saved moves count; of the tests, only for those about them ("prep", "menu_prep"...).
+func _plays_saved() -> bool:
+	return str(_args.get("test", "")).contains("prep") or not (_args.has("test") or _args.has("aivsai"))
+
+
+## A hit by "who" landed on the other side: the ping, for my team's and if it is on. Any of my
+## team's, for a shot left flying by one that switched out.
+func hit_ping(who: Fighter) -> void:
+	if options.hit_ping and player and player.is_player and who.team == player.team:
+		audio.ping()
 
 
 ## "rival_loadout": what the online rival sent with its choice (against the AI, what the menu has
@@ -641,6 +656,7 @@ func _net_event(d: Dictionary) -> void:
 			# Confirmation from the rival: my hit landed. Number and type, like offline.
 			if fighters.size() > 1 and d.damage > 0.5:
 				vfx.number(d.point, d.damage, d.affinity)
+				hit_ping(net.local)
 				if move.get("crit", false):
 					vfx.text(d.point + Vector3.UP * 1.2, tr("Critical hit!"), Color("ffb13a"))
 				if d.affinity > 1.05:

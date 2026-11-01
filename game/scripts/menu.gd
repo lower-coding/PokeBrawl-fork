@@ -62,6 +62,8 @@ const NAME_KEYS := [["Q", "W", "E", "R", "T", "Y", "U", "I", "O", "P"], ["A", "S
 ## from each one ([up, down, left, right], -1 stays).
 const MAIN_NAV := [[-1, -1, -1, 1], [6, 3, 0, 2], [6, 4, 1, -1], [1, -1, 0, 4], [2, 5, 3, -1], [4, -1, 3, -1], [-1, 2, 1, -1]]
 const ONLINE_NAV := [[-1, -1, -1, 1], [-1, 2, 0, -1], [1, -1, 0, -1]]
+const CRY_DB := -30.0            # a Pokémon's cry on being chosen
+const VS_CRY_DB := -22.0         # and on the VS screen
 
 var main: Node
 var is_open := false
@@ -69,8 +71,8 @@ var screen := "title"
 var cursor := 0
 ## The next battle. "format": 1v1 or 3v3; "team", "team2": each side's picks in a 3 vs 3, the
 ## first one leads (it is "p1" or "p2" too); "rules": BattleRules; "loadouts": per side, species ->
-## the moves and ability set for this battle, over its defaults. Not saved: it lasts until the
-## game closes.
+## the moves rolled for this battle (what is chosen by hand is saved, in Loadout). Not saved: it
+## lasts until the game closes.
 var choice := {"p1": "pikachu", "p2": "snorlax", "diff": "normal", "mode": "combat", "stage": "night",
 	"format": "1v1", "team": [], "team2": [], "rules": BattleRules.defaults(), "loadouts": [{}, {}]}
 var team_preview := ""           # a 3 vs 3's pick: who the cursor is on, shown in the next slot
@@ -682,7 +684,7 @@ func _take(sp: String) -> void:
 ## A Pokémon's cry, when it is chosen: never for just passing over it.
 func _cry(sp: String) -> void:
 	cries += 1
-	main.audio.cry(sp, main.camera.global_position, 1.0, -22.0)
+	main.audio.cry(sp, main.camera.global_position, 1.0, CRY_DB)
 
 
 ## A random Pokémon or form for whoever is picking, one not on its team yet.
@@ -789,17 +791,20 @@ func battle_picks() -> Array:
 	return out
 
 
-## A pick's moves and ability in this battle: what was set for it, or else its default (mine, what
-## the Moves menu saved; the AI's, the roster's).
+## A pick's moves and ability in this battle: what was rolled for it, or else what is saved for
+## that side. The online rival's own come with its choice: until then, the roster's.
 func battle_loadout(side: int, sp: String) -> Dictionary:
-	var edited: Dictionary = choice.loadouts[side].get(sp, {})
-	return edited if not edited.is_empty() else _default_loadout(side, sp)
+	var rolled: Dictionary = choice.loadouts[side].get(sp, {})
+	return rolled if not rolled.is_empty() else _default_loadout(side, sp)
 
 
 func _default_loadout(side: int, sp: String) -> Dictionary:
-	return main.my_loadout(sp) if side == 0 else Loadout.default_for(sp)
+	if side == 0:
+		return main.my_loadout(sp)
+	return Loadout.default_for(sp) if online else main.ai_loadout(sp)
 
 
+## What was rolled, for this battle only: a roll never overwrites a saved set.
 func _set_battle_loadout(side: int, sp: String, lo: Dictionary) -> void:
 	var checked := Loadout.valid(sp, lo)
 	if checked == _default_loadout(side, sp):
@@ -808,7 +813,7 @@ func _set_battle_loadout(side: int, sp: String, lo: Dictionary) -> void:
 		choice.loadouts[side][sp] = checked
 
 
-## What was set for a Pokémon lasts while it stays picked.
+## What was rolled for a Pokémon lasts while it stays picked.
 func _keep_picked_loadouts() -> void:
 	var picks := battle_picks()
 	for side in 2:
@@ -1139,8 +1144,8 @@ const EDIT_ROWS := 8             # options shown at once in the list
 
 
 ## Moves screen: pick a Pokémon in the list, then one of its four moves (or its ability),
-## then what goes there. Every change is saved at once (Loadout), or kept for this battle when
-## prepping. Y / X shows or hides the details of the highlighted move; X / R restores the
+## then what goes there. Every change is saved at once (Loadout), when prepping too, for the side
+## of the pick. Y / X shows or hides the details of the highlighted move; X / R restores the
 ## defaults (see ask_restore); RB / E rolls random moves when prepping.
 func _edit_moves() -> void:
 	var list := edit_entries()
@@ -1230,16 +1235,17 @@ func _browse_options(options: Array) -> void:
 		edit_top = mini(edit_top, edit_cursor - 1)
 
 
-## Restores the defaults, after asking. Prepping, only what was set for this battle: every pick's
-## from the list of picks, the one being edited from its slots or a slot's options. Otherwise the
-## saved ones, every Pokémon's or the one being edited's, the same way.
+## Restores the defaults, after asking: from the list, every Pokémon's (prepping, every pick's);
+## from its slots or a slot's options, the one being edited's.
 func ask_restore() -> void:
 	if not restorable():
 		_sound("back")
 		return
 	if restore_all():
 		if prepping():
-			ask(tr("Restore every pick's default moves and ability?"), func(): choice.loadouts = [{}, {}])
+			ask(tr("Restore every pick's default moves and ability?"), func():
+				for pick in battle_picks():
+					_restore_pick(pick[0], pick[1]))
 		else:
 			ask(tr("Restore every Pokémon's default moves and abilities?"), func(): Loadout.restore())
 		return
@@ -1247,10 +1253,15 @@ func ask_restore() -> void:
 	var side := edit_side
 	ask(tr("Restore %s's default moves and ability?") % tr(Roster.POKEMON[sp].display_name), func():
 		if prepping():
-			choice.loadouts[side].erase(sp)
+			_restore_pick(side, sp)
 		else:
 			Loadout.restore(sp)
 		edit_phase = "slots")
+
+
+func _restore_pick(side: int, sp: String) -> void:
+	choice.loadouts[side].erase(sp)
+	Loadout.restore(sp, side)
 
 
 func restore_all() -> bool:
@@ -1261,9 +1272,13 @@ func restore_all() -> bool:
 func restorable() -> bool:
 	if prepping():
 		if restore_all():
-			return not (choice.loadouts[0].is_empty() and choice.loadouts[1].is_empty())
-		return choice.loadouts[edit_side].has(edit_sp)
+			return battle_picks().any(func(pick): return _pick_changed(pick[0], pick[1]))
+		return _pick_changed(edit_side, edit_sp)
 	return not (all_forms().all(Loadout.is_default) if restore_all() else Loadout.is_default(edit_sp))
+
+
+func _pick_changed(side: int, sp: String) -> bool:
+	return choice.loadouts[side].has(sp) or not Loadout.is_default(sp, side)
 
 
 func _leave_moves() -> void:
@@ -1328,9 +1343,11 @@ func edit_loadout() -> Dictionary:
 	return battle_loadout(edit_side, edit_sp) if prepping() else Loadout.saved(edit_sp)
 
 
+## A change by hand is saved, in place of a roll if it was on one (so that roll is kept).
 func _store_edit(lo: Dictionary) -> void:
 	if prepping():
-		_set_battle_loadout(edit_side, edit_sp, lo)
+		choice.loadouts[edit_side].erase(edit_sp)
+		Loadout.store(edit_sp, lo, edit_side)
 	else:
 		Loadout.store(edit_sp, lo)
 
@@ -1436,7 +1453,7 @@ func _start_vs(mine: String, theirs: String) -> void:
 	screen = "vs"
 	enter_t = 0.0
 	main.portraits(mine, theirs)
-	main.audio.cry(mine, main.camera.global_position, 1.0, -12.0)
+	main.audio.cry(mine, main.camera.global_position, 1.0, VS_CRY_DB)
 
 
 func vs_pair() -> Array:

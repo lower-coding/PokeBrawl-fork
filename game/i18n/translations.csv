@@ -792,3 +792,13 @@ Other pick,Other pick,Otra elección
 Other group,Other group,Otro grupo
 %s's moves,%s's moves,Movimientos de %s
 Common moves,Common moves,Movimientos comunes
+"Press to change it, then press the new key. Esc cancels. The arrow keys, the stick and the D-pad always move too.","Press to change it, then press the new key. Esc cancels. The arrow keys, the stick and the D-pad always move too.","Pulsa para cambiarla y luego pulsa la tecla nueva. Esc cancela. Las flechas, el stick y la cruceta siempre mueven también."
+Hit sound,Hit sound,Sonido de golpe
+"A short ping when you hit the foe, just one for a quick burst of hits.","A short ping when you hit the foe, just one for a quick burst of hits.","Un ping corto al golpear al rival, solo uno en una ráfaga rápida de golpes."
+Move forward,Move forward,Avanzar
+Move back,Move back,Retroceder
+Move left,Move left,Ir a la izquierda
+Move right,Move right,Ir a la derecha
+Press a key...,Press a key...,Pulsa una tecla...
+C,C,C
+%s also does: %s,%s also does: %s,%s también hace: %s

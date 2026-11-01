@@ -107,7 +107,7 @@ license in full, written by `tools/godot_notices.gd`.
 - The pixel font (`game/gui/font/`, `tools/pixel_font.py`). It is not the Minecraft font. The
   menus use the system's Bahnschrift or Segoe UI fonts, which are not shipped.
 - The Poké Ball window icon (`game/icon.png`, `game/icon.ico`).
-- The synthesized sounds (dodge, footsteps, falls, armor, charges) in `game/scripts/audio.gd`.
+- The synthesized sounds (dodge, footsteps, falls, armor, charges, hit ping) in `game/scripts/audio.gd`.
 
 ## Pokémon
 

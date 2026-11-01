@@ -1468,6 +1468,8 @@ func receive(info: Dictionary) -> String:
 	if g.strength >= 2 or damage > hp_max * 0.12:
 		main.trainer_react(self, "flinch")
 	main.session.hit(team, damage)
+	if at and is_instance_valid(at) and at.team != team:
+		main.hit_ping(at)
 	if at and is_instance_valid(at) and not at.is_remote:
 		# Its team's energy, even if it hit with a shot it left flying when it switched out.
 		var credit: Fighter = at.party.active if at.party else at
