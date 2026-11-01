@@ -5,6 +5,8 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+## [demo-sylveon] - 2026-11-01
+
 ### Added
 - **Sylveon**, a slow special wall: Moonblast, Swift, Draining Kiss and Hyper Voice by default, with
   Dazzling Gleam and 22 more on the Moves screen. Its legs and ribbons move with clips of ours.
