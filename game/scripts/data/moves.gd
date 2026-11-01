@@ -49,9 +49,20 @@ extends RefCounted
 ##   inflicts                      status moves: the status they give ("drowsy": Yawn)
 ##   secondary                     what a hit also does, as in the games: "chance", and "status",
 ##                                 "boost" or "confuse" (seconds) on the target, "self" on the user
+##   heal                          share of the damage dealt the user gets back at the hit
+##                                 (Draining Kiss, Fighter.on_strike)
+##   stars, fan, gap               Swift: how many, how wide they leave (rad to each side) and the
+##                                 seconds between them
+##   look                          which wave widewave.gd draws: "gleam" or "voice"
 ##   counterplay                   what the opponent can do (for design and the selection screen)
 ## Player-facing text (display_name, desc, counterplay) is in English and is translated
 ## through game/i18n/translations.csv.
+
+## The type a move has in battle: Pixilate turns Normal moves into Fairy ones.
+static func type_for(id: String, ability: String) -> String:
+	var type: String = DATA[id].type if DATA.has(id) else "normal"
+	return "fairy" if type == "normal" and ability == "pixilate" else type
+
 
 ## Cooldown in seconds: strong moves and those with few PP take longer. A 40-power move
 ## with 30 PP is back in 1.6 s; a 120-power one with 10 PP takes about 6.5 s. Moves
@@ -777,4 +788,42 @@ const DATA := {
 		"desc": "Relaxes its body and moves much faster: Speed rises two stages. Once per battle.",
 		"ai": {"min": 6.0, "max": 99.0, "kind": "buff", "value": 0.8},
 		"counterplay": "Hit it in that short moment. Afterwards, lower its Speed or cover ground with area moves."},
+
+	# ---------------------------------------------------------------- Sylveon
+	"drainingkiss": {"fx_hit": ["fairywind_targethit", "playrough_targetstars"],
+		"display_name": "Draining Kiss", "script": "res://scripts/moves/strike.gd", "motion": "kiss", "type": "fairy", "cat": "special", "power": 50, "pp": 10, "accuracy": 100, "priority": 0,
+		"heal": 0.75, "cost": 14.0, "startup": 0.1, "active": 0.12, "recovery": 0.3, "damage": 50.0, "stun": 0.3,
+		"strength": 1, "reach": 1.3, "radius": 0.9, "advance": 2.0, "hit_height": 0.7, "sound": "drainingkiss", "sound_hit": "drainingkiss_hit",
+		"desc": "A quick kiss at close range. It heals the user by most of the damage dealt.",
+		"ai": {"min": 0.0, "max": 3.5, "kind": "punish", "value": 1.2},
+		"counterplay": "It only reaches a few meters and heals nothing if it misses: stay away, or dodge through it and punish."},
+	"moonblast": {"fx_hit": ["psybeam_targetburst", "playrough_targetstars"],
+		"display_name": "Moonblast", "script": "res://scripts/moves/moonblast.gd", "type": "fairy", "cat": "special", "power": 95, "pp": 15, "accuracy": 100, "secondary": {"chance": 0.3, "boost": {"spa": -1}}, "priority": 0,
+		"cost": 22.0, "startup": 0.42, "active": 0.08, "recovery": 0.36, "damage": 95.0, "stun": 0.5,
+		"strength": 2, "contact": false, "speed": 18.0, "reach": 20.0, "radius": 0.75, "track": 40.0,
+		"desc": "A bright ball of moonlight. It can lower the target's Sp. Atk.",
+		"ai": {"min": 3.0, "max": 17.0, "kind": "projectile", "value": 1.2},
+		"counterplay": "The glow warns you and it barely turns: sidestep late or dodge through it."},
+	"swift": {"fx_hit": ["playrough_targetstars"],
+		"deflectable": 1, "display_name": "Swift", "script": "res://scripts/moves/swift.gd", "type": "normal", "cat": "special", "power": 60, "pp": 20, "accuracy": 0, "priority": 0,
+		"split": 4, "stars": 5, "fan": 0.6, "gap": 0.04,
+		"cost": 14.0, "startup": 0.22, "active": 0.2, "recovery": 0.3, "damage": 60.0, "stun": 0.12, "hitstop": 0.02,
+		"strength": 0, "contact": false, "speed": 16.0, "reach": 20.0, "radius": 0.3, "homing": 4.5,
+		"desc": "Five star-shaped rays that chase the target. They never miss, unless it dodges.",
+		"ai": {"min": 3.0, "max": 16.0, "kind": "projectile", "value": 1.1},
+		"counterplay": "You cannot outrun them: a dodge makes them lose you. Walls stop them too."},
+	"dazzlinggleam": {"fx_startup": [["lightscreen_actoreffect", "center"]], "fx_hit": ["fairywind_target", "disarmingvoice_targetsparks"],
+		"display_name": "Dazzling Gleam", "script": "res://scripts/moves/widewave.gd", "look": "gleam", "type": "fairy", "cat": "special", "power": 80, "pp": 10, "accuracy": 100, "priority": 0,
+		"cost": 22.0, "startup": 0.32, "active": 0.1, "recovery": 0.4, "damage": 80.0, "stun": 0.5,
+		"strength": 1, "contact": false, "speed": 9.0, "reach": 15.0, "width": 7.0, "tall": 3.8, "low": 1.3,
+		"desc": "A wide sheet of light rolls across the field.",
+		"ai": {"min": 2.0, "max": 13.0, "kind": "projectile", "value": 1.1},
+		"counterplay": "Up close it is too tall to jump: dodge through it. Further away it is low enough to jump."},
+	"hypervoice": {"fx_startup": [["sing_actor", "locator_mouth"]], "fx_hit": ["supersonic_impact1", "supersonic_impact2"],
+		"display_name": "Hyper Voice", "script": "res://scripts/moves/widewave.gd", "look": "voice", "type": "normal", "cat": "special", "power": 90, "pp": 10, "accuracy": 100, "priority": 0,
+		"cost": 24.0, "startup": 0.46, "active": 0.1, "recovery": 0.4, "damage": 90.0, "stun": 0.55,
+		"strength": 2, "contact": false, "speed": 9.0, "reach": 15.0, "width": 7.0, "tall": 3.8, "low": 1.3,
+		"desc": "A great shout spreads across the field in waves of sound.",
+		"ai": {"min": 2.0, "max": 13.0, "kind": "projectile", "value": 1.2},
+		"counterplay": "Up close it is too tall to jump: dodge through it. Further away it is low enough to jump."},
 }

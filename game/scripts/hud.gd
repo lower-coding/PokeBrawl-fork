@@ -393,6 +393,9 @@ func stage_tags(l: Fighter) -> Array:
 		if n != 0:
 			var mult := ("%.2f" % l.stage_mult(stat)).rstrip("0").trim_suffix(".")
 			tags.append(["%s× %s" % [mult, names[stat]], n > 0])
+	# Infatuated, with the seconds left: hearts over its head are easy to lose.
+	if l.charmed_by != "":
+		tags.append(["%s %d" % [tr("Love"), ceili(l.charmed_t)], false])
 	return tags
 
 
@@ -446,13 +449,14 @@ func _moves(l: Fighter, g0: Vector2) -> void:
 		var ready := l.ready(move)
 		var using: bool = l.action != null and l.action.id == move
 		var a := 1.0 if ready or using else 0.5
-		var col: Color = Roster.TYPE_COLOR.get(d.type, Color.WHITE)
+		var type := Moves.type_for(move, l.data.passive.id)
+		var col: Color = Roster.TYPE_COLOR.get(type, Color.WHITE)
 		if _not_ready[i] > 0.0:
 			col = col.lerp(Color(0.95, 0.3, 0.25), _not_ready[i] / 0.4)
 		col.a = a
 		_piece("battle_move", g, Vector2(92, 24), Rect2(0, 24 if using else 0, 92, 24), col)
 		_piece("battle_move_overlay", g, Vector2(92, 24), Rect2(), Color(1, 1, 1, a))
-		_type_icon(d.type, g + Vector2(-9, 2), 18, a)
+		_type_icon(type, g + Vector2(-9, 2), 18, a)
 		var p := _s
 		if _text_width(tr(d.display_name), p) > 73 * _s:
 			p = _p_log()

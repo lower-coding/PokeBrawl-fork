@@ -65,6 +65,11 @@ const COBBLEMON := {
 	"confusion": ["confusion", "confusion_actor"], "confusion_hit": ["confusion", "confusion_target"],
 	"teleport": ["kinesis", "kinesis_actor"], "calmmind": ["kinesis", "kinesis_actor"], "agility": ["quickattack", "quickattack_actor"],
 	"psyshock": ["psychic", "psychic_actor"], "psyshock_hit": ["psychic", "psychic_target"],
+	"drainingkiss": ["megadrain", "megadrain_actor"], "drainingkiss_hit": ["megadrain", "megadrain_target"],
+	"moonblast": ["shadowball", "shadowball_actor"], "moonblast_hit": ["psychic", "psychic_target"],
+	"swift": ["magicalleaf", "magicalleaf_actor"], "swift_hit": ["magicalleaf", "magicalleaf_target"],
+	"dazzlinggleam": ["lightscreen", "lightscreen_actor"], "dazzlinggleam_hit": ["psychic", "psychic_target"],
+	"hypervoice": ["sing", "sing_actor"], "hypervoice_hit": ["kinesis", "kinesis_target"],
 }
 
 var main: Node

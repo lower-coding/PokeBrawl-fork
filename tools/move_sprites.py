@@ -779,6 +779,121 @@ def psyshock_shard(px, side, f, n, rnd):
                 put(px, side, x, y, hexc("8a2c86"))
 
 
+def moonblast_ball(px, side, f, n, rnd):
+    """A ball of moonlight: a pale core in a see-through purple ball with a strong rim, a halo that
+    breathes, a crescent of white light turning on it and motes drifting off."""
+    c = (side - 1) / 2.0
+    r = side * 0.3
+    turn = f / n * math.tau
+    breath = 0.5 + 0.5 * math.sin(turn)
+    ring(px, side, r, r + 2.5 + 1.5 * breath, hexc("a06aff", ALPHA_SOFT))
+    for y in range(side):
+        for x in range(side):
+            d = math.hypot(x - c, y - c)
+            if d > r:
+                continue
+            if d > r - 1.0:
+                layer(px, side, x, y, hexc("e8d4ff", ALPHA_STRONG))
+            elif d > r - 2.2:
+                layer(px, side, x, y, hexc("a772ff", ALPHA_MID))
+            else:
+                layer(px, side, x, y, hexc("8a55e8", ALPHA_SOFT))
+    # The crescent: the part of a disc outside another one, off to one side.
+    ox, oy = math.cos(turn) * r * 0.45, math.sin(turn) * r * 0.45
+    for y in range(side):
+        for x in range(side):
+            if math.hypot(x - c, y - c) <= r * 0.72 and math.hypot(x - c - ox, y - c - oy) > r * 0.62:
+                layer(px, side, x, y, hexc("ffffff", ALPHA_STRONG))
+    core = r * (0.34 if f % 2 == 0 else 0.28)
+    for y in range(side):
+        for x in range(side):
+            d = math.hypot(x - c, y - c)
+            if d <= core:
+                put(px, side, x, y, hexc("fbf6ff") if d <= core - 1.0 else hexc("d9c2ff"))
+    for k in range(4):
+        a = k / 4 * math.tau - turn * 0.5
+        d = (r + 2) * (1.0 + ((f / n + k / 4) % 1.0) * 0.4)
+        layer(px, side, round(c + math.cos(a) * d), round(c + math.sin(a) * d), hexc("f0e4ff", ALPHA_STRONG))
+
+
+def swift_star(px, side, f, n, rnd):
+    """Swift's five-pointed star, gold with a pale middle and a darker rim, turning a fifth of a turn
+    (its symmetry) over the strip so it loops."""
+    c = (side - 1) / 2.0
+    r_out, r_in = side * 0.48, side * 0.2
+    turn = f / n * (math.tau / 5) - math.pi / 2
+    for y in range(side):
+        for x in range(side):
+            dx, dy = x - c, y - c
+            d = math.hypot(dx, dy)
+            # How far the star reaches this way: straight edges between its points and notches.
+            a = (math.atan2(dy, dx) - turn) % (math.tau / 5)
+            k = abs(a - math.tau / 10) / (math.tau / 10)
+            reach = r_in + (r_out - r_in) * k ** 1.5
+            if d > reach:
+                continue
+            if reach - d < 1.0:
+                col = hexc("d68a14")
+            elif d < r_in * 0.7:
+                col = hexc("fffbe0")
+            else:
+                col = hexc("ffd84a")
+            put(px, side, x, y, col)
+
+
+def gleam_band(px, side, f, n, rnd):
+    """Dazzling Gleam's sheet, stretched across the wave's front: a curtain of pink light, highest in
+    the middle and lower toward its ends, in stepped bands fading upward. A bright line runs along its
+    foot and its top edge, with shafts of pale light rising through it and a few sparkles, all shifting
+    along it so it loops."""
+    c = (side - 1) / 2.0
+    turn = f / n * math.tau
+
+    def top(x):
+        # How high the curtain reaches over this column (0 to 1), rippling.
+        u = (x - c) / c
+        return (1.0 - 0.75 * abs(u) ** 3) * (0.92 + 0.08 * math.sin(u * 9.0 + turn))
+
+    for x in range(side):
+        reach = top(x)
+        for y in range(side):
+            up = (side - 1 - y) / (side - 1)
+            if up > reach:
+                continue
+            if reach - up < 0.04 or y >= side - 2:
+                put(px, side, x, y, hexc("fff0fa", ALPHA_STRONG))
+            elif up < reach * 0.4:
+                put(px, side, x, y, hexc("ff9ad8", ALPHA_MID))
+            else:
+                put(px, side, x, y, hexc("ffb4e2", ALPHA_SOFT))
+    for s in range(7):
+        x0 = (s * side / 7 + f / n * side * (1 if s % 2 else -1)) % side
+        for w in range(2 + s % 2):
+            x = int(x0 + w) % side
+            for y in range(side):
+                up = (side - 1 - y) / (side - 1)
+                if up <= top(x) * (0.55 + 0.1 * (s % 3)):
+                    layer(px, side, x, y, hexc("fff4fb", ALPHA_SOFT))
+    for _ in range(6):
+        x = rnd.randrange(8, side - 8)
+        y = side - 1 - int(rnd.uniform(0.15, 0.8) * top(x) * (side - 1))
+        star(px, side, x, y, rnd.randint(1, 2), hexc("ffffff"))
+
+
+def voice_arc(px, side, f, n, rnd):
+    """Hyper Voice's shock front, stretched across the wave: an arch standing on the ground, in
+    stepped see-through bands that are strongest on the outside. It has no dark in it, so whoever
+    stands behind it can still be seen."""
+    c = (side - 1) / 2.0
+    bands = ((0.9, 1.0, hexc("ffffff", ALPHA_STRONG)), (0.8, 0.9, hexc("e4e0ff", ALPHA_MID)), (0.68, 0.8, hexc("c9c2ff", ALPHA_SOFT)))
+    for y in range(side):
+        for x in range(side):
+            d = math.hypot((x - c) / c, (side - 1 - y) / (side - 1))
+            for low, high, color in bands:
+                if low <= d < high:
+                    put(px, side, x, y, color)
+
+
 if __name__ == "__main__":
     os.makedirs(OUTPUT, exist_ok=True)
     strip(6, 30, electro_ball, "electroball.png", 7)
@@ -802,3 +917,7 @@ if __name__ == "__main__":
     strip(6, 20, acid_spray, "acidspray_ball.png", 89)
     strip(6, 20, chilling_water, "chillingwater_ball.png", 97)
     strip(4, 24, psyshock_shard, "psyshock_shard.png", 101)
+    strip(8, 32, moonblast_ball, "moonblast_ball.png", 103)
+    strip(4, 16, swift_star, "swift_star.png", 107)
+    strip(4, 64, gleam_band, "gleam_band.png", 109)
+    strip(1, 96, voice_arc, "voice_arc.png", 113)

@@ -699,6 +699,9 @@ func _net_event(d: Dictionary) -> void:
 		"disabled":
 			if net.remote and d.get("sp", net.remote.species) == net.remote.species:
 				net.remote.said_disabled()
+		"infatuated":
+			if net.remote and d.get("sp", net.remote.species) == net.remote.species:
+				net.remote.infatuate(str(d.by), int(d.seed))
 		"rematch":
 			rematch()
 		"asks_rematch":

@@ -372,6 +372,8 @@ func _read_state(b: StreamPeerBuffer) -> void:
 			c.held[a] = true
 		else:
 			c.release(a)
+		# The owner's count, whatever got lost on the way: infatuation's roll goes by it.
+		c.counter[a] = n
 	r.button_moves = buttons_from(b.get_u8())
 	var s := {}
 	s.pos = Vector3(b.get_float(), b.get_float(), b.get_float())

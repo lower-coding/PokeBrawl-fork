@@ -16,9 +16,17 @@ var clock := 0.0
 
 
 func add_hit(g: Hit) -> Hit:
+	_retype(g)
 	g.born = clock
 	hits.append(g)
 	return g
+
+
+## Pixilate: its user's Normal moves hit as Fairy ones. Every hit passes through add_hit or
+## projectile, so this is the one place that needs to know.
+func _retype(g: Hit) -> void:
+	if g.type == "normal" and g.user is Fighter and is_instance_valid(g.user) and g.user.data.passive.id == "pixilate":
+		g.type = "fairy"
 
 
 func remove(g: Hit) -> void:
@@ -77,6 +85,7 @@ func projectile(p: Dictionary) -> Dictionary:
 		# Sand Veil: in a sandstorm, projectiles follow it worse (its evasion in the games).
 		if p.target is Fighter and p.target.data.passive.id == "sandveil" and main.weather and main.weather.is_on("sand"):
 			p.track *= 0.8
+	_retype(p.hit)
 	p.hit.local = false
 	p.hit.shape = "sphere"
 	p.hit.radius = p.radius

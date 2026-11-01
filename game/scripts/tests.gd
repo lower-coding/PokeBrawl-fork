@@ -191,6 +191,8 @@ func _ready() -> void:
 			_urshifu_test()
 		"mewtwo":
 			_mewtwo_test()
+		"sylveon":
+			_sylveon_test()
 		"prep":
 			_prep_test()
 		"loadouts":
@@ -2134,9 +2136,488 @@ func _mechanics() -> void:
 	await _goodra_cases()
 	await _urshifu_cases()
 	await _mewtwo_cases()
+	await _sylveon_cases()
 	var fails := _results.filter(func(r): return not r[1]).size()
 	print("RESULT: %d of %d" % [_results.size() - fails, _results.size()])
 	get_tree().quit()
+
+
+## Only Sylveon's cases (--test=sylveon), without the rest of the mechanics.
+func _sylveon_test() -> void:
+	await get_tree().physics_frame
+	await _sylveon_cases()
+	var fails := _results.filter(func(r): return not r[1]).size()
+	print("RESULT: %d of %d" % [_results.size() - fails, _results.size()])
+	get_tree().quit()
+
+
+## What one whole use of "move" takes off "on", by the formula: no combo, no ability of the target.
+func _move_damage(by: Fighter, on: Fighter, move: String) -> float:
+	var d: Dictionary = Moves.DATA[move]
+	var g := Hit.new()
+	g.user = by
+	g.move_id = move
+	g.type = d.type
+	g.cat = d.cat
+	g.damage = d.damage
+	main.combat._retype(g)
+	return Damage.dealt(g, by, on, Roster.affinity(g.type, on.types))
+
+
+## A contact hit (or not) from "by" on "on", straight into combat.
+func _contact_hit(by: Fighter, on: Fighter, contact := true) -> String:
+	var g := Hit.new()
+	g.user = by
+	g.local = false
+	g.move_id = "bite"
+	g.type = "dark"
+	g.cat = "physical"
+	g.damage = 30.0
+	g.stun = 0.1
+	g.contact = contact
+	return main.combat.apply(g, on, on.center())
+
+
+## Sylveon at half health kisses "sp" from "dist" meters, with a chance to set the scene first.
+## Returns [its health back, what the target lost].
+func _kiss(sp: String, dist: float, ready_up := Callable()) -> Array:
+	var ab: Array = await _setup("sylveon", sp, Vector3(-dist, 0, 0), Vector3(0, 0, 0))
+	var a: Fighter = ab[0]
+	var b: Fighter = ab[1]
+	a.hp = a.hp_max * 0.5
+	var hp0: float = a.hp
+	var target0: float = b.hp
+	if ready_up.is_valid():
+		ready_up.call(a, b)
+		hp0 = a.hp
+	a.ctrl.press("mov3")
+	await _wait(0.1)
+	a.ctrl.release("mov3")
+	await _wait(0.5)
+	return [a.hp - hp0, target0 - b.hp]
+
+
+## Sylveon: Pixilate, Cute Charm and infatuation, and its five moves.
+func _sylveon_cases() -> void:
+	await _pixilate_cases()
+	await _cute_charm_cases()
+	await _infatuation_cases()
+	await _draining_kiss_cases()
+	await _swift_cases()
+	await _wave_cases()
+	# Moonblast: a forced roll lowers Sp. Atk.
+	Fighter.force_roll = 0.0
+	await _one_hit("sylveon", "snorlax", "mov1", 6.0)
+	Fighter.force_roll = -1.0
+	var hit_one: Fighter = main.fighters[1]
+	_ok("Moonblast: a forced roll gives -1 Sp. Atk", hit_one.hp < hit_one.hp_max and hit_one.stages.spa == -1, "HP %d, Sp. Atk %+d" % [hit_one.hp, hit_one.stages.spa])
+	# On other bodies, with other locators.
+	for pick in [["charizard", "swift", 6.0], ["urshifu", "swift", 6.0], ["pikachu", "drainingkiss", 2.0], ["gengar", "dazzlinggleam", 6.0], ["snorlax", "hypervoice", 6.0]]:
+		main._args["moves"] = ",".join([pick[1]] + Roster.POKEMON[pick[0]].moves.slice(0, 3))
+		var dealt := await _one_hit(pick[0], "blastoise", "mov1", pick[2])
+		main._args.erase("moves")
+		_ok("%s with %s" % [pick[0], pick[1]], dealt > 0.0, "damage %d" % dealt)
+	# Loadouts.
+	_ok("Loadouts: Sylveon can pick Cute Charm", Loadout.valid("sylveon", {"moves": Roster.POKEMON.sylveon.moves, "ability": "cutecharm"}).ability == "cutecharm")
+	_ok("Loadouts: nobody else can", Loadout.valid("pikachu", {"moves": Roster.POKEMON.pikachu.moves, "ability": "cutecharm"}).ability == "static")
+	_ok("Loadouts: the new moves reach those who learn them", "swift" in Loadout.moves_for("charizard") and "drainingkiss" in Loadout.moves_for("pikachu")
+		and "dazzlinggleam" in Loadout.moves_for("gengar") and "hypervoice" in Loadout.moves_for("snorlax"))
+
+
+func _pixilate_cases() -> void:
+	var ab: Array = await _setup("sylveon", "snorlax", Vector3(-6, 0, 0), Vector3(0, 0, 0))
+	var a: Fighter = ab[0]
+	var b: Fighter = ab[1]
+	var with_it := _move_damage(a, b, "hypervoice")
+	var gleam_with := _move_damage(a, b, "dazzlinggleam")
+	var g := Hit.new()
+	g.user = a
+	main.combat.add_hit(g)
+	_ok("Pixilate: a Normal hit reads as Fairy", g.type == "fairy", g.type)
+	g.active = false
+	var shot := Hit.new()
+	shot.user = a
+	var thrown: Dictionary = main.combat.projectile({"user": a, "pos": a.center(), "velocity": Vector3.RIGHT * 10.0, "hit": shot, "lifetime": 0.01, "node": null})
+	_ok("Pixilate: a Normal shot too", thrown.hit.type == "fairy", thrown.hit.type)
+	a.data.passive = Loadout.ability("sylveon", "cutecharm")
+	var without := _move_damage(a, b, "hypervoice")
+	var plain := Hit.new()
+	plain.user = a
+	main.combat.add_hit(plain)
+	_ok("Pixilate: without it the same move stays Normal", plain.type == "normal", plain.type)
+	plain.active = false
+	_ok("Pixilate: STAB and ×1.2 are ×1.8 together", absf(with_it / without - 1.8) < 0.06, "%d vs %d" % [with_it, without])
+	_ok("Pixilate: a Fairy move gains nothing", is_equal_approx(gleam_with, _move_damage(a, b, "dazzlinggleam")))
+	a.data.passive = Loadout.ability("sylveon", "pixilate")
+	# End to end, Hyper Voice on a rival with no resistance.
+	var voice := await _one_hit("sylveon", "snorlax", "mov4", 6.0)
+	_ok("Pixilate: a landed Hyper Voice deals what the formula says", absf(voice - with_it) < with_it * 0.02, "%d vs %d" % [voice, with_it])
+	# It reaches a Ghost, which Normal barely does.
+	ab = await _setup("sylveon", "gengar", Vector3(-6, 0, 0), Vector3(0, 0, 0))
+	a = ab[0]
+	b = ab[1]
+	var on_ghost := _move_damage(a, b, "hypervoice")
+	a.data.passive = Loadout.ability("sylveon", "cutecharm")
+	var normal_on_ghost := _move_damage(a, b, "hypervoice")
+	_ok("Pixilate: it hits Gengar at Fairy's effect, not at a quarter", on_ghost > normal_on_ghost * 3.0, "%d vs %d" % [on_ghost, normal_on_ghost])
+	# A Steel rival resists it, as Fairy.
+	ab = await _setup("sylveon", "scizor", Vector3(-6, 0, 0), Vector3(0, 0, 0))
+	a = ab[0]
+	b = ab[1]
+	var resisted := Hit.new()
+	resisted.user = a
+	main.combat.add_hit(resisted)
+	resisted.active = false
+	_ok("Pixilate: a Steel rival resists it", is_equal_approx(Roster.affinity(resisted.type, b.types), Roster.NOT_VERY), resisted.type)
+	# A shot sent back keeps its thrower's numbers: its type, its STAB, its power.
+	var star := Hit.new()
+	star.user = a
+	star.move_id = "swift"
+	star.type = "normal"
+	star.cat = "special"
+	star.damage = Moves.DATA.swift.damage
+	var p: Dictionary = main.combat.projectile({"user": a, "pos": b.center() + Vector3.LEFT * 2.0, "velocity": Vector3.RIGHT * 16.0, "hit": star, "lifetime": 1.0, "target": b, "node": null})
+	var before := Damage.dealt(p.hit, a, b, 1.0)
+	main.combat.deflect(p, b, 2)
+	_ok("Pixilate: a Swift sent back keeps Sylveon's numbers", p.hit.type == "fairy" and p.hit.source == a
+		and is_equal_approx(Damage.dealt(p.hit, b, b, 1.0), before * Combat.DEFLECT_BONUS), "%s %d" % [p.hit.type, before])
+	p.age_t = p.lifetime
+
+
+func _cute_charm_cases() -> void:
+	var ab: Array = await _setup("scizor", "sylveon", Vector3(-1.6, 0, 0), Vector3(0, 0, 0))
+	var a: Fighter = ab[0]
+	var b: Fighter = ab[1]
+	b.data.passive = Loadout.ability("sylveon", "cutecharm")
+	Fighter.force_roll = 0.0
+	_contact_hit(a, b, false)
+	_ok("Cute Charm: a hit that is not contact does not", a.charmed_by == "" and b._charm_t <= 0.0, a.charmed_by)
+	_contact_hit(a, b)
+	_ok("Cute Charm: a contact hit infatuates, with the roll forced", a.charmed_by == "sylveon" and is_equal_approx(a.charmed_t, Fighter.LOVE_TIME), a.charmed_by)
+	a.charmed_t = 3.0
+	b._charm_t = 0.0
+	_contact_hit(a, b)
+	_ok("Cute Charm: a second proc changes nothing", is_equal_approx(a.charmed_t, 3.0), "%.2f" % a.charmed_t)
+	# One roll a second: a roll that fails blocks the next one, as the blows of a Close Combat.
+	ab = await _setup("scizor", "sylveon", Vector3(-1.6, 0, 0), Vector3(0, 0, 0))
+	a = ab[0]
+	b = ab[1]
+	b.data.passive = Loadout.ability("sylveon", "cutecharm")
+	Fighter.force_roll = 0.9
+	_contact_hit(a, b)
+	Fighter.force_roll = 0.0
+	_contact_hit(a, b)
+	_ok("Cute Charm: one roll per second at most", a.charmed_by == "" and b._charm_t > 0.0, "%s, %.2f" % [a.charmed_by, b._charm_t])
+	await _wait(1.1)
+	_contact_hit(a, b)
+	_ok("Cute Charm: it can roll again after that", a.charmed_by == "sylveon", a.charmed_by)
+	# A real Close Combat rolls once: the first blow's roll stops the others.
+	Fighter.force_roll = 0.9
+	await _one_hit("urshifu", "sylveon", "mov3", 1.8, "", "cutecharm")
+	a = main.fighters[0]
+	b = main.fighters[1]
+	_ok("Cute Charm: Close Combat lands several hits and rolls within one second", b.hp < b.hp_max and a.charmed_by == "", "HP %d" % b.hp)
+	# Guarded, or the hit that KOs it.
+	ab = await _setup("scizor", "sylveon", Vector3(-1.6, 0, 0), Vector3(0, 0, 0))
+	a = ab[0]
+	b = ab[1]
+	b.data.passive = Loadout.ability("sylveon", "cutecharm")
+	Fighter.force_roll = 0.0
+	b.start("protect", "mov1")
+	await _wait(0.1)
+	var guarded := _contact_hit(a, b)
+	_ok("Cute Charm: a guarded hit does not", a.charmed_by == "" and b.hp == b.hp_max, guarded)
+	b.action.finish(true)
+	b.action = null
+	b._to_free()
+	b.hp = 1.0
+	_contact_hit(a, b)
+	_ok("Cute Charm: a hit that KOs it does not", b.state == "ko" and a.charmed_by == "", b.state)
+	Fighter.force_roll = -1.0
+
+
+func _infatuation_cases() -> void:
+	var ab: Array = await _setup("urshifu", "sylveon", Vector3(-6, 0, 0), Vector3(0, 0, 0))
+	var a: Fighter = ab[0]
+	var b: Fighter = ab[1]
+	a.infatuate("sylveon")
+	_ok("Infatuation: lasts 8 s", is_equal_approx(a.charmed_t, 8.0))
+	_ok("Infatuation: a tag on the HUD with the seconds left", main.hud.stage_tags(a).any(func(tag): return tag[0].ends_with("8")), str(main.hud.stage_tags(a)))
+	a.inflict("brn")
+	_ok("Infatuation: stays alongside a burn", a.charmed_by == "sylveon" and a.status == "brn")
+	a.cure_status(false)
+	a.charmed_t = 0.05
+	await _wait(0.2)
+	_ok("Infatuation: wears off, then cannot come back for 5 s", a.charmed_by == "" and a._charm_lock > 4.5, "%.2f" % a._charm_lock)
+	a.infatuate("sylveon")
+	_ok("Infatuation: nothing charms it during the lock", a.charmed_by == "")
+	a._charm_lock = 0.05
+	await _wait(0.15)
+	a.infatuate("sylveon")
+	_ok("Infatuation: it can come back after the lock", a.charmed_by == "sylveon")
+	# A failed press: Close Combat's cooldown is cut to 4 s, nothing is spent.
+	Fighter.force_roll = 0.0
+	var energy0: float = a.energy
+	a.ctrl.press("mov3")
+	await _wait(0.05)
+	a.ctrl.release("mov3")
+	_ok("Infatuation: a failed move does not start", a.action == null and a.state == "stunned", a.state)
+	_ok("Infatuation: no energy is spent", a.energy >= energy0, "%.1f from %.1f" % [a.energy, energy0])
+	_ok("Infatuation: Close Combat's cooldown is cut to 4 s", absf(a.cd("closecombat") - Fighter.LOVE_CD) < 0.2, "%.2f" % a.cd("closecombat"))
+	await _wait(Fighter.LOVE_T + 0.1)
+	_ok("Infatuation: stunned for a moment only", a.state == "free", a.state)
+	a.ctrl.press("dodge")
+	await _wait(0.05)
+	a.ctrl.release("dodge")
+	_ok("Infatuation: a dodge always works", a.state == "dodge", a.state)
+	await _wait(0.6)
+	Fighter.force_roll = 0.9
+	a.ctrl.press("mov1")
+	await _wait(0.05)
+	a.ctrl.release("mov1")
+	_ok("Infatuation: forced to pass, the move runs", a.action != null and a.action.id == a.data.moves[0], a.state)
+	await _wait(1.2)
+	# A short cooldown stays its own, a status move can fail and its limited uses stay.
+	ab = await _setup("pikachu", "sylveon", Vector3(-6, 0, 0), Vector3(0, 0, 0))
+	a = ab[0]
+	a.infatuate("sylveon")
+	Fighter.force_roll = 0.0
+	a.ctrl.press("mov2")
+	await _wait(0.05)
+	a.ctrl.release("mov2")
+	_ok("Infatuation: a shorter cooldown stays as it is", absf(a.cd("quickattack") - Moves.cooldown("quickattack")) < 0.2 and Moves.cooldown("quickattack") < Fighter.LOVE_CD, "%.2f" % a.cd("quickattack"))
+	main._args["moves"] = "calmmind,psychic,shadowball,teleport"
+	ab = await _setup("mewtwo", "sylveon", Vector3(-6, 0, 0), Vector3(0, 0, 0))
+	main._args.erase("moves")
+	a = ab[0]
+	a.infatuate("sylveon")
+	a.ctrl.press("mov1")
+	await _wait(0.05)
+	a.ctrl.release("mov1")
+	_ok("Infatuation: a status move can fail too, keeping its uses", a.data.moves[0] == "calmmind" and a.action == null and a.state == "stunned" and not a.uses.has("calmmind") and a.cd("calmmind") > 0.0, a.state)
+	Fighter.force_roll = -1.0
+	# Both copies of a fighter online agree: the same seed and press give the same answer, and about half fail.
+	var fails := 0
+	var agree := true
+	a._love_seed = 12345
+	var other: Fighter = main.fighters[1]
+	other._love_seed = 12345
+	for i in 200:
+		a.ctrl.counter["mov1"] = i
+		other.ctrl.counter["mov1"] = i
+		agree = agree and a._love_fails("mov1") == other._love_fails("mov1")
+		fails += 1 if a._love_fails("mov1") else 0
+	_ok("Infatuation: both copies roll the same, about half fail", agree and fails > 70 and fails < 130, "%d of 200" % fails)
+	# How it ends.
+	ab = await _setup("urshifu", "sylveon", Vector3(-6, 0, 0), Vector3(0, 0, 0))
+	a = ab[0]
+	b = ab[1]
+	a.infatuate("sylveon")
+	a.reset(a.global_position, a.face_yaw)
+	_ok("Infatuation: gone on a rematch", a.charmed_by == "" and a._charm_lock == 0.0)
+	a.infatuate("sylveon")
+	b._damage_direct(999999.0)
+	await _wait(0.1)
+	_ok("Infatuation: ends when the rival is KO", a.charmed_by == "", a.charmed_by)
+	ab = await _team_battle("urshifu", "urshifu,lucario,scizor", "sylveon", "sylveon,gengar,snorlax")
+	main.ai.mode = "still"
+	a = ab[0]
+	b = ab[1]
+	var pa: Party = main.parties[0]
+	var pb: Party = main.parties[1]
+	pb.charges = 2
+	pa.charges = 2
+	a.infatuate("sylveon")
+	pb.begin_recall(0)
+	await _wait(0.05)
+	_team_hit(a, b, 2)
+	await _wait(0.1)
+	_ok("Infatuation: a cut recall does not end it", pb.active == b and b.state != "recall" and a.charmed_by == "sylveon", "%s, %s" % [b.state, a.charmed_by])
+	await _wait(1.0)
+	await _team_switch(pb, 0)
+	await _wait(0.05)
+	_ok("Infatuation: ends when the rival switches out", pb.active != b and a.charmed_by == "", a.charmed_by)
+	var foe: Fighter = pb.active
+	await _wait(1.5)
+	a.infatuate(foe.species)
+	await _team_switch(pa, 0)
+	_ok("Infatuation: a switch cures it", pa.active != a and a.charmed_by == "", a.charmed_by)
+	await _wait(1.5)
+	main.menu.choice.format = "1v1"
+
+
+func _draining_kiss_cases() -> void:
+	var r: Array = await _kiss("snorlax", 2.0)
+	_ok("Draining Kiss: a hit heals 75% of the damage at once", r[1] > 0.0 and absf(r[0] / r[1] - 0.75) < 0.03, "healed %d of %d" % [r[0], r[1]])
+	r = await _kiss("snorlax", 9.0)
+	_ok("Draining Kiss: a miss heals nothing", r[0] == 0.0 and r[1] == 0.0, "healed %d" % r[0])
+	r = await _kiss("snorlax", 2.0, func(_a: Fighter, b: Fighter): b.invulnerable = 5.0)
+	_ok("Draining Kiss: a dodge heals nothing", r[0] == 0.0, "healed %d" % r[0])
+	r = await _kiss("snorlax", 2.0, func(_a: Fighter, b: Fighter): b.start("protect", "mov1"))
+	_ok("Draining Kiss: Protect heals nothing", r[0] == 0.0, "healed %d, dealt %d" % [r[0], r[1]])
+	var ab: Array = await _setup("sylveon", "snorlax", Vector3(-2, 0, 0), Vector3(0, 0, 0))
+	var a: Fighter = ab[0]
+	var b: Fighter = ab[1]
+	a.hp = a.hp_max * 0.5
+	var kiss := Hit.new()
+	kiss.user = a
+	kiss.move_id = "drainingkiss"
+	kiss.type = "fairy"
+	kiss.cat = "special"
+	kiss.damage = Moves.DATA.drainingkiss.damage
+	var doll := Node3D.new()
+	a.on_strike(doll, kiss, "hit")
+	doll.free()
+	_ok("Draining Kiss: a decoy heals nothing", a.hp == a.hp_max * 0.5)
+	a.hp = a.hp_max - 1.0
+	a.on_strike(b, kiss, "hit")
+	_ok("Draining Kiss: never over max HP", a.hp == a.hp_max, "%d/%d" % [a.hp, a.hp_max])
+	# Special: Sp. Atk counts and Attack does not.
+	var base := _move_damage(a, b, "drainingkiss")
+	a.stages.atk = 6
+	var same := _move_damage(a, b, "drainingkiss")
+	a.stages.atk = 0
+	a.stages.spa = 2
+	_ok("Draining Kiss: uses Sp. Atk and not Attack", is_equal_approx(base, same) and _move_damage(a, b, "drainingkiss") > base * 1.5)
+	a.stages.spa = 0
+	# Contact: it pays what contact pays.
+	await _kiss("garchomp", 2.0)
+	a = main.fighters[0]
+	_ok("Draining Kiss: Rough Skin costs it 1/8", a.hp < a.hp_max * 0.5, "%d/%d" % [a.hp, a.hp_max])
+	await _kiss("garchomp", 2.0, func(s: Fighter, _b: Fighter): s.hp = 10.0)
+	a = main.fighters[0]
+	_ok("Draining Kiss: KO'd by Rough Skin, it stays KO'd", a.state == "ko" and a.hp == 0.0, "%s %d" % [a.state, a.hp])
+	await _kiss("goodra", 2.0)
+	a = main.fighters[0]
+	_ok("Draining Kiss: Gooey slows it", a.stages.spe == -1, "%+d" % a.stages.spe)
+	Fighter.force_roll = 0.0
+	await _kiss("sylveon", 2.0, func(_s: Fighter, o: Fighter): o.data.passive = Loadout.ability("sylveon", "cutecharm"))
+	Fighter.force_roll = -1.0
+	a = main.fighters[0]
+	_ok("Draining Kiss: a rival's Cute Charm can charm it", a.charmed_by == "sylveon", a.charmed_by)
+	# Counter does not pay back a special move.
+	await _kiss("urshifu", 2.0, func(_s: Fighter, o: Fighter): o.start("counter", "mov1"))
+	a = main.fighters[0]
+	_ok("Draining Kiss: Counter does not pay it back", a.hp >= a.hp_max * 0.5, "%d/%d" % [a.hp, a.hp_max])
+
+
+func _swift_cases() -> void:
+	var ab: Array = await _setup("sylveon", "snorlax", Vector3(-10, 0, 0), Vector3(0, 0, 0))
+	var a: Fighter = ab[0]
+	var b: Fighter = ab[1]
+	var one_use := _move_damage(a, b, "swift")
+	a.ctrl.press("mov2")
+	await _wait(0.1)
+	a.ctrl.release("mov2")
+	await _wait(0.4)
+	var stars: Array = main.combat.projectiles.filter(func(p): return p.hit.move_id == "swift")
+	_ok("Swift: five stars from one press", stars.size() == 5, "%d" % stars.size())
+	_ok("Swift: only the first tells how effective it was", stars.filter(func(p): return not p.hit.quiet).size() == 1)
+	await _wait(1.2)
+	var taken: float = b.hp_max - b.hp
+	_ok("Swift: on a still rival their sum is about one use", taken > one_use * 3.2 and taken < one_use * 4.4, "%d, a star is %d" % [taken, one_use])
+	# Running does not lose them.
+	ab = await _setup("sylveon", "snorlax", Vector3(-8, 0, 0), Vector3(0, 0, 0))
+	a = ab[0]
+	b = ab[1]
+	a.ctrl.press("mov2")
+	await _wait(0.1)
+	a.ctrl.release("mov2")
+	b.ctrl.yaw = 0.0
+	b.ctrl.move_input = Vector2(0, 1)
+	await _wait(1.6)
+	b.ctrl.move_input = Vector2.ZERO
+	_ok("Swift: a sidestep does not lose them", b.hp < b.hp_max - one_use * 2.0, "%d lost" % (b.hp_max - b.hp))
+	# A dodge does, for the ones in the air.
+	ab = await _setup("sylveon", "snorlax", Vector3(-12, 0, 0), Vector3(0, 0, 0))
+	a = ab[0]
+	b = ab[1]
+	a.ctrl.press("mov2")
+	await _wait(0.1)
+	a.ctrl.release("mov2")
+	await _wait(0.4)
+	stars = main.combat.projectiles.filter(func(p): return p.hit.move_id == "swift")
+	var chasing: bool = stars.all(func(p): return p.target == b)
+	b.ctrl.press("dodge")
+	await _wait(0.1)
+	b.ctrl.release("dodge")
+	_ok("Swift: a dodge shakes them off", chasing and stars.all(func(p): return p.target == null), "%s, %d stars" % [chasing, stars.size()])
+	await _wait(1.5)
+	# A deflect breaks one and does not send it back, even from a move that sends things back.
+	ab = await _setup("sylveon", "pikachu", Vector3(-10, 0, 0), Vector3(0, 0, 0))
+	a = ab[0]
+	b = ab[1]
+	a.ctrl.press("mov2")
+	await _wait(0.1)
+	a.ctrl.release("mov2")
+	await _wait(0.4)
+	stars = main.combat.projectiles.filter(func(p): return p.hit.move_id == "swift")
+	var star: Dictionary = stars[0]
+	star.pos = b.center() + b.forward() * 1.2
+	var swing := Hit.new()
+	swing.user = b
+	swing.local = false
+	swing.move_id = "irontail"
+	swing.center = star.pos
+	swing.radius = 0.8
+	swing.strength = 0
+	main.combat.add_hit(swing)
+	var stopped: bool = main.combat._try_deflect(star, Vector3.ZERO)
+	swing.active = false
+	_ok("Swift: a deflect breaks a star and does not send it back", stopped and star.get("broken", false) and star.user == a, "%s %s" % [stopped, star.get("broken", false)])
+
+
+func _wave_cases() -> void:
+	# One hit, and it is not a shot.
+	for move in ["hypervoice", "dazzlinggleam"]:
+		main._args["moves"] = "%s,moonblast,swift,drainingkiss" % move
+		var ab: Array = await _setup("sylveon", "snorlax", Vector3(-6, 0, 0), Vector3(0, 0, 0))
+		main._args.erase("moves")
+		var a: Fighter = ab[0]
+		var b: Fighter = ab[1]
+		var count := [0]
+		b.hit_taken.connect(func(_who: Fighter, _info: Dictionary): count[0] += 1)
+		a.ctrl.press("mov1")
+		await _wait(0.1)
+		a.ctrl.release("mov1")
+		await _wait(0.6)
+		_ok("%s: it is not a projectile" % move, main.combat.projectiles.is_empty())
+		await _wait(1.5)
+		_ok("%s: one hit" % move, count[0] == 1 and b.hp < b.hp_max, "%d hits" % count[0])
+	# Too tall to jump up close, low enough further away. The rival waits out of the way and is
+	# put where a jump's peak would be only to ask the hit.
+	var ab2: Array = await _setup("sylveon", "pikachu", Vector3(-8, 0, 0), Vector3(14, 0, 0))
+	var a2: Fighter = ab2[0]
+	var b2: Fighter = ab2[1]
+	var peak: float = float(b2.data.jump) * float(b2.data.jump) / (2.0 * float(b2.data.gravity))
+	var home: Vector3 = b2.global_position
+	a2.ctrl.press("mov4")
+	await _wait(0.1)
+	a2.ctrl.release("mov4")
+	var wave: Hit = null
+	while wave == null:
+		await get_tree().physics_frame
+		for g in main.combat.hits:
+			if g.move_id == "hypervoice":
+				wave = g
+	while wave.radius < 1.8:
+		await get_tree().physics_frame
+	var mid: Vector3 = wave.a.lerp(wave.b, 0.5)
+	b2.global_position = Vector3(mid.x, peak, mid.z)
+	var close: Variant = main.combat._touches(wave, b2)
+	b2.global_position = home
+	while wave.radius > 0.7:
+		await get_tree().physics_frame
+	await _wait(0.2)
+	mid = wave.a.lerp(wave.b, 0.5)
+	b2.global_position = Vector3(mid.x, peak, mid.z)
+	var far: Variant = main.combat._touches(wave, b2)
+	b2.global_position = Vector3(mid.x, 0.0, mid.z)
+	var on_ground: Variant = main.combat._touches(wave, b2)
+	b2.global_position = home
+	_ok("Hyper Voice: up close a jump does not clear it", close != null)
+	_ok("Hyper Voice: further away a jump clears it", far == null)
+	_ok("Hyper Voice: further away it still hits on the ground", on_ground != null)
 
 
 ## Only Mewtwo's cases (--test=mewtwo), without the rest of the mechanics.

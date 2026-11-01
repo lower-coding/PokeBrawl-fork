@@ -396,7 +396,8 @@ static func score(f: Fighter, foe: Fighter) -> float:
 		var d: Dictionary = Moves.DATA[m]
 		var power: float = 80.0 if d.get("power_by", "") != "" else float(d.get("power", 0))
 		if power > 0.0:
-			deals = maxf(deals, power * (Damage.STAB if d.type in f.data.types else 1.0) * Roster.affinity(d.type, foe.data.types))
+			var type := Moves.type_for(m, f.data.passive.id)
+			deals = maxf(deals, power * (Damage.STAB if type in f.data.types else 1.0) * Roster.affinity(type, foe.data.types))
 	var takes := 0.0
 	for t in foe.data.types:
 		takes = maxf(takes, Damage.STAB * 100.0 * Roster.affinity(t, f.data.types))

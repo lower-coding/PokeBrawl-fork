@@ -341,3 +341,27 @@ battle (no limit in the games: nothing resets stages in 1 vs 1). `selfboost.gd`,
 **Shadow Ball, on Mewtwo** · *Now:* the same move, with a clip named after it: both hands at the right hip by
 0.2 s, a thrust at 0.28 s. Every other Pokémon keeps `special`.
 - [Smash] Cupped hands at the hip; there it also charges and flies in a wavy path, not taken.
+
+---
+
+## Sylveon
+A first pass, and **mostly still owed**. Searches found no Sylveon or these moves in Pokkén, and the
+[Smash fan wiki](https://supersmashbros.fandom.com/wiki/Sylveon_(Pokemon)) only has it as a trophy, so neither
+gives a reference yet: check Serebii's Pokkén lists and SmashWiki directly. In the anime,
+[Serena's Sylveon](https://bulbapedia.bulbagarden.net/wiki/Serena%27s_Sylveon) uses Swift and Fairy Wind; how
+Moonblast, Draining Kiss, Dazzling Gleam and Hyper Voice look there is not researched. Their looks below come
+from the games' descriptions.
+
+**Draining Kiss** · *Now:* a very short wind-up, a small hop into a kiss, hearts where it lands and a green
+shine as it heals 75% of the damage dealt. Close range, contact and special at once.
+
+**Moonblast** · *Now:* a purple glow gathers at the mouth and a slow ball of moonlight flies out, barely
+turning. Purple, not the type's pink.
+
+**Swift** · *Now:* five gold stars leave in a fan and curve in. Running does not lose them; a dodge does.
+- [Anime] Serena's Sylveon fires it as a stream of stars, in battle and in performances.
+
+**Dazzling Gleam** · *Now:* a curtain of pink light rolls across the field with Surf's height curve.
+
+**Hyper Voice** · *Now:* three arches of sound roll across the field with the same curve, hitting harder from
+a longer wind-up.

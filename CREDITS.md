@@ -7,7 +7,7 @@ PokeBrawl is made by [xjoje6](https://github.com/xjoje6). It stands on other peo
 [Cobblemon](https://gitlab.com/cable-mc/cobblemon) is a Pokémon mod for Minecraft, by the
 Cobblemon team. PokeBrawl uses, adapted, its:
 
-- **Pokémon models, animations and textures** (twelve of the Pokémon, all but Urshifu, and Pikachu's
+- **Pokémon models, animations and textures** (thirteen of the Pokémon, all but Urshifu, and Pikachu's
   cap variant for Ash's Pikachu; Goodra's folder in Cobblemon has no license file of its own, so it is treated the
   same as the rest), licensed **CC BY-NC 3.0**
   ([game/pokemon/LICENSE-models.txt](game/pokemon/LICENSE-models.txt),
@@ -16,7 +16,9 @@ Cobblemon team. PokeBrawl uses, adapted, its:
   top); the untouched originals are in `sources/cobblemon/`. Mewtwo's model came with no attack
   animations: its six attack clips and its floating walk, which replaces Cobblemon's still pose
   (`sources/cobblemon/mewtwo/moves.animation.json`), are ours, made
-  for this game on Cobblemon's model. Used with the Cobblemon team's
+  for this game on Cobblemon's model. So are Sylveon's walk, run and attack clips
+  (`sources/cobblemon/sylveon/moves.animation.json`, written by `tools/sylveon_walk.py`), since Cobblemon
+  moves its legs in code rather than in its animation file. Used with the Cobblemon team's
   approval, non-commercially and with attribution.
 - **Move particle pieces, sequences and textures** (`game/fx/`, except `game/fx/tex/custom/`),
   converted by `tools/convert_particles.py`, under the repository's general license,

@@ -5,6 +5,19 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+### Added
+- **Sylveon**, a slow special wall: Moonblast, Swift, Draining Kiss and Hyper Voice by default, with
+  Dazzling Gleam and 22 more on the Moves screen. Its legs and ribbons move with clips of ours.
+- **Pixilate** (its default ability): Normal moves become Fairy moves and hit 1.2 times as hard. The menus
+  and the HUD show them as Fairy.
+- **Cute Charm**: each contact move that hits it has a 30% chance of infatuating the attacker, one roll per
+  second at most. Infatuated, half of the moves it tries fail for 8 s or until either one leaves the field: it is
+  stunned for a moment and the move's cooldown runs, at most 4 s, but nothing is spent. It cannot come back
+  for 5 s afterwards.
+- Five moves, the game's first Fairy ones among them: **Draining Kiss**, **Moonblast**, **Swift**,
+  **Dazzling Gleam** and **Hyper Voice**. Swift also reaches Charizard, Pikachu, Mewtwo, Scizor, Garchomp,
+  Lucario, Greninja and both Urshifu; Draining Kiss, Pikachu; Dazzling Gleam, Gengar; Hyper Voice, Snorlax.
+
 ## [demo-controls] - 2026-11-01
 
 ### Added

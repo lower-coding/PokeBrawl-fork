@@ -32,6 +32,16 @@ const LOWERED_T := 3.0              # one turn: how long Lash Out stays doubled
 const CONFUSE_LOCK := 3.0           # how long after confusion it cannot be confused again
 const BUTTONS_STRAIGHT := [0, 1, 2, 3]
 const PRESSURE := 1.1               # how much longer the rival's cooldowns take (Pressure)
+const CUTE_CHARM := 0.3             # chance per contact hit, one roll per second at most
+const LOVE_CHANCE := 0.5            # infatuated: how often a move fails
+const LOVE_CD := 4.0                # a failed move's cooldown is at most this
+const LOVE_T := 0.4                 # stunned for this long when one fails
+const LOVE_TIME := 8.0              # how long it lasts at most
+const LOVE_LOCK := 5.0              # how long after it ends it cannot come back
+const LOVE_COLOR := Color(1.0, 0.55, 0.78)
+
+## Tests: what the rolls of secondary effects and infatuation come out as (below 0, random).
+static var force_roll := -1.0
 
 var main: Node
 var species := "pikachu"
@@ -75,6 +85,14 @@ var button_moves: Array = BUTTONS_STRAIGHT
 var _locked_decoy := false            # locked on a decoy (when it goes, the lock goes)
 var ai_driven := false                # its moves come from the AI (it never unlocks)
 var _confuse_fx := 0.0
+## Infatuated with this species (Cute Charm), for charmed_t more seconds. It sits alongside a
+## status. _love_seed makes both copies online agree on which presses fail (_love_fails).
+var charmed_by := ""
+var charmed_t := 0.0
+var _love_seed := 0
+var _love_fx := 0.0
+var _charm_lock := 0.0
+var _charm_t := 0.0                   # Cute Charm: until it can roll again
 var _slow_t := 0.0
 var static_mark := 0.0
 var burned := 0.0
@@ -403,6 +421,43 @@ func confuse(secs: float) -> void:
 		main.net.send_event({"t": "confused", "secs": secs, "sp": species})
 
 
+## Infatuated with "by" for LOVE_TIME seconds, or until either leaves the field. For LOVE_LOCK
+## seconds after it wears off nothing charms it. The owner picks the seed and tells the attacker's
+## copy (net "infatuated").
+func infatuate(by: String, love_seed := -1) -> void:
+	if state == "ko" or charmed_by != "" or _charm_lock > 0.0:
+		return
+	charmed_by = by
+	charmed_t = LOVE_TIME
+	_love_seed = randi() if love_seed < 0 else love_seed
+	main.vfx.text(center() + Vector3.UP * 1.0, tr("Infatuated!"), LOVE_COLOR)
+	main.hud.log_entry(tr("%s: %s") % [tr(data.display_name), tr("Infatuated!")])
+	if not is_remote and main.net and main.net.linked:
+		main.net.send_event({"t": "infatuated", "sp": species, "by": by, "seed": _love_seed})
+
+
+## Whether this press of "button" fails. From the press's number and the seed, not randf: the
+## rival's copy replays the presses (Net) and has to reach the same answer.
+func _love_fails(button: String) -> bool:
+	if force_roll >= 0.0:
+		return force_roll < LOVE_CHANCE
+	return rand_from_seed(hash([_love_seed, button, ctrl.counter.get(button, 0)]))[0] / 4294967296.0 < LOVE_CHANCE
+
+
+## Infatuation stops this move half the time: it does not start and nothing is spent, but its
+## cooldown runs (at most LOVE_CD) and it is stunned for a moment, so a press cannot just be repeated.
+func _immobilized(move: String, button: String) -> bool:
+	if charmed_by == "" or not _love_fails(button):
+		return false
+	var cooldown: float = minf(Moves.cooldown(move), LOVE_CD)
+	stun_target(LOVE_T)
+	cds[move] = cooldown
+	main.vfx.text(center() + Vector3.UP * 0.9, tr("Immobilized by love!"), LOVE_COLOR)
+	main.hud.log_entry(tr("%s is immobilized by love!") % tr(data.display_name))
+	main.fx.anim("generic/status/infatuation_heart.png", global_position + Vector3.UP * (data.height + 0.3), 0.8, 10, 0.5)
+	return true
+
+
 ## A random order in which no button keeps its move.
 static func _shuffled_buttons() -> Array:
 	var order := BUTTONS_STRAIGHT.duplicate()
@@ -523,6 +578,8 @@ func effect(type: String, value: float, move := "") -> void:
 			inflict(move)
 		"confuse":
 			confuse(value)
+		"infatuate":
+			infatuate(move)
 		"self_boost":
 			if stages.has(move):
 				boost(move, int(value))
@@ -793,7 +850,7 @@ func _secondary(md: Dictionary, info: Dictionary, at: Fighter) -> void:
 		return
 	var sec: Dictionary = md.secondary
 	var chance: float = float(sec.get("chance", 1.0)) / float(md.get("split", 1))
-	if randf() >= chance:
+	if (force_roll if force_roll >= 0.0 else randf()) >= chance:
 		return
 	if sec.has("status"):
 		inflict(sec.status)
@@ -844,6 +901,10 @@ func _timers(delta: float) -> void:
 			var a := _time * 4.0
 			var head: Vector3 = global_position + Vector3.UP * (data.height + 0.35)
 			main.vfx.burst("stars", head + Vector3(cos(a), 0.0, sin(a)) * (data.radius * 0.8 + 0.2), Vector3.UP, Color(0, 0, 0, 0), 0.3)
+	_charm_t = maxf(0.0, _charm_t - delta)
+	_charm_lock = maxf(0.0, _charm_lock - delta)
+	if charmed_by != "":
+		_love_step(delta)
 	_flash = maxf(0.0, _flash - delta * 6.0)
 	lowered_t = maxf(0.0, lowered_t - delta)
 
@@ -898,6 +959,23 @@ func _timers(delta: float) -> void:
 		_combo_clear += delta
 		if _combo_clear > 0.5:
 			_combo = 0
+
+
+## Infatuated: it wears off into LOVE_LOCK, or ends if the one it loves is gone. The species, not
+## the fighter: a rival switching out repoints "rival" (Main.on_party_swap), a cut recall does not.
+func _love_step(delta: float) -> void:
+	charmed_t -= delta
+	if charmed_t <= 0.0:
+		charmed_by = ""
+		_charm_lock = LOVE_LOCK
+		return
+	if state == "ko" or rival == null or not is_instance_valid(rival) or rival.species != charmed_by or rival.state == "ko":
+		charmed_by = ""
+		return
+	_love_fx -= delta
+	if _love_fx <= 0.0:
+		_love_fx = 0.7
+		main.fx.anim("generic/status/infatuation_heart.png", global_position + Vector3(randf_range(-0.3, 0.3), data.height + 0.3, 0.0), 0.5, 10, 0.7)
 
 
 func _read_buffer(delta: float) -> void:
@@ -1108,6 +1186,9 @@ func _try_actions(on_ground: bool) -> void:
 		var b := "mov%d" % (i + 1)
 		if _wants(b):
 			var move: String = data.moves[button_moves[i]]
+			if ready(move) and _immobilized(move, b):
+				_consume(b)
+				return
 			if ready(move) and not on_ground and Moves.DATA[move].get("needs_ground", false):
 				_consume(b)
 				_start_dive(move, b)
@@ -1214,6 +1295,8 @@ func _step_action(delta: float, on_ground: bool) -> void:
 			var move: String = data.moves[button_moves[i]]
 			if _wants(b) and move != action.id and action.cancels_into(move) and ready(move):
 				_consume(b)
+				if _immobilized(move, b):
+					return
 				_start_cooldown(action.id)
 				start(move, b)
 				main.hud.log_entry(tr("%s used %s!") % [tr(data.display_name), tr(Moves.DATA[move].display_name)])
@@ -1480,6 +1563,13 @@ func receive(info: Dictionary) -> String:
 	if hp <= 0.0:
 		_die(info)
 		return "hit"
+	# Cute Charm: a contact hit can infatuate whoever made it, once a second at most (one use of a
+	# move can be several of our hits; Close Combat is six).
+	if data.passive.id == "cutecharm" and g.contact and at and is_instance_valid(at) and not flow and _charm_t <= 0.0:
+		_charm_t = 1.0
+		if (force_roll if force_roll >= 0.0 else randf()) < CUTE_CHARM:
+			at.effect("infatuate", 0.0, species)
+			main.vfx.text(at.center() + Vector3.UP * 0.7, tr("Cute Charm"), Roster.TYPE_COLOR.fairy)
 	# Counter: it takes the hit without flinching and pays it back.
 	if action and action.has_method("took_hit") and action.took_hit(info, damage):
 		main.vfx.armor(self)
@@ -1589,6 +1679,11 @@ func on_strike(o: Node, g: Hit, res: String) -> void:
 	if res == "hit" and d.has("recoil") and o is Fighter and not is_remote:
 		_damage_direct(Damage.dealt(g, self, o, Roster.affinity(g.type, o.types)) * float(d.recoil))
 		main.vfx.text(center() + Vector3.UP * 0.6, tr("Recoil"), Color(1.0, 0.6, 0.4), 0.8)
+	# Draining Kiss: a share of it back at the hit ("heal"; "drain" is a stream's energy use). Not
+	# if Rough Skin just KO'd it.
+	if res in ["hit", "armor"] and d.has("heal") and o is Fighter and not is_remote and state != "ko":
+		heal(Damage.dealt(g, self, o, Roster.affinity(g.type, o.types)) * float(d.heal))
+		main.vfx.cobble("megadrain_actorheal", center(), null, data.height)
 
 
 func _die(_info: Dictionary) -> void:
@@ -1635,8 +1730,8 @@ func bench() -> void:
 	visible = false
 
 
-## Leaving the field. As in the games its stat stages and confusion go; so do what it had
-## out (decoys, lingering hits), being invisible, and a type changed by Protean. HP, cooldowns
+## Leaving the field. As in the games its stat stages, confusion and infatuation go; so do what it
+## had out (decoys, lingering hits), being invisible, and a type changed by Protean. HP, cooldowns
 ## and status do not: they wait for it on the bench.
 func leave_field() -> void:
 	if action:
@@ -1651,6 +1746,8 @@ func leave_field() -> void:
 	clear_stages()
 	confused = 0.0
 	_confuse_lock = 0.0
+	charmed_by = ""
+	_charm_lock = 0.0
 	button_moves = BUTTONS_STRAIGHT
 	last_move = Vector3.ZERO
 	drowsy = 0.0
@@ -1726,6 +1823,9 @@ func reset(pos: Vector3, yaw: float) -> void:
 	slow = 1.0
 	confused = 0.0
 	_confuse_lock = 0.0
+	charmed_by = ""
+	_charm_lock = 0.0
+	_charm_t = 0.0
 	button_moves = BUTTONS_STRAIGHT
 	last_move = Vector3.ZERO
 	burned = 0.0
