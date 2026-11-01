@@ -5,6 +5,18 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+### Added
+- **Double jump** for every Pokémon that does not fly: jump again in the air, once before landing, for a
+  sixth of the energy bar. The new **Double jump cost** rule changes that share, or makes it free. With too
+  little energy there is no second jump. Charizard and Gengar still take off with it, at no energy.
+- **Night Platforms** stage: the night stadium with three platforms over the field, two low ones and a higher
+  one in the middle. You jump up through them and land on top, **Descend** drops through, shots and the camera
+  ignore them, and the AI follows you up and down. Ground waves pass underneath whoever stands on one.
+- The energy bar shows its numbers next to it (current/max), and so does a flyer's flight bar.
+
+### Changed
+- Greninja's double jump is no longer free: it pays like everybody else's.
+
 ## [demo-doubles] - 2026-11-01
 
 ### Added

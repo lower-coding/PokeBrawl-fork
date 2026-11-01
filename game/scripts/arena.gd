@@ -9,6 +9,8 @@ const LENGTH := 36.0          # X axis
 const WIDTH := 22.0          # Z axis
 ## Collision layer only the battle camera looks at (stands it must not go into).
 const CAMERA_LAYER := 16
+## Collision layer of the platforms: only fighters look at it, so shots and the camera go through.
+const PLATFORM_LAYER := 8
 ## In a 2 vs 2, how far each of a side's two trainers stands from the middle.
 const TRAINER_APART := 1.4
 
@@ -17,6 +19,8 @@ var stage := ""
 ## Stages with a void (no walls, you can fall off): a fighter below this height is KO'd.
 ## -INF on stages with walls.
 var void_y := -INF
+## Stages with platforms: bodies with their origin on the top face (Fighter._step_platforms).
+var platforms: Array[StaticBody3D] = []
 var _t := 0.0
 
 

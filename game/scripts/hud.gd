@@ -542,11 +542,20 @@ func _resources(l: Fighter, g: Vector2) -> void:
 	x += 3
 	_rect(Vector2(x, g.y + 1), Vector2(62, 5), Color(0.05, 0.06, 0.09, 0.85))
 	_rect(Vector2(x + 1, g.y + 2), Vector2(60 * l.energy / Fighter.ENERGY_MAX, 3), Color(0.35, 0.7, 1.0))
+	var pl := _p_log()
+	_text(Vector2(x + 64, g.y) * _s, energy_text(l), pl)
 	if l.data.has("flight"):
-		x += 66
+		# The widest the energy's numbers get, so the flight bar stays put.
+		x += 66 + _text_width("100/100", pl) / _s + 2
 		_rect(Vector2(x, g.y + 1), Vector2(30, 5), Color(0.05, 0.06, 0.09, 0.85))
 		_rect(Vector2(x + 1, g.y + 2), Vector2(28 * l.flight / float(l.data.flight.stamina), 3),
 			Color(1.0, 0.62, 0.3) if l.flight > float(l.data.flight.stamina) * 0.25 else Color(0.95, 0.35, 0.25))
+		_text(Vector2(x + 32, g.y) * _s, "%.1f/%.1f" % [l.flight, float(l.data.flight.stamina)], pl)
+
+
+## The energy as the HUD writes it next to its bar: current/max.
+static func energy_text(l: Fighter) -> String:
+	return "%d/%d" % [l.energy, Fighter.ENERGY_MAX]
 
 
 ## The live portrait of side "i"'s "sp" (on the field or on the bench), if there is one.

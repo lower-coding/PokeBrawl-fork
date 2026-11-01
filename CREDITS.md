@@ -102,7 +102,7 @@ license in full, written by `tools/godot_notices.gd`.
 
 - The code (MIT, see [LICENSE](LICENSE)).
 - The stadiums, drawn by code (`game/scripts/arena.gd`, `night_stadium.gd`,
-  `floating_stadium.gd`, `league_stadium.gd`), and their preview images (`game/gui/stages/`),
+  `floating_stadium.gd`, `league_stadium.gd`, `platform_stadium.gd`), and their preview images (`game/gui/stages/`),
   rendered from them.
 - The effects drawn by code (`game/scripts/vfx.gd`, `vfx_shaders.gd`) and the pixel energy
   balls (`game/fx/tex/custom/`, `tools/move_sprites.py`).

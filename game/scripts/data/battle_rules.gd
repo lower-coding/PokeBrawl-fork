@@ -6,7 +6,7 @@ extends RefCounted
 ## for its rematches, and the menu for the next one until the game closes; they are never saved.
 ##   default          what a battle plays by unless someone changes it
 ##   min, max, step   what the Rules screen and --rules allow
-##   unit             how the value reads: "s", "%", "%/s", "x" or nothing
+##   unit             how the value reads: "s", "%", "%/s", "x", "1/" (a share: 6 reads 1/6) or nothing
 ##   zero             the word for 0, where 0 turns it off
 ##   one              the word for 1, where the rule is just off or on: any step flips it
 ##   any_format       it counts in every format
@@ -53,6 +53,8 @@ const DEFS := [
 		"help": "On, nobody can lock on: the button does nothing and the camera stays free. The AI still aims on its own."},
 	{"id": "aim_assist", "group": "Aiming", "label": "Aim assist", "default": 0.0, "min": 0.0, "max": 100.0, "step": 10.0, "unit": "%", "zero": "Off", "any_format": true,
 		"help": "With nothing locked on and the crosshair over the foe: turning the camera gets slower and the aim follows the foe a little, so it is harder to slip off. The higher, the stronger."},
+	{"id": "air_jump_cost", "group": "Movement", "label": "Double jump cost", "default": 6, "min": 0, "max": 12, "step": 1, "unit": "1/", "zero": "Free", "any_format": true,
+		"help": "How much of the energy bar a double jump takes: at 1/6, a sixth of it. With less than that left, there is no double jump. Flyers take off instead, and that costs no energy."},
 ]
 
 
@@ -120,6 +122,8 @@ static func text(id: String, value: float) -> String:
 			return "x" + number
 		"s":
 			return number + " s"
+		"1/":
+			return "1/" + number
 	return number + " " + d.unit
 
 

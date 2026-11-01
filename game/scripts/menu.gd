@@ -29,11 +29,12 @@ extends Node
 
 const DIFFICULTIES := ["easy", "normal", "hard"]
 const DIFFICULTY_NAME := {"easy": "Easy", "normal": "Normal", "hard": "Hard"}
-const STAGES := ["night", "floating", "league"]
-const STAGE_NAME := {"night": "Night Stadium", "floating": "Floating Stadium", "league": "League Stadium"}
+const STAGES := ["night", "floating", "league", "night_platforms"]
+const STAGE_NAME := {"night": "Night Stadium", "floating": "Floating Stadium", "league": "League Stadium", "night_platforms": "Night Platforms"}
 const STAGE_TEXT := {"night": "A Galar stadium at night, packed and walled all round: nobody falls off.",
 	"floating": "A platform over the void. Whoever is pushed off the edge is out.",
-	"league": "The League's coliseum. The field closes in bit by bit: outside it you lose HP."}
+	"league": "The League's coliseum. The field closes in bit by bit: outside it you lose HP.",
+	"night_platforms": "The night stadium with three platforms over the field. Jump up through them; Descend drops back down."}
 const PORTRAIT_SIZE := Vector2i(340, 240)
 const FORM_ZONE := 10            # a wall tab's zone number: cell * this + which form
 const MAIN_MENU := [["combat", "Battle", "Against the AI. Pick your Pokémon, the rival and the difficulty."],

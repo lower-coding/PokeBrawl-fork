@@ -65,8 +65,10 @@ godot --path game -- --p1=charizard --p2=pikachu --diff=hard --stage=league
 - **Profile:** your trainer (nine, with the games' sprites) and your name. Your trainer stands
   by the field, throws the Poké Ball at the start and reacts to the battle; online, your rival
   sees them.
-- **Three stadiums:**
+- **Four stadiums:**
   - **Night Stadium:** a Galar stadium at night, packed and walled all round. Nobody falls off.
+  - **Night Platforms:** the same stadium with three platforms over the field, two low ones and a
+    higher one in the middle. Jump up through them, land on top, and Descend drops back down.
   - **Floating Stadium:** a platform over the void. Whoever is pushed off the edge is out.
   - **League Stadium:** the League's coliseum. The field closes in by phases; outside it you
     lose HP.
@@ -80,7 +82,7 @@ godot --path game -- --p1=charizard --p2=pikachu --diff=hard --stage=league
 |---|---|---|---|
 | Move | Left stick | Left stick | WASD (can be changed in Options) or arrows |
 | Camera | Right stick | Right stick | Mouse |
-| Jump | A | ✕ | Space |
+| Jump, and again in the air | A | ✕ | Space |
 | Dodge | B | ○ | Shift |
 | Lock on / release | RS (click the right stick) | R3 | Tab or middle click |
 | First person / back | none (set one in Options) | none (set one in Options) | C |
@@ -92,7 +94,7 @@ godot --path game -- --p1=charizard --p2=pikachu --diff=hard --stage=league
 | Pause | Menu | Options | Esc |
 | Switch Pokémon (with a team) | X, Y | □, △ | 1, 2 |
 | Fly (Charizard, Gengar) | A in the air to take off; hold A to climb | ✕ the same | Space the same |
-| Descend while flying | LS (click the left stick) | L3 | Ctrl |
+| Descend while flying, or through a platform | LS (click the left stick) | L3 | Ctrl |
 | Debug view | View | Share | F3 |
 
 In the menus: A / ✕ / Space or left click picks, B / ○ / Backspace or right click goes back,
@@ -136,6 +138,9 @@ that battle unless you then change one by hand.
   or a circle. In the **Rules** tab, **No lock-on** keeps every player's camera free, **Aim assist**
   makes the aim stick to the foe while it is over it, more the higher it is, and **Legacy free aim**
   brings back the old way: moves stay level and shots home in on the rival.
+- **Double jump.** Jump again in the air, once before landing, for a sixth of the energy bar (the
+  **Double jump cost** rule changes it). Short of that, no second jump. Charizard and Gengar take off
+  instead, at no energy. The bar shows its numbers next to it.
 - **First person** (C) sees the battle from your Pokémon's eyes, free or locked on.
 - **Stat changes** show under each HP bar as in Pokémon Showdown: `1.5× Atk` in green, `0.67× Def`
   in red.
@@ -256,6 +261,7 @@ godot --headless --path game -- --test=sylveon            # only its cases too: 
 godot --headless --path game -- --test=loadouts           # every Pokémon with every move it can pick
 godot --headless --path game -- --test=status             # also: status_moves, abilities, new_moves
 godot --headless --path game -- --test=deflect            # also: clash, lockon, league, trainers
+godot --headless --path game -- --test=jumps              # the double jump and its energy, the platforms, the AI on them
 godot --headless --path game -- --test=team               # the rules of 3 vs 3 and switching
 godot --headless --path game -- --aivsai --test=team_battles --battles=20 --speed=4   # random teams: length, switches, wins
 godot --headless --path game -- --test=doubles            # the rules of 2 vs 2: sides, lock, friendly fire, its moves, the AI

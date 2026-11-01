@@ -10,6 +10,8 @@ extends RefCounted
 ##   speed/accel top speed (m/s) and ground acceleration
 ##   turn        how fast it turns to face (rad/s)
 ##   jump        initial jump speed; gravity; air_control = control in the air (0 to 1)
+##   jumps       jumps before landing, if not 2: the ones in the air cost energy
+##               (BattleRules air_jump_cost). Flyers have just one: they take off instead
 ##   knockback   multiplies how far hits push it (lower is heavier)
 ##   poise       0 light, 1 heavy: added to the poise of the move it is winding up
 ##               (see Moves). Only hits with strength >= the total interrupt it
@@ -126,7 +128,6 @@ const POKEMON := {
 		"height": 1.55, "radius": 0.5, "poise": 0, "hp": 940.0, "knockback": 1.05,
 		"speed": 8.4, "accel": 65.0, "turn": 16.0, "jump": 10.5, "gravity": 27.0, "air_control": 0.85,
 		"dodge": {"dist": 5.6, "dur": 0.22, "iframes": [0.03, 0.19], "recovery": 0.15, "charges": 3, "recharge": 1.1},
-		"jumps": 2,
 		"moves": ["watershuriken", "nightslash", "doubleteam", "hydropump"],
 		"passive": {"id": "protean", "display_name": "Protean",
 			"text": "Takes the type of the last move it used, which changes its weaknesses. Shown by the icons on its frame."},

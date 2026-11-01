@@ -364,7 +364,6 @@ Move 1,Move 1,Movimiento 1
 Move 2,Move 2,Movimiento 2
 Move 3,Move 3,Movimiento 3
 Move 4,Move 4,Movimiento 4
-Descend (flying),Descend (flying),Bajar (volando)
 Pause,Pause,Pausa
 Menu,Menu,Menú
 Cancel,Cancel,Cancelar
@@ -879,3 +878,11 @@ Your side,Your side,Tu lado
 The other side,The other side,El otro lado
 Waiting for the others,Waiting for the others,Esperando a los demás
 Change my team,Change my team,Cambiar mi equipo
+Not enough energy,Not enough energy,Sin energía suficiente
+"Descend (flying, platforms)","Descend (flying, platforms)","Bajar (volando, plataformas)"
+Free,Free,Gratis
+Night Platforms,Night Platforms,Plataformas nocturnas
+The night stadium with three platforms over the field. Jump up through them; Descend drops back down.,The night stadium with three platforms over the field. Jump up through them; Descend drops back down.,El estadio nocturno con tres plataformas sobre el campo. Salta a través de ellas; con Bajar vuelves abajo.
+Movement,Movement,Movimiento
+Double jump cost,Double jump cost,Coste del doble salto
+"How much of the energy bar a double jump takes: at 1/6, a sixth of it. With less than that left, there is no double jump. Flyers take off instead, and that costs no energy.","How much of the energy bar a double jump takes: at 1/6, a sixth of it. With less than that left, there is no double jump. Flyers take off instead, and that costs no energy.","Cuánta barra de energía gasta un doble salto: con 1/6, una sexta parte. Con menos de eso no hay doble salto. Los voladores despegan en su lugar, y eso no gasta energía."

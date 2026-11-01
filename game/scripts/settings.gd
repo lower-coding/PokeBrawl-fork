@@ -218,7 +218,7 @@ func _action_name(a: String) -> String:
 		"mov2": return tr("Move 2")
 		"mov3": return tr("Move 3")
 		"mov4": return tr("Move 4")
-		"descend": return tr("Descend (flying)")
+		"descend": return tr("Descend (flying, platforms)")
 		"switch1": return tr("Switch 1")
 		"switch2": return tr("Switch 2")
 		"first_person": return tr("First person")

@@ -25,6 +25,7 @@ signal hit_taken(who: Fighter, info: Dictionary)
 const BUFFER := 0.15                 # how long a press waits to be executed
 const ENERGY_MAX := 100.0
 const ENERGY_REGEN := 9.0           # per second
+const PLATFORM_DROP := 0.15         # seconds a platform stays open after Descend
 const COMBO_MAX := 5
 const DODGE_DELAY := 1.1        # s from the start of a dodge until charges start refilling again
 const RECOIL := 0.85               # speed when backing away from the locked-on rival
@@ -138,7 +139,7 @@ var aim_lead := 1.0                  # how much projectiles lead a moving target
 var _hit_ms := -100000               # when it was last hit (Time ms), for the ring-out log
 var _left_as := ""                   # what it was doing when it went off the edge (same log)
 var head_pitch := 0.0                   # tilt of hits toward the target's height (rad)
-var air_jumps := 0                 # jumps left in the air (Greninja: double jump)
+var air_jumps := 0                 # jumps left in the air: the double jump, for energy
 var boosted_hits := 0                        # hits boosted by Swords Dance
 var _boost_t := 0.0                  # seconds left on the Swords Dance boost
 var _passive_t := 0.0
@@ -158,6 +159,9 @@ var _dodge_fatigue := false
 var _dodge_reach := 1.0              # slowness (streams, ice) shortens the dodge
 var _energy_pause := 0.0
 var _was_grounded := true
+var _floor_y := 0.0                # the height it last stood at
+var _drop_t := 0.0                 # dropping through platforms (Descend)
+var _through := {}                 # platforms that do not hold it right now
 var _time := 0.0
 var _rumble_ok := true
 
@@ -198,7 +202,7 @@ func setup(m: Node, sp: String, eq: int, loadout := {}) -> void:
 	charges = data.dodge.charges
 	flight = _flight_max()
 	collision_layer = 2
-	collision_mask = 1 | 4
+	collision_mask = 1 | 4 | Arena.PLATFORM_LAYER
 	floor_snap_length = 0.3
 	var col := CollisionShape3D.new()
 	var cap := CapsuleShape3D.new()
@@ -287,10 +291,11 @@ func hittable() -> bool:
 	return state != "ko"
 
 
+## On the ground, for what only reaches the ground: on a platform, a wave goes by underneath.
 func on_floor() -> bool:
 	if data.get("levitates", false):
 		return false
-	return is_on_floor() or global_position.y < main.ground_y + 0.15
+	return global_position.y < main.ground_y + (0.5 if is_on_floor() else 0.15)
 
 
 ## What it looks at and aims at: the rival, or a decoy it is locked on (the AI falls for
@@ -455,13 +460,13 @@ func _bearing(o: Node3D) -> float:
 
 
 ## How high the feet can rise with hits and dashes that go upward: its jump height
-## plus one meter. Flyers have no ceiling. This way a ground Pokémon does not "fly"
-## chasing a Charizard in the air.
+## plus one meter, from where it last stood. Flyers have no ceiling. This way a ground
+## Pokémon does not "fly" chasing a Charizard in the air.
 func attack_ceiling() -> float:
 	if data.has("flight") or flying:
 		return INF
 	var g: float = maxf(float(data.gravity), 1.0)
-	return main.ground_y + float(data.jump) * float(data.jump) / (2.0 * g) + 1.0
+	return _floor_y + float(data.jump) * float(data.jump) / (2.0 * g) + 1.0
 
 
 func target_center() -> Vector3:
@@ -852,6 +857,7 @@ func _physics_process(delta: float) -> void:
 	elif state != "action" or not action or not action.no_gravity:
 		velocity.y -= data.gravity * delta * (2.2 if state == "dive" else 1.0)
 	_separate()
+	_step_platforms(delta)
 	var before := global_position
 	move_and_slide()
 	_edge_stop(before)
@@ -860,7 +866,26 @@ func _physics_process(delta: float) -> void:
 	if on_ground and not _was_grounded and state in ["free", "action"]:
 		_land()
 	_was_grounded = is_on_floor()
+	if _was_grounded:
+		_floor_y = global_position.y
 	ctrl.clear()
+
+
+## Platforms only hold what comes down on them from above: from below it passes through, and
+## holding Descend drops through (a moment more once let go, to clear the one it was on).
+func _step_platforms(delta: float) -> void:
+	if main.arena.platforms.is_empty():
+		return
+	_drop_t = PLATFORM_DROP if state == "free" and ctrl.keeps("descend") else maxf(0.0, _drop_t - delta)
+	for pl: StaticBody3D in main.arena.platforms:
+		var holds := _drop_t <= 0.0 and velocity.y <= 0.0 and global_position.y >= pl.global_position.y - 0.05
+		# Only on a change: Jolt lists an exception once per call and a removal takes one away.
+		if holds and _through.has(pl):
+			_through.erase(pl)
+			remove_collision_exception_with(pl)
+		elif not holds and not _through.has(pl):
+			_through[pl] = true
+			add_collision_exception_with(pl)
 
 
 ## On stages with a void, a move never carries its user off the edge (a Quick Attack or an
@@ -1285,14 +1310,22 @@ func _try_actions(on_ground: bool) -> void:
 				party.begin_recall(slot)
 				return
 	if on_ground:
-		air_jumps = int(data.get("jumps", 1)) - 1
+		# A flyer's jump in the air is taking off.
+		air_jumps = 0 if data.has("flight") else int(data.get("jumps", 2)) - 1
 	if _wants("jump") and not on_ground and _take_off():
 		_consume("jump")
 		return
 	if _wants("jump") and (on_ground or air_jumps > 0):
 		_consume("jump")
 		if not on_ground:
+			if energy < main.air_jump_cost:
+				if is_player:
+					main.vfx.text(center() + Vector3.UP * 0.9, tr("Not enough energy"), Color(0.75, 0.77, 0.85))
+				return
 			air_jumps -= 1
+			if main.air_jump_cost > 0.0:
+				energy -= main.air_jump_cost
+				_energy_pause = 0.8
 			main.vfx.burst("wind", global_position, Vector3.DOWN, Color(0, 0, 0, 0), 0.6)
 			_pose.turn = 0.0
 		velocity.y = data.jump

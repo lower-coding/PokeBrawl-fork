@@ -154,6 +154,47 @@ func _physics_process(delta: float) -> void:
 		if not _punish(seen, dist, diff):
 			_attack(seen, dist, diff)
 	_edge_guard()
+	_chase_platforms(seen)
+
+
+## On a stage with platforms: after a foe standing higher up it heads for the next platform up
+## and jumps, again near the top of the jump if it needs to and has the energy; after a foe
+## standing lower down it drops through. Flyers just fly.
+func _chase_platforms(seen: Dictionary) -> void:
+	if main.arena.platforms.is_empty() or me.state != "free" or me.data.has("flight") or not seen.on_ground:
+		return
+	var p := me.global_position
+	var grounded := me.is_on_floor()
+	var above: float = seen.pos.y - p.y
+	if above < -0.7 and grounded and p.y > main.ground_y + 0.5:
+		_hold_button("descend", 0.1)
+		state_text = "drops down"
+		return
+	if above < 0.7 and grounded:
+		return
+	var one_jump: float = float(me.data.jump) * float(me.data.jump) / (2.0 * float(me.data.gravity))
+	var can_double: bool = me.energy >= main.air_jump_cost
+	var reach: float = (one_jump * 2.0 if can_double else one_jump) if grounded else (one_jump if can_double and me.air_jumps > 0 else 0.0)
+	var goal: StaticBody3D = null
+	var best := INF
+	for pl: StaticBody3D in main.arena.platforms:
+		var rise: float = pl.global_position.y - p.y
+		var from_foe := Vector2(pl.global_position.x - seen.pos.x, pl.global_position.z - seen.pos.z).length()
+		if rise > (0.7 if grounded else 0.05) and rise < reach - 0.05 and from_foe < best:
+			goal = pl
+			best = from_foe
+	if goal == null:
+		return
+	var to_goal := goal.global_position - p
+	to_goal.y = 0.0
+	if to_goal.length() > 1.0:
+		me.ctrl.move_input = _to_local(to_goal.normalized())
+	state_text = "climbs after the rival"
+	if grounded:
+		if to_goal.length() < 6.0:
+			_press("jump")
+	elif me.velocity.y < 1.0 and goal.global_position.y - p.y > 0.05:
+		_press("jump")
 
 
 ## On a stage with a void, a flyer that fell off flies back: it takes off, first moves out

@@ -10,6 +10,8 @@ extends Node
 ##   mechanics   headless: concrete cases from the acceptance criteria (dodging a
 ##               projectile, jumping the wave, punishing a recovery, combo limit,
 ##               hitstop)
+##   jumps       the double jump and its energy, the stage with platforms, the numbers on the
+##               energy bar (with a window, captures of the last two)
 ##   team        headless: the rules of 3 vs 3 and switching (Party, BattleRules)
 ##   doubles     headless: the rules of 2 vs 2: sides, lock, friendly fire, winning, the moves for
 ##               an ally, the AI
@@ -213,6 +215,8 @@ func _ready() -> void:
 			_stage_shots()
 		"stage_previews":
 			_stage_previews()
+		"jumps":
+			_jumps_test()
 		"result_shot":
 			_result_shot()
 		"deflect":
@@ -1447,7 +1451,8 @@ func _stage_previews() -> void:
 	main.camera.set_physics_process(false)
 	var views := {"night": [Vector3(-26.0, 13.0, 22.0), Vector3(2.0, 0.0, -2.0)],
 		"floating": [Vector3(-30.0, 12.0, 26.0), Vector3(0.0, -1.0, 0.0)],
-		"league": [Vector3(-13.0, 10.0, 13.0), Vector3(3.0, 2.0, -8.0)]}
+		"league": [Vector3(-13.0, 10.0, 13.0), Vector3(3.0, 2.0, -8.0)],
+		"night_platforms": [Vector3(-22.0, 9.0, 20.0), Vector3(0.0, 1.5, 0.0)]}
 	DirAccess.make_dir_recursive_absolute(ProjectSettings.globalize_path("res://gui/stages"))
 	for id in Menu.STAGES:
 		main.set_stage(id)
@@ -1460,6 +1465,166 @@ func _stage_previews() -> void:
 		img.resize(640, 360, Image.INTERPOLATE_LANCZOS)
 		img.save_png("res://gui/stages/%s.png" % id)
 		print("preview ", id)
+	get_tree().quit()
+
+
+## A jump in the air until it starts coming down, then another.
+func _double_jump(f: Fighter) -> void:
+	f.ctrl.press("jump")
+	await _wait(0.05)
+	while f.velocity.y > 0.0:
+		await get_tree().physics_frame
+	f.ctrl.press("jump")
+	await _wait(0.05)
+
+
+func _hold_descend(f: Fighter, s: float) -> void:
+	var end_pos := t + s
+	while t < end_pos:
+		f.ctrl.held["descend"] = true
+		await get_tree().physics_frame
+	f.ctrl.release("descend")
+
+
+## The double jump and its energy, the stage with platforms and the numbers on the energy bar.
+func _jumps_test() -> void:
+	await get_tree().physics_frame
+	main.menu.choice.format = "1v1"
+	main.menu.choice.rules = BattleRules.defaults()
+	# The double jump: a sixth of the bar, once per jump.
+	var ab: Array = await _setup("pikachu", "snorlax", Vector3(-6, 0, 0), Vector3(6, 0, 0))
+	var a: Fighter = ab[0]
+	_ok("A double jump costs a sixth of the bar", is_equal_approx(main.air_jump_cost, Fighter.ENERGY_MAX / 6.0), "%.2f" % main.air_jump_cost)
+	_ok("The rule reads 1/6", BattleRules.text("air_jump_cost", 6.0) == "1/6" and BattleRules.text("air_jump_cost", 0.0) == tr("Free"), BattleRules.text("air_jump_cost", 6.0))
+	a.energy = 60.0
+	a.ctrl.press("jump")
+	await _wait(0.05)
+	_ok("The first jump is free", a.energy >= 60.0 and a.velocity.y > 0.0, "%.1f" % a.energy)
+	while a.velocity.y > 0.0:
+		await get_tree().physics_frame
+	var e0: float = a.energy
+	a.ctrl.press("jump")
+	await _wait(0.05)
+	_ok("The second one in the air jumps and costs it", a.velocity.y > 0.0 and absf(e0 - a.energy - main.air_jump_cost) < 1.0, "%.1f from %.1f" % [a.energy, e0])
+	while a.velocity.y > 0.0:
+		await get_tree().physics_frame
+	e0 = a.energy
+	a.ctrl.press("jump")
+	await _wait(0.05)
+	_ok("No third one", a.velocity.y <= 0.0 and a.energy >= e0, "%.1f" % a.energy)
+	await _wait(1.0)
+	_ok("Landing gives it back", a.is_on_floor() and a.air_jumps == 1)
+	a.energy = 10.0
+	await _double_jump(a)
+	_ok("Short of energy: no double jump, and nothing spent", a.velocity.y <= 0.0 and a.energy >= 10.0, "%.1f" % a.energy)
+	await _wait(1.0)
+	# The rule: a half, and free.
+	main.menu.choice.rules = BattleRules.parsed("air_jump_cost:2")
+	ab = await _setup("pikachu", "snorlax", Vector3(-6, 0, 0), Vector3(6, 0, 0))
+	a = ab[0]
+	await _double_jump(a)
+	_ok("At 1/2 it takes half the bar", absf(a.energy - Fighter.ENERGY_MAX * 0.5) < 2.0, "%.1f" % a.energy)
+	main.menu.choice.rules = BattleRules.parsed("air_jump_cost:0")
+	ab = await _setup("pikachu", "snorlax", Vector3(-6, 0, 0), Vector3(6, 0, 0))
+	a = ab[0]
+	a.energy = 0.0
+	await _double_jump(a)
+	_ok("Free, it takes no energy and needs none", a.velocity.y > 0.0, "%.1f" % a.energy)
+	main.menu.choice.rules = BattleRules.defaults()
+	# Flyers take off with it, at no energy. Greninja pays like everybody.
+	ab = await _setup("charizard", "snorlax", Vector3(-6, 0, 0), Vector3(6, 0, 0))
+	a = ab[0]
+	await _double_jump(a)
+	_ok("A flyer takes off instead, at no energy", a.flying and a.energy >= Fighter.ENERGY_MAX, "%.1f" % a.energy)
+	ab = await _setup("greninja", "snorlax", Vector3(-6, 0, 0), Vector3(6, 0, 0))
+	a = ab[0]
+	await _double_jump(a)
+	_ok("Greninja pays like everybody", a.energy < Fighter.ENERGY_MAX - main.air_jump_cost + 1.0, "%.1f" % a.energy)
+	# The numbers on the bar.
+	a.energy = 83.4
+	_ok("The bar's numbers: current/max", Hud.energy_text(a) == "83/100", Hud.energy_text(a))
+	ab = await _setup("charizard", "snorlax", Vector3(-6, 0, 0), Vector3(6, 0, 0))
+	ab[0].is_player = true
+	await _wait(0.1)
+	_capture("hud_stamina_flyer")
+	ab[0].is_player = false
+	ab = await _setup("pikachu", "snorlax", Vector3(-6, 0, 0), Vector3(6, 0, 0))
+	ab[0].is_player = true
+	await _wait(0.1)
+	_capture("hud_stamina")
+	ab[0].is_player = false
+	# The stage: every Pokémon that jumps reaches each level from the last one.
+	var stage_before: String = main.arena.stage
+	main.set_stage("night_platforms")
+	_ok("Three platforms", main.arena.platforms.size() == 3)
+	var short: Array = []
+	for sp in Roster.POKEMON:
+		var d: Dictionary = Roster.POKEMON[sp]
+		if not d.has("flight") and float(d.jump) * float(d.jump) / float(d.gravity) < PlatformStadium.LOW_Y + 0.1:
+			short.append(sp)
+	_ok("Every level is in reach of a double jump", short.is_empty(), str(short))
+	ab = await _setup("pikachu", "snorlax", Vector3(-7, 0, 0), Vector3(7, 0, 0))
+	a = ab[0]
+	var b: Fighter = ab[1]
+	_ok("They start clear of the platforms", a.is_on_floor() and a.global_position.y < 0.1 and absf(a.global_position.x) > 6.0 + 0.5 and absf(a.global_position.x) < 7.5)
+	# Snorlax, the heaviest, from the field up through the side platform.
+	b.reset(Vector3(12, 0, 0), -PI * 0.5)
+	await _wait(0.2)
+	await _double_jump(b)
+	await _wait(0.9)
+	_ok("Up through a platform with a double jump, even Snorlax", b.is_on_floor() and absf(b.global_position.y - PlatformStadium.LOW_Y) < 0.1, "height %.2f" % b.global_position.y)
+	_ok("Standing on one, ground waves go by underneath", not b.on_floor())
+	# Falling from above it lands; Descend goes through, to the field.
+	a.reset(Vector3(-12, 4, 0), PI * 0.5)
+	await _wait(0.8)
+	_ok("From above it lands on top", a.is_on_floor() and absf(a.global_position.y - PlatformStadium.LOW_Y) < 0.1, "height %.2f" % a.global_position.y)
+	_capture("platforms_battle")
+	await _hold_descend(a, 0.1)
+	await _wait(0.6)
+	_ok("Descend drops through to the field", a.is_on_floor() and a.global_position.y < 0.1, "height %.2f" % a.global_position.y)
+	# The top one, from a side one.
+	a.reset(Vector3(-7.6, PlatformStadium.LOW_Y, 0), PI * 0.5)
+	await _wait(0.2)
+	a.ctrl.press("jump")
+	await _wait(0.05)
+	var low_from: float = a.global_position.x
+	for i in 50:
+		a.global_position.x = minf(a.global_position.x + 0.1, -3.0)
+		if i == 8:
+			a.ctrl.press("jump")
+		await get_tree().physics_frame
+	await _wait(0.5)
+	_ok("From a side one to the top one", a.is_on_floor() and absf(a.global_position.y - PlatformStadium.HIGH_Y) < 0.1, "from x %.1f, height %.2f" % [low_from, a.global_position.y])
+	# Shots go through; walking off one falls.
+	var q := PhysicsRayQueryParameters3D.create(Vector3(-12, 0.5, 0), Vector3(-12, 5, 0), Combat.WORLD_LAYER)
+	_ok("Shots go through", main.get_world_3d().direct_space_state.intersect_ray(q).is_empty())
+	# The AI comes up after a foe on a platform, and comes down after one on the field.
+	a.reset(Vector3(-12, PlatformStadium.LOW_Y + 0.2, 0), PI * 0.5)
+	a.hp = a.hp_max
+	b.reset(Vector3(12, 0, 0), -PI * 0.5)
+	main.ai.mode = "active"
+	var went_up := false
+	for i in 60 * 12:
+		a.hp = a.hp_max
+		b.energy = Fighter.ENERGY_MAX
+		if b.is_on_floor() and b.global_position.y > 1.0:
+			went_up = true
+			break
+		await get_tree().physics_frame
+	_ok("The AI goes up after a foe on a platform", went_up, "height %.2f, %s" % [b.global_position.y, main.ai.state_text])
+	a.reset(Vector3(-12, 0, 0), PI * 0.5)
+	var came_down := false
+	for i in 60 * 6:
+		a.hp = a.hp_max
+		if b.is_on_floor() and b.global_position.y < 0.2:
+			came_down = true
+			break
+		await get_tree().physics_frame
+	_ok("The AI comes down after a foe on the field", came_down, "height %.2f, %s" % [b.global_position.y, main.ai.state_text])
+	main.ai.mode = "still"
+	main.set_stage(stage_before)
+	var fails := _results.filter(func(r): return not r[1]).size()
+	print("RESULT: %d of %d" % [_results.size() - fails, _results.size()])
 	get_tree().quit()
 
 

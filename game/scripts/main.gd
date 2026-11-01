@@ -41,6 +41,7 @@ var field_pace := 1.0             # how much slower the League's field closes (B
 var legacy_aim := false           # free aim the old way, level (BattleRules): no true free aim
 var no_lock := false              # players cannot lock on (BattleRules)
 var aim_assist := 0.0             # 0 to 1: how much the aim sticks to the foe (BattleRules)
+var air_jump_cost := Fighter.ENERGY_MAX / 6.0   # the energy a double jump takes (BattleRules)
 var trainers: Array = []          # Trainer of each fighter, same order (only for show)
 ## The opening: each trainer throws their Poké Ball and their Pokémon comes out; nobody
 ## moves until it ends. Tests skip it (unless --intro).
@@ -171,8 +172,9 @@ func font(bold := true) -> Font:
 	return _fonts[k]
 
 
-## Builds the stage: "night" (the night stadium, the default) or "floating" (a platform
-## over a void: falling off is a KO). It can be
+## Builds the stage: "night" (the night stadium, the default), "floating" (a platform
+## over a void: falling off is a KO), "league" or "night_platforms" (the night stadium with
+## three platforms over the field). It can be
 ## changed in the menu (online, the host picks it); it is rebuilt from scratch.
 func set_stage(stage_id: String) -> void:
 	if arena and arena.stage == stage_id:
@@ -183,6 +185,7 @@ func set_stage(stage_id: String) -> void:
 	match stage_id:
 		"floating": arena = FloatingStadium.new()
 		"league": arena = LeagueStadium.new()
+		"night_platforms": arena = PlatformStadium.new()
 		_:
 			arena = NightStadium.new()
 			stage_id = "night"
@@ -250,6 +253,8 @@ func start_battle(p1: String, p2: String, diff: String, rival_loadout := {}, riv
 	legacy_aim = menu.choice.rules.legacy_aim != 0.0
 	no_lock = menu.choice.rules.no_lock != 0.0
 	aim_assist = menu.choice.rules.aim_assist / 100.0
+	var jump_share: float = menu.choice.rules.air_jump_cost
+	air_jump_cost = Fighter.ENERGY_MAX / jump_share if jump_share > 0.0 else 0.0
 	doubles = menu.choice.format == "2v2"
 	friendly_fire = doubles and menu.choice.rules.friendly_fire != 0.0
 	winning_team = -1
