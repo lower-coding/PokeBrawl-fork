@@ -12,6 +12,9 @@ extends Node
 ##               hitstop)
 ##   team        headless: the rules of 3 vs 3 and switching (Party, BattleRules)
 ##   menu_rules  with a window: the selection's Rules screen, on to a battle by those rules
+##   menu_wall   with a window: the roster's rows at any size, its keys and mouse, when the
+##               cries play, with captures
+##   menu_perf   with a window: what the selection costs a frame
 ##   team_battles --aivsai [--battles=N] [--speed=x] [--diff=...]: random teams, AI against
 ##               AI; how long they last, how often they switch, who wins
 ##   hud         with a window: the crosshair with nothing locked on and the stat stage tags,
@@ -94,6 +97,10 @@ func _ready() -> void:
 				[7.3, "", "menu_setup"], [7.5, "menu_accept", ""],
 				[7.8, "", "menu_vs"], [10.7, "", "menu_battle"], [10.9, "pause", ""], [11.3, "", "menu_pause"],
 				[11.5, "menu_back", ""], [12.2, "", "menu_back"]]
+		"menu_perf":
+			_menu_perf()
+		"menu_wall":
+			_menu_wall()
 		"menu_rules":
 			# Battle, 3 vs 3; your team with the mouse (a pick, one taken out, two more) and the rival's
 			# with the keys; the Rules tab, a rule by mouse and keys; back and Fight.
@@ -152,16 +159,16 @@ func _ready() -> void:
 			_plan = [[1.5, "", ""], [1.7, "menu_accept", ""], [2.0, "move_right", ""], [2.2, "move_right", ""], [2.4, "move_down", ""],
 				[2.9, "menu_accept", ""]]
 		"menu_forms":
-			# Battle, 1 vs 1: down to the last cell and left to Urshifu's, the form by key and by its tab, picked;
+			# Battle, 1 vs 1: the cursor on Urshifu's cell, the form by key and by its tab, picked;
 			# the rival, then the Moves screen and back; a 3 vs 3's team with it on.
-			_plan = [[1.5, "menu_accept", ""], [2.0, "menu_accept", ""], [2.6, "menu_accept", ""], [3.2, "move_down", ""], [3.4, "move_down", ""],
-				[3.6, "move_down", ""], [3.8, "move_left", ""], [4.2, "", "forms_single"], [4.4, "mov1", ""], [5.0, "", "forms_rapid"], [5.2, "click:form:110", ""],
+			_plan = [[1.5, "menu_accept", ""], [2.0, "menu_accept", ""], [2.6, "menu_accept", ""], [3.8, "wall:urshifu", ""],
+				[4.2, "", "forms_single"], [4.4, "mov1", ""], [5.0, "", "forms_rapid"], [5.2, "click:form:110", ""],
 				[5.8, "", "forms_tab"], [6.0, "mov1", ""], [6.4, "menu_accept", ""], [7.0, "", "forms_rival"], [7.2, "menu_accept", ""],
 				[7.8, "", "forms_setup"]]
 		"menu_forms_team":
 			# Battle, 3 vs 3: a pick, then Urshifu's cell picked and flipped on the team, in place.
 			_plan = [[1.5, "menu_accept", ""], [2.0, "menu_accept", ""], [2.4, "move_right", ""], [2.8, "menu_accept", ""], [3.4, "menu_accept", ""],
-				[3.8, "move_down", ""], [4.0, "move_down", ""], [4.2, "move_down", ""], [4.4, "move_left", ""], [4.6, "menu_accept", ""], [5.2, "", "forms_team_single"],
+				[4.2, "wall:urshifu", ""], [4.6, "menu_accept", ""], [5.2, "", "forms_team_single"],
 				[5.4, "mov1", ""], [6.0, "", "forms_team_rapid"]]
 		"menu_options":
 			# Options: from the main menu, then down a few rows.
@@ -226,6 +233,200 @@ func _ready() -> void:
 			get_tree().quit()
 
 
+## The roster: its rows at any size, the keys and the mouse on it, when the cries play and that
+## nothing left behind keeps rendering, with captures of the selection and of a crowded wall.
+func _menu_wall() -> void:
+	var m: Menu = main.menu
+	while m.portraits.is_empty() or m._generating:
+		await get_tree().process_frame
+	for n in [1, 13, 14, 30, 60, 100, 150]:
+		var shape := MenuDraw.wall_shape(n)
+		var last := MenuDraw.wall_cell(shape, n, n - 1)
+		var far := 0.0
+		for i in mini(n, shape.cols):
+			far = maxf(far, MenuDraw.wall_cell(shape, n, i).x + shape.w + shape.h * UiKit.SLANT)
+		var fits: bool = shape.cols * shape.rows >= n and last.y + shape.h <= MenuDraw.WALL_Y + MenuDraw.WALL_H + 0.01 and far <= MenuDraw.WALL_X + MenuDraw.WALL_W + 0.01
+		_ok("Wall: %d cells fit, in rows of %d, %d × %d" % [n, shape.cols, shape.w, shape.h], fits and shape.h >= 50.0, "%s" % shape)
+	m.choice.format = "3v3"
+	m._go("format")
+	await _wall_frames(10)
+	m.choice.format = "1v1"
+	m.choice.p1 = "pikachu"
+	m._go("selection")
+	await _wall_settle()
+	_ok("Renders: nothing left behind from the screen before", m._renders.keys().all(func(k): return k.begins_with("card")), "%s" % [m._renders.keys()])
+	_capture("wall_selection")
+	var n: int = m.pokemon_list().size()
+	# Keys: there and back lands on the same cell (a full row's last has no cell under it), and
+	# every cell can be reached.
+	var cols: int = MenuDraw.wall_shape(n).cols
+	var back := true
+	var reached := {}
+	for i in n:
+		var down := m._wall_step(i, 1)
+		reached[down] = true
+		if down != i and m._wall_step(down, -1) != i and (i + 1) % cols != 0:
+			back = false
+	_ok("Wall: down then up comes back", back)
+	_ok("Wall: nothing above the top row or under the last", m._wall_step(0, -1) == 0 and m._wall_step(n - 1, 1) == n - 1)
+	_ok("Wall: down reaches the whole last row", range(cols * (n / cols if n % cols else n / cols - 1), n).all(func(i): return reached.has(i)))
+	# The mouse: each cell's middle, and just inside its slanted corners.
+	var over := true
+	for z in m.draw.zones:
+		if z.kind != "wall":
+			continue
+		var r: Rect2 = z.rect
+		var inset: float = r.size.y * z.lean
+		for pos in [r.get_center(), r.position + Vector2(inset + 4.0, 3.0), r.end - Vector2(inset + 4.0, 3.0)]:
+			var got: Dictionary = m.draw.zone_at(pos)
+			if got.get("kind") != "wall" or got.get("i") != z.i:
+				over = false
+				print("  over ", z.i, " at ", pos, " got ", got.get("kind"), " ", got.get("i"))
+	_ok("Wall: the pointer gets the cell it is over, slanted edges too", over)
+	# Cries: only what gets picked.
+	var cried := m.cries
+	m.sel_phase = "p1"
+	for i in n:
+		m._pick_on_wall(i)
+	m._hover({"kind": "wall", "i": 2})
+	m.cursor = m.cell_of("urshifu")
+	m._flip_form()
+	_ok("Cries: none moving over the roster or changing form", m.cries == cried, "%d" % (m.cries - cried))
+	await _wall_settle()
+	_capture("wall_form")
+	m._take(m.pokemon_list()[m.cursor])
+	_ok("Cries: one for a pick", m.cries == cried + 1, "%d" % (m.cries - cried))
+	m.cursor = m.cell_of("snorlax")
+	await _wall_settle()
+	_capture("wall_rival")
+	m._random_pick()
+	_ok("Cries: one for a random pick", m.cries == cried + 2, "%d" % (m.cries - cried))
+	await _wall_settle()
+	_capture("wall_setup")
+	m.choice.format = "3v3"
+	m._go("selection")
+	m.choice.team = []
+	m.choice.team2 = []
+	m.sel_phase = "p1"
+	m.form_pick = {}
+	m.cursor = m.cell_of("pikachu")
+	cried = m.cries
+	m._take("pikachu")
+	m._take("charizard")
+	_ok("Cries: one for each on the team", m.cries == cried + 2, "%d" % (m.cries - cried))
+	m._take("charizard")
+	_ok("Cries: none taking one out", m.cries == cried + 2 and m.choice.team == ["pikachu"], "%s" % [m.choice.team])
+	m._take("urshifu")
+	m.cursor = m.cell_of("gengar")
+	m.team_preview = "gengar"
+	await _wall_settle()
+	_capture("wall_team")
+	_ok("Renders: only the team's", m._renders.keys().all(func(k): return k.begins_with("team")), "%s" % [m._renders.keys()])
+	# Moves screen: browsing is silent, choosing one cries.
+	m.choice.format = "1v1"
+	m._go("moves")
+	cried = m.cries
+	m._hover({"kind": "mvp", "i": 3})
+	m._hover({"kind": "mvp", "i": 4})
+	_ok("Cries: none on the Moves screen's list", m.cries == cried, "%d" % (m.cries - cried))
+	m._clicked = true
+	await _wall_frames(3)
+	_ok("Cries: one choosing a Pokémon to edit", m.cries == cried + 1 and m.edit_phase == "slots", "%d, %s" % [m.cries - cried, m.edit_phase])
+	await _wall_frames(10)
+	_capture("wall_moves")
+	# A crowded roster: the same Pokémon over and over.
+	m._go("selection")
+	var real: Array = m._all_forms.duplicate()
+	for size in [30, 60]:
+		var many: Array = []
+		while many.size() < size:
+			many.append_array(real.filter(func(sp): return not Roster.POKEMON[sp].has("echo_of")))
+		m._all_forms = many.slice(0, size)
+		m.sel_phase = "p1"
+		m._pick_on_wall(size / 2)
+		await _wall_settle()
+		_capture("wall_%d" % size)
+	m.cursor = 0
+	m._all_forms = real
+	get_tree().quit()
+
+
+func _wall_frames(n: int) -> void:
+	for i in n:
+		await get_tree().process_frame
+
+
+## Long enough for what a screen slides in or eases to finish, however fast the frames go.
+func _wall_settle() -> void:
+	await get_tree().create_timer(0.8).timeout
+
+
+## What the selection costs: frame times with no frame cap on the way a player gets there, the
+## wall's lookups, the live 3D renders and how long a new Pokémon under the cursor stalls a frame.
+func _menu_perf() -> void:
+	var m: Menu = main.menu
+	DisplayServer.window_set_vsync_mode(DisplayServer.VSYNC_DISABLED)
+	Engine.max_fps = 0
+	var start := Time.get_ticks_msec()
+	var stall := 0
+	var slow := 0
+	var before := Time.get_ticks_usec()
+	while m.portraits.is_empty() or m._generating:
+		await get_tree().process_frame
+		var took := Time.get_ticks_usec() - before
+		before = Time.get_ticks_usec()
+		stall = maxi(stall, took)
+		slow += 1 if took > 33000 else 0
+	print("PERF portraits ready after %d ms (%d), worst frame %.1f ms, %d frames over 33 ms" % [Time.get_ticks_msec() - start, m.portraits.size(), stall / 1000.0, slow])
+	m._go("main")
+	await _perf_frames("main", 120)
+	m._go("format")
+	await _perf_frames("format", 120)
+	m.choice.format = "1v1"
+	m._go("selection")
+	await _perf_frames("selection 1v1", 300)
+	print("PERF live renders: %s" % [m._renders.keys()])
+	var t0 := Time.get_ticks_usec()
+	for sp in m.pokemon_list():
+		m.forms_of(sp)
+	print("PERF the wall's lookups, one frame: %.2f ms" % ((Time.get_ticks_usec() - t0) / 1000.0))
+	# The cursor over every cell, a frame apart: the worst stall is what the player feels.
+	var worst := 0
+	for i in m.pokemon_list().size():
+		m._pick_on_wall(i)
+		var f0 := Time.get_ticks_usec()
+		await get_tree().process_frame
+		worst = maxi(worst, Time.get_ticks_usec() - f0)
+	print("PERF worst frame moving the cursor: %.1f ms" % (worst / 1000.0))
+	m.choice.format = "3v3"
+	m._go("format")
+	await _perf_frames("format", 60)
+	m._go("selection")
+	m.choice.team = m.pokemon_list().slice(0, 3)
+	m.sel_phase = "p2"
+	m.choice.team2 = m.pokemon_list().slice(3, 5)
+	m.team_preview = m.pokemon_list()[5]
+	await _perf_frames("selection 3v3", 300)
+	print("PERF live renders: %s" % [m._renders.keys()])
+	get_tree().quit()
+
+
+## Frames in a row, after letting the screen settle: the average and the worst.
+func _perf_frames(what: String, n: int) -> void:
+	for i in 30:
+		await get_tree().process_frame
+	var last := Time.get_ticks_usec()
+	var total := 0
+	var worst := 0
+	for i in n:
+		await get_tree().process_frame
+		var now := Time.get_ticks_usec()
+		total += now - last
+		worst = maxi(worst, now - last)
+		last = now
+	print("PERF %s: %.2f ms a frame (%.0f fps), worst %.1f ms" % [what, total / 1000.0 / n, 1000000.0 * n / total, worst / 1000.0])
+
+
 ## One queued menu step (see the menus' plan). From _physics_process, which runs before the
 ## menus' _process in a frame: a press made after them would be "just pressed" too late.
 func _next_step() -> void:
@@ -238,6 +439,8 @@ func _next_step() -> void:
 	if st[0] == "key" and st[1].begins_with("click:"):
 		_click_zone(st[1].get_slice(":", 1), int(st[1].get_slice(":", 2)))
 		_step_wait = 4
+	elif st[0] == "key" and st[1].begins_with("wall:"):
+		main.menu._pick_on_wall(main.menu.cell_of(st[1].get_slice(":", 1)))
 	elif st[0] == "key" and st[1].begins_with("opt:"):
 		main.menu.edit_cursor = main.menu.edit_options().find(st[1].get_slice(":", 1))
 	elif st[0] == "key":

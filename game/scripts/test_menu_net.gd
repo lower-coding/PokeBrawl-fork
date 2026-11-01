@@ -168,9 +168,9 @@ func _menu(m: Menu) -> void:
 			var target := list.find(want)
 			if m.cursor == target:
 				_press("menu_accept")
-			elif target / m.COLUMNS > m.cursor / m.COLUMNS:
+			elif m.wall_row(target) > m.wall_row(m.cursor):
 				_press("move_down")
-			elif target / m.COLUMNS < m.cursor / m.COLUMNS:
+			elif m.wall_row(target) < m.wall_row(m.cursor):
 				_press("move_up")
 			else:
 				_press("move_right" if target > m.cursor else "move_left")

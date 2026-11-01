@@ -3,6 +3,24 @@
 All notable changes to this project are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [Unreleased]
+
+### Changed
+- The selection's roster is now rows of slanted cells, like a fighting game's. The rows and the cell
+  size adapt to how many Pokémon there are: two rows of 7 today, and it still fits 150 (cells under
+  90 px leave the name to the player card). Up and down go to the cell right above or below.
+- The player cards are shorter to make room, with the name and types beside the model, and the
+  battle's options grew to fill the roster's place, with the stage's text under its picture.
+- A cell with forms shows its tabs only while highlighted; the others mark how many forms they have.
+- Cries play only when a Pokémon is chosen: picked on the selection (a 3 vs 3 team's too, not when
+  taken out) or chosen to edit on the Moves screen. Moving the cursor or the mouse over them is silent.
+- New tests: `--test=menu_wall` and `--test=menu_perf`.
+
+### Fixed
+- The selection ran at about 14 fps on a fast PC: it checked every move's script on the disk for every
+  cell, every frame, which got worse with each new Pokémon. It now checks once.
+- Menu renders no longer keep drawing unseen after their screen is left.
+
 ## [demo-random] - 2026-10-31
 
 ### Added

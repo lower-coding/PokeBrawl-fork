@@ -30,7 +30,7 @@ const STAGE_NAME := {"night": "Night Stadium", "floating": "Floating Stadium", "
 const STAGE_TEXT := {"night": "A Galar stadium at night, packed and walled all round: nobody falls off.",
 	"floating": "A platform over the void. Whoever is pushed off the edge is out.",
 	"league": "The League's coliseum. The field closes in bit by bit: outside it you lose HP."}
-const COLUMNS := 5
+const PORTRAIT_SIZE := Vector2i(340, 240)
 const FORM_ZONE := 10            # a wall tab's zone number: cell * this + which form
 const MAIN_MENU := [["combat", "Battle", "Against the AI. Pick your Pokémon, the rival and the difficulty."],
 	["online", "Online", "1 vs 1 or 3 vs 3 with a friend over the internet."],
@@ -99,8 +99,10 @@ var _key := Vector2i.ZERO        # selected key of the on-screen keypad (column,
 var _t := 0.0
 var _vs_t := -1.0
 var _vs := []                    # [mine, theirs] on the VS screen
-var _renders := {}               # slot -> {vp, model, species}: live 3D renders on the menus
+var _renders := {}               # slot -> {vp, model, species, used}: live 3D renders on the menus
 var _generating := false
+var cries := 0                   # how many so far (the tests count them)
+var _all_forms: Array = []       # what all_forms() found
 # Moves screen: pokemon (list), slots (its 4 + ability), list (options for the slot)
 var edit_phase := "pokemon"
 var edit_sp := ""
@@ -193,9 +195,11 @@ func _click_form(cell: int, which: int) -> void:
 	_form_changed()
 
 
-## Every Pokémon and form with all its moves done (the rest are half finished).
+## Every Pokémon and form with all its moves done (the rest are half finished). Looked up once:
+## each check goes to the disk, and the wall asks for this many times a frame.
 func all_forms() -> Array:
-	var list: Array = []
+	if not _all_forms.is_empty():
+		return _all_forms
 	for sp in Roster.POKEMON:
 		var data: Dictionary = Roster.POKEMON[sp]
 		var ready := true
@@ -203,8 +207,8 @@ func all_forms() -> Array:
 			if not Moves.DATA.has(move) or not ResourceLoader.exists(Moves.DATA[move].script):
 				ready = false
 		if ready:
-			list.append(sp)
-	return list
+			_all_forms.append(sp)
+	return _all_forms
 
 
 # ---------------------------------------------------------------- open and close
@@ -263,7 +267,6 @@ func _go(p: String) -> void:
 			team_preview = pokemon_list()[cursor]
 	elif p == "format":
 		cursor = maxi(FORMATS.map(func(f): return f[0]).find(choice.format), 0)
-		_free_renders()
 	elif p == "profile":
 		name_edit = false
 		profile_cursor = TrainerData.ids().find(main.options.trainer)
@@ -272,8 +275,6 @@ func _go(p: String) -> void:
 		cursor = cell_of(choice.p1)
 		edit_side = -1
 		edit_sp = pokemon_list()[cursor]
-	elif p != "vs":
-		_free_renders()
 
 
 ## Online: once connected, both go on to pick.
@@ -622,9 +623,9 @@ func _selection() -> void:
 	elif _pressed("move_left"):
 		to = maxi(cursor - 1, 0)
 	elif _pressed("move_down"):
-		to = mini(cursor + COLUMNS, n - 1)
+		to = _wall_step(cursor, 1)
 	elif _pressed("move_up"):
-		to = maxi(cursor - COLUMNS, 0)
+		to = _wall_step(cursor, -1)
 	if to != cursor:
 		_pick_on_wall(to)
 	if _accept():
@@ -645,18 +646,45 @@ func _selection() -> void:
 			_go("main")
 
 
+## The wall's row of cell "i".
+func wall_row(i: int) -> int:
+	return i / int(MenuDraw.wall_shape(pokemon_list().size()).cols)
+
+
+## The cell "step" rows from cell "i", the one right above or below it on screen (a shorter last
+## row is centered). There and back lands on the same cell. "i" itself if no row is there.
+func _wall_step(i: int, step: int) -> int:
+	var n := pokemon_list().size()
+	var cols: int = MenuDraw.wall_shape(n).cols
+	var row := i / cols + step
+	if row < 0 or row * cols >= n:
+		return i
+	var from_off := (cols - mini(cols, n - i / cols * cols)) * 0.5
+	var to_off := (cols - mini(cols, n - row * cols)) * 0.5
+	var at := i % cols + from_off - to_off
+	var col := ceili(at) if to_off > from_off else floori(at)
+	return row * cols + clampi(col, 0, mini(cols, n - row * cols) - 1)
+
+
 ## "sp" is this side's pick: on to the next side, or to the battle's options.
 func _take(sp: String) -> void:
 	_sound("ok")
 	if team_battle():
 		_team_pick(sp)
 		return
+	_cry(sp)
 	choice[sel_phase] = sp
 	if sel_phase == "p1" and not online:
 		sel_phase = "p2"
 		cursor = cell_of(choice.p2)
 	else:
 		_to_setup()
+
+
+## A Pokémon's cry, when it is chosen: never for just passing over it.
+func _cry(sp: String) -> void:
+	cries += 1
+	main.audio.cry(sp, main.camera.global_position, 1.0, -22.0)
 
 
 ## A random Pokémon or form for whoever is picking, one not on its team yet.
@@ -668,7 +696,6 @@ func _random_pick() -> void:
 	var sp: String = pool.pick_random()
 	cursor = cell_of(sp)
 	team_preview = sp
-	main.audio.cry(sp, main.camera.global_position, 1.0, -22.0)
 	_take(sp)
 
 
@@ -867,6 +894,7 @@ func _team_pick(sp: String) -> void:
 		send_choice()
 		return
 	picks.append(sp)
+	_cry(sp)
 	if picks.size() < Party.SIZE:
 		send_choice()
 		return
@@ -1130,16 +1158,15 @@ func _edit_moves() -> void:
 			if not prepping() and _pressed("mov1") and _next_form():
 				_sound("move")
 				_edit_pick(cursor)
-				main.audio.cry(edit_sp, main.camera.global_position, 1.0, -22.0)
 				return
 			var before := cursor
 			cursor = _cycle(cursor, n)
 			if cursor != before:
 				_edit_pick(cursor)
-				main.audio.cry(edit_sp, main.camera.global_position, 1.0, -22.0)
 			if _accept():
 				_sound("ok")
 				_edit_pick(cursor)
+				_cry(edit_sp)
 				edit_slot = 0
 				edit_phase = "slots"
 			elif _pressed("menu_back"):
@@ -1151,7 +1178,6 @@ func _edit_moves() -> void:
 			if prepping() and n > 1 and (_pressed("move_left") or _pressed("move_right")):
 				_sound("move")
 				_edit_pick((cursor + (1 if _pressed("move_right") else n - 1)) % n)
-				main.audio.cry(edit_sp, main.camera.global_position, 1.0, -22.0)
 			if _accept():
 				_sound("ok")
 				var options := edit_options()
@@ -1442,6 +1468,7 @@ func render(slot: String, sp: String, px: Vector2i, turn := 0.45) -> Texture2D:
 		add_child(vp)
 		r = {"vp": vp, "model": null, "species": "", "turn": turn}
 		_renders[slot] = r
+	r.used = true
 	var vp: SubViewport = r.vp
 	if vp.size != px:
 		vp.size = px
@@ -1463,16 +1490,27 @@ func _free_renders() -> void:
 	_renders.clear()
 
 
+## After drawing: a render this frame did not show goes away (a screen left behind, a pick taken
+## out), or it would keep drawing its 3D scene unseen.
+func _drop_unused_renders() -> void:
+	for slot in _renders.keys():
+		if _renders[slot].used:
+			_renders[slot].used = false
+		else:
+			_renders[slot].vp.queue_free()
+			_renders.erase(slot)
+
+
 # ---------------------------------------------------------------- portraits
 
-## Grid icons: each Pokémon rendered once to a texture.
+## Grid icons: each Pokémon rendered once to a texture, the shape of a slanted wall cell.
 func _generate_portraits() -> void:
 	_generating = true
 	for sp in all_forms():
 		var vp := SubViewport.new()
 		vp.own_world_3d = true
 		vp.transparent_bg = true
-		vp.size = Vector2i(128, 128)
+		vp.size = PORTRAIT_SIZE
 		vp.msaa_3d = Viewport.MSAA_4X
 		vp.render_target_update_mode = SubViewport.UPDATE_ALWAYS
 		add_child(vp)
@@ -1546,7 +1584,8 @@ func _frame_portrait(r: Dictionary, body := false, aspect := 1.0) -> void:
 		face = points[0]
 	var box_height: float = clampf(r.height * 0.6, 0.6, 1.4)
 	var dist := box_height * 0.5 / tan(deg_to_rad(15.0))
-	var looks := face - Vector3(0, box_height * 0.08, 0)
+	# The face above the middle: a wall cell's name covers the picture's bottom.
+	var looks := face - Vector3(0, box_height * 0.15, 0)
 	r.cam.position = looks + Vector3(0, box_height * 0.1, dist)
 	r.cam.look_at(looks)
 
@@ -1555,6 +1594,7 @@ func _frame_portrait(r: Dictionary, body := false, aspect := 1.0) -> void:
 
 func draw_ui(h: Hud) -> void:
 	draw.draw(h)
+	_drop_unused_renders()
 
 
 # ---------------------------------------------------------------- mouse
@@ -1567,7 +1607,7 @@ func _mouse(ev: InputEvent) -> void:
 		_back_click = true
 		return
 	# The wheel scrolls like the arrows: up and down (lists, options, the setup tab under
-	# the pointer), left and right along the selection's row of Pokémon.
+	# the pointer), left and right through the selection's Pokémon.
 	if ev is InputEventMouseButton and ev.pressed and ev.button_index in [MOUSE_BUTTON_WHEEL_UP, MOUSE_BUTTON_WHEEL_DOWN]:
 		var up: bool = ev.button_index == MOUSE_BUTTON_WHEEL_UP
 		var along := screen == "selection" and sel_phase != "setup"
@@ -1606,6 +1646,7 @@ func _mouse(ev: InputEvent) -> void:
 				if edit_phase == "pokemon":
 					_sound("ok")
 					_edit_pick(cursor)
+					_cry(edit_sp)
 					edit_slot = z.i
 					edit_phase = "slots"
 				else:
@@ -1627,7 +1668,7 @@ func _click_moves_pokemon(i: int) -> void:
 		edit_slot = 0
 		edit_phase = "slots"
 		details = false
-		main.audio.cry(edit_sp, main.camera.global_position, 1.0, -22.0)
+		_cry(edit_sp)
 
 
 ## Presses an action for one frame, as if a key had been tapped.
@@ -1647,7 +1688,6 @@ func _hover(z: Dictionary) -> void:
 		"mvp":
 			if screen == "moves" and edit_phase == "pokemon" and z.i != cursor:
 				_edit_pick(z.i)
-				main.audio.cry(edit_sp, main.camera.global_position, 1.0, -22.0)
 		"slot":
 			if edit_phase == "slots":
 				edit_slot = z.i
@@ -1692,6 +1732,5 @@ func _pick_on_wall(i: int) -> void:
 		team_preview = list[cursor]
 	else:
 		choice[sel_phase] = list[cursor]
-	main.audio.cry(list[cursor], main.camera.global_position, 1.0, -22.0)
 	if online:
 		send_choice()

@@ -3,7 +3,7 @@ extends RefCounted
 ## Draws the menus (Menu keeps the logic) in Smash Ultimate's dark look (UiKit): a
 ## hatched charcoal floor, solid slanted blocks, big italic names and very little text.
 ## Each screen weighs differently: the main menu is a wall of tiles of different sizes,
-## the selection a row of portraits over two big player cards, the Moves screen a list
+## the selection a roster of slanted cells over two player cards, the Moves screen a list
 ## with a sheet. Highlights ease in and out; text that could run long is fitted to its
 ## block so nothing spills out.
 
@@ -26,6 +26,23 @@ const CREDITS := ["Created by xjoje6. Made with Godot Engine.",
 	"Music: Pokémon arrangements by The Noble Demon, used with credit as permitted by the artist. Original compositions by GAME FREAK.",
 	"Trainer sprites from the Pokémon games, via Pokémon Showdown. Full credits in CREDITS.txt.",
 	"Non-profit fan project. Pokémon belongs to Nintendo, Creatures Inc., GAME FREAK and The Pokémon Company."]
+
+## The selection's roster: the area it fills, and its cells, which grow to fill it up to a size.
+const WALL_X := 60.0
+const WALL_Y := 140.0
+const WALL_W := 1800.0
+const WALL_H := 432.0
+const CELL_GAP := 6.0
+const CELL_MAX_H := 180.0
+const CELL_ASPECT := 1.2
+const NAME_MIN_H := 90.0         # shorter cells leave the name to the player card
+## The player cards under it.
+const CARD_X := [50.0, 960.0]
+const CARD_Y := 590.0
+const CARD_W := 850.0
+const CARD_H := 410.0
+## The battle's options, in the roster's place.
+const BAR_H := 420.0
 
 var m: Menu
 var u := UiKit.new()
@@ -333,82 +350,135 @@ func _selection() -> void:
 	u.hints(items)
 
 
-## The wall of portraits: one row, no gaps. The highlighted one lights up in the color of
-## whoever is picking; tokens mark what each side has. A cell with forms shows the current one
-## and a tab for each.
+## The rows and cell size that make "n" cells as big as they can be in the roster's area:
+## {cols, rows, w, h}. Every row but the last is full.
+static func wall_shape(n: int) -> Dictionary:
+	var best := {"cols": maxi(n, 1), "rows": 1, "w": 0.0, "h": 0.0}
+	for rows in range(1, mini(n, 16) + 1):
+		var cols := ceili(float(n) / rows)
+		var h := minf((WALL_H - (rows - 1) * CELL_GAP) / rows, CELL_MAX_H)
+		var w := (WALL_W - (cols - 1) * CELL_GAP - (rows * h + (rows - 1) * CELL_GAP) * UiKit.SLANT) / cols
+		w = minf(w, h * CELL_ASPECT)
+		h = minf(h, w / CELL_ASPECT)
+		if w > best.w:
+			best = {"cols": cols, "rows": rows, "w": w, "h": h}
+	return best
+
+
+## Where cell "i" goes, as its slant block's (x, y). Rows step along the lean, so the columns
+## follow the diagonal, and a shorter last row is centered.
+static func wall_cell(shape: Dictionary, n: int, i: int) -> Vector2:
+	var cols: int = shape.cols
+	var rows: int = shape.rows
+	var step_x: float = shape.w + CELL_GAP
+	var step_y: float = shape.h + CELL_GAP
+	var tall := rows * step_y - CELL_GAP
+	var wide := cols * step_x - CELL_GAP + tall * UiKit.SLANT
+	var row := i / cols
+	var left := WALL_X + (WALL_W - wide) * 0.5 + (rows - 1 - row) * step_y * UiKit.SLANT
+	return Vector2(left + (cols - mini(cols, n - row * cols)) * 0.5 * step_x + i % cols * step_x, WALL_Y + (WALL_H - tall) * 0.5 + row * step_y)
+
+
+## The roster, in rows like a fighting game's. The highlighted cell lights up in the color of
+## whoever is picking and, if it has forms, shows a tab for each; tokens mark what each side has.
 func _wall(list: Array, setup: float) -> void:
-	var tw := 1780.0 / list.size()
-	var lift := -340.0 * UiKit.ease(setup)
+	var shape := wall_shape(list.size())
+	var lift := -600.0 * UiKit.ease(setup)
 	var picker := _side_color(1 if m.sel_phase == "p2" else 0)
 	for i in list.size():
-		var sp: String = list[i]
-		var data: Dictionary = Roster.POKEMON[sp]
-		var x := 70.0 + i * tw
-		var y := 150.0 + lift
-		var o := on("wall" + Roster.base_of(sp), i == m.cursor and m.sel_phase != "setup")
-		if setup < 0.5:
-			zone("wall", i, x, y, tw - 3.0, 200.0)
-		u.rect(x, y, tw - 3.0, 200.0, UiKit.PANEL.lerp(UiKit.PANEL_HI, o))
-		u.rect(x, y, tw - 3.0, 124.0, Color(Roster.TYPE_COLOR.get(data.types[0], UiKit.GREY), 0.22 + 0.2 * o))
-		if m.portraits.has(sp):
-			var side := minf(152.0, tw - 3.0)
-			u.tex(m.portraits[sp], x + (tw - 3.0 - side) * 0.5, y + 4.0 - 6.0 * o, side, side)
-		for t in data.types.size():
-			u.type_icon(data.types[t], x + tw - 34.0 - t * 28.0, y + 6.0, 26.0)
-		u.rect(x, y + 160.0, tw - 3.0, 40.0, UiKit.DARK.lerp(picker, o))
-		u.title(x + 12.0, y + 166.0, tr(data.display_name).to_upper(), 26.0, UiKit.INK, -1, tw - 30.0)
-		if o > 0.01:
-			u.rect(x - 4.0, y - 6.0 * o, tw + 5.0, 6.0 * o, picker)
-		var forms := m.forms_of(sp)
-		if forms.size() > 1:
-			_form_tabs(i, forms, sp, x, y + 130.0, tw - 3.0, picker, setup)
-		var tx := x + 6.0
-		if m.team_battle():
-			if m.on_team(sp, m.choice.team):
-				tx = _token(tx, y + 8.0, "1P", UiKit.RED)
-			if m.on_team(sp, m.choice.team2):
-				_token(tx, y + 8.0, "2P" if m.online else "CPU", UiKit.BLUE if m.online else UiKit.GREY)
-			continue
-		if Roster.base_of(sp) == Roster.base_of(m.choice.p1) and (m.sel_phase != "p1" or m.me_ready):
-			tx = _token(tx, y + 8.0, "1P", UiKit.RED)
-		if not m.online and Roster.base_of(sp) == Roster.base_of(m.choice.p2) and m.sel_phase == "setup":
-			_token(tx, y + 8.0, "CPU", UiKit.GREY)
-		if m.online and Roster.base_of(sp) == Roster.base_of(m.rival_choice_id):
-			_token(tx, y + 8.0, "2P", UiKit.BLUE)
+		var at := wall_cell(shape, list.size(), i)
+		_wall_cell(i, list[i], at.x, at.y + lift, shape.w, shape.h, picker, setup)
+	var forms := m.forms_of(list[m.cursor])
+	if forms.size() > 1 and m.sel_phase != "setup":
+		var at := wall_cell(shape, list.size(), m.cursor)
+		_form_tabs(m.cursor, forms, list[m.cursor], at.x, at.y + lift + shape.h - 10.0, shape.w, picker, setup)
 
 
-## A wall cell's tabs, one per form, the one showing lit. A click changes the form without picking.
+func _wall_cell(i: int, sp: String, x: float, y: float, w: float, h: float, picker: Color, setup: float) -> void:
+	var data: Dictionary = Roster.POKEMON[sp]
+	var o := on("wall%d" % i, i == m.cursor and m.sel_phase != "setup")
+	if setup < 0.5:
+		zone("wall", i, x, y, w + h * UiKit.SLANT, h, UiKit.SLANT)
+	u.slant(x, y, w, h, UiKit.PANEL.lerp(UiKit.PANEL_HI, o))
+	u.slant(x, y, w, h, Color(Roster.TYPE_COLOR.get(data.types[0], UiKit.GREY), 0.28 + 0.22 * o))
+	if m.portraits.has(sp):
+		u.slant_tex(m.portraits[sp], x, y, w, h, 1.0 + 0.08 * o)
+	if h >= NAME_MIN_H:
+		var strip := h * 0.2
+		u.slant(x, y + h - strip, w, strip, UiKit.DARK.lerp(picker, o))
+		u.title(u.edge(x, y, h, y + h - strip * 0.5) + 8.0, y + h - strip * 0.92, tr(data.display_name).to_upper(), strip * 0.72, UiKit.INK, -1, w - 20.0)
+	var icon := clampf(h * 0.15, 14.0, 26.0)
+	var right := u.edge(x, y, h, y + 6.0) + w
+	for t in data.types.size():
+		u.type_icon(data.types[t], right - (icon + 2.0) * (t + 1) - 2.0, y + 5.0, icon)
+	var forms := m.forms_of(sp)
+	if forms.size() > 1 and i != m.cursor:
+		# It has forms: a mark for each, the tabs show on the highlighted cell.
+		var mark := maxf(h * 0.05, 5.0)
+		var my := y + h - mark * 1.6 - (h * 0.2 if h >= NAME_MIN_H else 0.0)
+		for n in forms.size():
+			var lit: bool = forms[n] == sp
+			u.slant(u.edge(x, y, h, my) + w - (mark + 3.0) * (forms.size() - n) - 4.0, my, mark, mark, UiKit.INK if lit else Color(UiKit.DARK, 0.85))
+	_wall_tokens(sp, u.edge(x, y, h, y + 6.0) + 5.0, y + 4.0, clampf(h * 0.13, 13.0, 22.0))
+	if o > 0.01:
+		u.slant_frame(x, y, w, h, 5.0 * o, picker)
+
+
+## What each side has, on a cell.
+func _wall_tokens(sp: String, x: float, y: float, size: float) -> void:
+	var tx := x
+	if m.team_battle():
+		if m.on_team(sp, m.choice.team):
+			tx = _token(tx, y, "1P", UiKit.RED, size)
+		if m.on_team(sp, m.choice.team2):
+			_token(tx, y, "2P" if m.online else "CPU", UiKit.BLUE if m.online else UiKit.GREY, size)
+		return
+	if Roster.base_of(sp) == Roster.base_of(m.choice.p1) and (m.sel_phase != "p1" or m.me_ready):
+		tx = _token(tx, y, "1P", UiKit.RED, size)
+	if not m.online and Roster.base_of(sp) == Roster.base_of(m.choice.p2) and m.sel_phase == "setup":
+		_token(tx, y, "CPU", UiKit.GREY, size)
+	if m.online and Roster.base_of(sp) == Roster.base_of(m.rival_choice_id):
+		_token(tx, y, "2P", UiKit.BLUE, size)
+
+
+## The highlighted cell's tabs, one per form, the one showing lit: hanging from its bottom edge, on
+## top of what is below, wide enough to read however small the cell. A click changes the form
+## without picking.
 func _form_tabs(cell: int, forms: Array, showing: String, x: float, y: float, w: float, col: Color, setup: float) -> void:
-	var tab := w / forms.size()
+	var tab := maxf(w / forms.size(), 92.0)
+	var left := x + (w - tab * forms.size()) * 0.5
 	for n in forms.size():
 		var lit: bool = forms[n] == showing
-		var tx := x + n * tab
+		var tx := left + n * tab
 		if setup < 0.5:
-			zone("form", cell * Menu.FORM_ZONE + n, tx, y, tab, 30.0)
-		u.rect(tx, y, tab - 2.0, 30.0, col if lit else Color(UiKit.DARK, 0.85))
+			zone("form", cell * Menu.FORM_ZONE + n, tx, y, tab + 34.0 * UiKit.SLANT, 34.0, UiKit.SLANT)
+		u.slant(tx, y, tab - 2.0, 34.0, col if lit else UiKit.DARK)
 		var label: String = tr(Roster.POKEMON[forms[n]].form_tab).to_upper()
-		u.text_fit(tx + 6.0, y + 5.0, label, tab - 14.0, 18.0, Color(UiKit.INK, 1.0 if lit else 0.6), u.heavy)
+		u.text_fit(tx + 14.0, y + 6.0, label, tab - 22.0, 20.0, Color(UiKit.INK, 1.0 if lit else 0.65), u.heavy)
 
 
-func _token(x: float, y: float, label: String, col: Color) -> float:
-	var w := u.width(label, 22.0, u.heavy) + 22.0
-	u.slant(x, y, w, 34.0, col)
-	u.text(x + 14.0, y + 5.0, label, 22.0, UiKit.INK, u.heavy)
+func _token(x: float, y: float, label: String, col: Color, size := 22.0) -> float:
+	var w := u.width(label, size, u.heavy) + size
+	u.slant(x, y, w, size * 1.55, col)
+	u.text(x + size * 0.64, y + size * 0.23, label, size, UiKit.INK, u.heavy)
 	return x + w + 4.0
 
 
-## The battle's options, in place of the wall once both are picked: the stage's picture
-## with a line about it, and the options as tabs (stage, difficulty, rules, edit moves, fight).
+## The battle's options, in place of the roster once both are picked: the stage's picture with a
+## line about it, and the options as tabs (stage, difficulty, rules, edit moves, fight).
 func _setup_bar(setup: float) -> void:
-	var y := lerpf(-260.0, 150.0, UiKit.ease(setup))
+	var y := lerpf(-600.0, 150.0, UiKit.ease(setup))
+	var hgt := BAR_H
+	var mid := y + hgt * 0.5
 	var st: String = m.choice.stage
-	u.rect(70.0, y, 400.0, 200.0, UiKit.DARK)
+	u.rect(70.0, y, 400.0, hgt, UiKit.DARK)
 	u.tex(_stage_picture(st), 82.0, y + 12.0, 376.0, 176.0)
-	u.rect(70.0, y + 194.0, 400.0, 6.0, UiKit.RED)
+	u.para(86.0, y + 206.0, tr(Menu.STAGE_TEXT[st]), 368.0, 25.0, UiKit.INK, u.body, 1.25, 6)
+	u.rect(70.0, y + hgt - 6.0, 400.0, 6.0, UiKit.RED)
 	var items := m.setup_items()
 	var host: bool = not m.online or (m.main.net != null and m.main.net.host)
 	var x := 510.0
-	var tw := (1850.0 - x - (items.size() - 1) * 20.0) / items.size()
+	var tw := (1830.0 - x - (items.size() - 1) * 20.0) / items.size()
 	for i in items.size():
 		var it: String = items[i]
 		var o := on("tab" + it, i == m.setup_cursor and not (m.online and m.me_ready))
@@ -417,8 +487,8 @@ func _setup_bar(setup: float) -> void:
 		if it == "ready" and m.me_ready:
 			o = 1.0
 		var bx := x + i * (tw + 20.0)
-		u.slant(bx, y, tw, 200.0, UiKit.PANEL.lerp(col, o))
-		zone("tab", i, bx, y, tw + 200.0 * UiKit.SLANT, 200.0)
+		u.slant(bx, y, tw, hgt, UiKit.PANEL.lerp(col, o))
+		zone("tab", i, bx, y, tw + hgt * UiKit.SLANT, hgt, UiKit.SLANT)
 		var ink := UiKit.DARK if go and o > 0.5 else UiKit.INK
 		var label := ""
 		var sub := ""
@@ -440,29 +510,25 @@ func _setup_bar(setup: float) -> void:
 			"ready":
 				label = tr("Waiting for the rival") if m.me_ready else tr("Ready!")
 		if sub != "":
-			u.text_fit(u.edge(bx, y, 200.0, y + 44.0) + 24.0, y + 24.0, sub.to_upper(), tw - 70.0, 20.0, Color(ink, 0.7), u.bold)
+			u.text_fit(u.edge(bx, y, hgt, mid - 56.0) + 24.0, mid - 66.0, sub.to_upper(), tw - 50.0, 20.0, Color(ink, 0.7), u.bold)
 		if go:
 			# Fight / Ready: alone in its tab, centered both ways (the center follows the slant).
 			var size := 72.0
-			var cy := y + 100.0 - size * 0.62
-			u.title(u.edge(bx, y, 200.0, y + 100.0) + tw * 0.5, cy, label.to_upper(), size, ink, 0, tw - 80.0)
+			u.title(u.edge(bx, y, hgt, mid) + tw * 0.5, mid - size * 0.62, label.to_upper(), size, ink, 0, tw - 60.0)
 		else:
-			var ly := y + 64.0
-			u.title(u.edge(bx, y, 200.0, ly + 50.0) + 20.0, ly, label.to_upper(), 46.0, ink, -1, tw - 80.0)
-		if it == "stage":
-			u.para(u.edge(bx, y, 200.0, y + 180.0) + 22.0, y + 128.0, tr(Menu.STAGE_TEXT[st]), tw - 90.0, 19.0, Color(ink, 0.75), u.body, 1.2, 3)
+			u.title(u.edge(bx, y, hgt, mid + 10.0) + 20.0, mid - 36.0, label.to_upper(), 46.0, ink, -1, tw - 44.0)
 		if it == "rules":
 			var custom := BattleRules.changed(m.choice.rules).size()
 			var line := tr("Default rules") if custom == 0 else tr("%d changed") % custom
-			u.text_fit(u.edge(bx, y, 200.0, y + 150.0) + 22.0, y + 128.0, line, tw - 90.0, 19.0, Color(ink, 0.75), u.bold)
+			u.text_fit(u.edge(bx, y, hgt, mid + 40.0) + 22.0, mid + 26.0, line, tw - 50.0, 19.0, Color(ink, 0.75), u.bold)
 		if it in ["stage", "diff"] and (host or it == "diff") and o > 0.01:
-			u.text(u.edge(bx, y, 200.0, y + 30.0) + tw - 30.0, y + 18.0, "^", 24.0, Color(ink, o), u.heavy, 1)
-			u.text(u.edge(bx, y, 200.0, y + 190.0) + tw - 30.0, y + 160.0, "v", 24.0, Color(ink, o), u.heavy, 1)
+			u.text(u.edge(bx, y, hgt, mid - 110.0) + tw * 0.5, mid - 130.0, "^", 28.0, Color(ink, o), u.heavy, 0)
+			u.text(u.edge(bx, y, hgt, mid + 110.0) + tw * 0.5, mid + 90.0, "v", 28.0, Color(ink, o), u.heavy, 0)
 
 
-## Each side's pick in a big card, Smash style: its color, the Pokémon in 3D spilling a
-## little over the top, the name huge at the bottom, its ability and its four moves with
-## their type symbol on the right. Online the rival's card says whether it is ready.
+## Each side's pick in a card, Smash style: its color, the Pokémon in 3D on the left, spilling a
+## little over the top, and on the right its name, types, ability and four moves with their type
+## symbol. Online the rival's card says whether it is ready.
 func _player_card(side: int) -> void:
 	if m.team_battle():
 		_team_card(side)
@@ -470,49 +536,51 @@ func _player_card(side: int) -> void:
 	var left := side == 0
 	var col := _side_color(side)
 	var k := UiKit.ease((m.enter_t - 0.08 * side) / 0.4)
-	var x := (70.0 if left else 990.0) + (1.0 - k) * (-900.0 if left else 900.0)
-	var y := 400.0
-	var w := 860.0
-	var hgt := 600.0
+	var x: float = CARD_X[side] + (1.0 - k) * (-900.0 if left else 900.0)
+	var y := CARD_Y
+	var w := CARD_W
+	var hgt := CARD_H
 	u.slant(x, y, w, hgt, col)
 	u.slant(x + 16.0, y + 16.0, w - 32.0, hgt - 32.0, col.darkened(0.3))
 	u.stripes(x + 30.0, y + 16.0, w - 60.0, hgt - 32.0, Color(1, 1, 1, 0.035), 44.0)
 	var tag := "1P" if left else ("2P" if m.online else "CPU")
 	if not left and m.online and m.rival_choice_id == "":
-		u.title(u.edge(x, y, hgt, y + 90.0) + 30.0, y + 26.0, tag, 64.0, Color(UiKit.INK, 0.9))
-		u.title(u.edge(x, y, hgt, y + 330.0) + 30.0, y + 250.0, tr("Choosing...").to_upper(), 80.0, Color(UiKit.INK, 0.6), -1, w - 120.0)
+		u.title(u.edge(x, y, hgt, y + 70.0) + 30.0, y + 24.0, tag, 48.0, Color(UiKit.INK, 0.9))
+		u.title(u.edge(x, y, hgt, y + 240.0) + 30.0, y + 160.0, tr("Choosing...").to_upper(), 80.0, Color(UiKit.INK, 0.6), -1, w - 120.0)
 		return
 	var sp: String = m.choice.p1 if left else m.choice.p2
 	var data: Dictionary = Roster.POKEMON[sp]
 	# The Pokémon, on the left half, a little over the card's top edge.
-	u.tex(m.render("card%d" % side, sp, Vector2i(440, 520), 0.5 if left else -0.5), u.edge(x, y, hgt, y + 300.0) + 10.0, y - 60.0, 440.0, 520.0)
-	var tag_x := u.edge(x, y, hgt, y + 92.0) + 20.0
-	u.slant(tag_x, y + 22.0, u.width(tag, 56.0, u.heavy) + 44.0, 70.0, UiKit.DARK)
-	u.title(tag_x + 22.0, y + 28.0, tag, 56.0, UiKit.INK)
-	# Right half: ability and moves, each in its own strip, stepping along the diagonal.
-	var rw := 300.0
+	u.tex(m.render("card%d" % side, sp, Vector2i(370, 430), 0.5 if left else -0.5), u.edge(x, y, hgt, y + 200.0) + 10.0, y - 26.0, 370.0, 430.0)
+	var tag_x := u.edge(x, y, hgt, y + 78.0) + 20.0
+	u.slant(tag_x, y + 22.0, u.width(tag, 44.0, u.heavy) + 36.0, 56.0, UiKit.DARK)
+	u.title(tag_x + 18.0, y + 26.0, tag, 44.0, UiKit.INK)
+	# Right half: name, types, ability and moves, stepping along the diagonal.
+	var rw := 386.0
+	u.title(u.edge(x, y, hgt, y + 84.0) + 410.0, y + 22.0, tr(data.display_name).to_upper(), 62.0, UiKit.INK, -1, rw)
+	var tx := u.edge(x, y, hgt, y + 118.0) + 410.0
+	for t in data.types:
+		tx = u.type_tag(tx, y + 86.0, t, 18.0)
+	if data.has("form_name"):
+		u.text_fit(tx + 6.0, y + 90.0, tr(data.form_name), maxf(u.edge(x, y, hgt, y + 118.0) + 410.0 + rw - tx - 6.0, 60.0), 22.0, UiKit.INK, u.heavy)
 	var lo := _loadout(side)
 	var ab: Dictionary = Loadout.ability(sp, lo.ability)
-	var ax := u.edge(x, y, hgt, y + 92.0) + 430.0
-	u.text(ax, y + 40.0, tr("Ability").to_upper(), 18.0, Color(UiKit.INK, 0.6), u.bold)
-	u.text_fit(ax, y + 62.0, tr(ab.display_name), rw, 30.0, UiKit.INK, u.heavy)
+	var ax := u.edge(x, y, hgt, y + 150.0) + 410.0
+	var label := tr("Ability").to_upper()
+	u.text(ax, y + 128.0, label, 18.0, Color(UiKit.INK, 0.6), u.bold)
+	var lw := u.width(label, 18.0, u.bold) + 12.0
+	u.text_fit(ax + lw, y + 122.0, tr(ab.display_name), rw - lw, 28.0, UiKit.INK, u.heavy)
 	for i in lo.moves.size():
 		var d: Dictionary = Moves.DATA[lo.moves[i]]
-		var my: float = y + 116.0 + i * 64.0
-		var rx := u.edge(x, y, hgt, my + 54.0) + 430.0
-		u.slant(rx - 12.0, my, rw + 12.0, 54.0, Color(0, 0, 0, 0.28))
-		u.type_icon(d.type, rx + 4.0, my + 7.0, 40.0)
-		u.text_fit(rx + 54.0, my + 12.0, tr(d.display_name), rw - 70.0, 28.0, UiKit.INK, u.bold)
-	# Name and types at the bottom, across the card.
-	var tx := u.edge(x, y, hgt, y + hgt - 164.0) + 30.0
-	for t in data.types:
-		tx = u.type_tag(tx, y + hgt - 196.0, t, 20.0)
-	if data.has("form_name"):
-		u.text_fit(tx + 16.0, y + hgt - 196.0, tr(data.form_name), 300.0, 26.0, UiKit.INK, u.heavy)
-	u.title(u.edge(x, y, hgt, y + hgt - 40.0) + 24.0, y + hgt - 150.0, tr(data.display_name).to_upper(), 110.0, UiKit.INK, -1, w - 110.0)
+		var my: float = y + 162.0 + i * 55.0
+		var rx := u.edge(x, y, hgt, my + 48.0) + 410.0
+		u.slant(rx - 12.0, my, rw + 12.0, 48.0, Color(0, 0, 0, 0.28))
+		u.type_icon(d.type, rx + 4.0, my + 6.0, 36.0)
+		u.text_fit(rx + 50.0, my + 10.0, tr(d.display_name), rw - 66.0, 26.0, UiKit.INK, u.bold)
 	if not left and m.online and m.rival_ready:
-		u.slant(x + w - 240.0, y + 30.0, 190.0, 54.0, UiKit.YELLOW)
-		u.title(x + w - 214.0, y + 36.0, tr("Ready").to_upper(), 38.0, UiKit.DARK, -1, 150.0)
+		var ry := y + hgt - 84.0
+		u.slant(u.edge(x, y, hgt, ry + 54.0) + 24.0, ry, 190.0, 54.0, UiKit.YELLOW)
+		u.title(u.edge(x, y, hgt, ry + 54.0) + 50.0, ry + 6.0, tr("Ready").to_upper(), 38.0, UiKit.DARK, -1, 150.0)
 
 
 ## A 3 vs 3's side: the same card split in three, one Pokémon in each with all a pick shows in a
@@ -522,10 +590,10 @@ func _team_card(side: int) -> void:
 	var left := side == 0
 	var col := _side_color(side)
 	var k := UiKit.ease((m.enter_t - 0.08 * side) / 0.4)
-	var x := (70.0 if left else 990.0) + (1.0 - k) * (-900.0 if left else 900.0)
-	var y := 400.0
-	var w := 860.0
-	var hgt := 600.0
+	var x: float = CARD_X[side] + (1.0 - k) * (-900.0 if left else 900.0)
+	var y := CARD_Y
+	var w := CARD_W
+	var hgt := CARD_H
 	u.slant(x, y, w, hgt, col)
 	u.slant(x + 16.0, y + 16.0, w - 32.0, hgt - 32.0, col.darkened(0.3))
 	u.stripes(x + 30.0, y + 16.0, w - 60.0, hgt - 32.0, Color(1, 1, 1, 0.035), 44.0)
@@ -544,8 +612,8 @@ func _team_card(side: int) -> void:
 	if not left and m.online:
 		var ready: bool = m.rival_ready
 		var line: String = tr("Ready") if ready else tr("Picking: %d of %d") % [m.rival_count, Party.SIZE]
-		u.slant(x + w - 360.0, y + 34.0, 300.0, 54.0, UiKit.YELLOW if ready else UiKit.DARK)
-		u.title(x + w - 336.0, y + 40.0, line.to_upper(), 38.0, UiKit.DARK if ready else UiKit.INK, -1, 250.0)
+		u.slant(x + w - 340.0, y + 26.0, 300.0, 48.0, UiKit.YELLOW if ready else UiKit.DARK)
+		u.title(x + w - 316.0, y + 30.0, line.to_upper(), 34.0, UiKit.DARK if ready else UiKit.INK, -1, 250.0)
 
 
 func _team_slot(side: int, i: int, sp: String, preview: bool, picking: bool, cx: float, y: float, cw: float, hgt: float, col: Color) -> void:
@@ -554,33 +622,33 @@ func _team_slot(side: int, i: int, sp: String, preview: bool, picking: bool, cx:
 	if preview:
 		u.slant(edge.call(y + 30.0), y + 22.0, cw, 8.0, Color(col, 0.9))
 	if sp == "":
-		u.title(edge.call(y + 300.0) + cw * 0.5, y + 230.0, "?", 110.0, Color(UiKit.INK, 0.25), 0)
+		u.title(edge.call(y + 210.0) + cw * 0.5, y + 140.0, "?", 110.0, Color(UiKit.INK, 0.25), 0)
 		return
 	if not preview and picking:
-		zone("tslot", side * Party.SIZE + i, edge.call(y + hgt - 22.0), y + 22.0, cw + (hgt - 44.0) * UiKit.SLANT, hgt - 44.0)
+		zone("tslot", side * Party.SIZE + i, edge.call(y + hgt - 22.0), y + 22.0, cw + (hgt - 44.0) * UiKit.SLANT, hgt - 44.0, UiKit.SLANT)
 	var data: Dictionary = Roster.POKEMON[sp]
 	var fade := 0.7 if preview else 1.0
-	u.tex(m.render("team%d_%d" % [side, i], sp, Vector2i(260, 260), 0.5 if side == 0 else -0.5), edge.call(y + 200.0) - 6.0, y + 40.0, 260.0, 260.0, Color(1, 1, 1, fade))
+	u.tex(m.render("team%d_%d" % [side, i], sp, Vector2i(230, 190), 0.5 if side == 0 else -0.5), edge.call(y + 120.0) + 6.0, y + 2.0, 230.0, 190.0, Color(1, 1, 1, fade))
 	if i == 0:
-		_token(edge.call(y + 60.0) + 8.0, y + 30.0, tr("Lead"), UiKit.DARK)
+		_token(edge.call(y + 50.0) + 8.0, y + 26.0, tr("Lead"), UiKit.DARK)
 	# Name, types, ability.
-	u.title(edge.call(y + 340.0) + 14.0, y + 296.0, tr(data.display_name).to_upper(), 36.0, Color(UiKit.INK, fade), -1, cw - 50.0)
 	if data.has("form_name"):
-		u.text_fit(edge.call(y + 290.0) + 14.0, y + 270.0, tr(data.form_name), cw - 50.0, 20.0, Color(UiKit.INK, fade), u.heavy)
-	var tx: float = edge.call(y + 360.0) + 12.0
+		u.text_fit(edge.call(y + 170.0) + 14.0, y + 150.0, tr(data.form_name), cw - 50.0, 20.0, Color(UiKit.INK, fade), u.heavy)
+	u.title(edge.call(y + 206.0) + 14.0, y + 168.0, tr(data.display_name).to_upper(), 32.0, Color(UiKit.INK, fade), -1, cw - 50.0)
+	var tx: float = edge.call(y + 224.0) + 12.0
 	for t in data.types:
-		u.type_icon(t, tx, y + 338.0, 26.0)
-		tx += 30.0
+		u.type_icon(t, tx, y + 206.0, 24.0)
+		tx += 27.0
 	var lo := _loadout_of(side, sp)
-	u.text_fit(tx + 6.0, y + 340.0, tr(Loadout.ability(sp, lo.ability).display_name), cw - (tx - edge.call(y + 360.0)) - 40.0, 20.0, Color(UiKit.INK, fade), u.heavy)
+	u.text_fit(tx + 4.0, y + 207.0, tr(Loadout.ability(sp, lo.ability).display_name), cw - (tx - edge.call(y + 224.0)) - 36.0, 19.0, Color(UiKit.INK, fade), u.heavy)
 	# Its four moves.
 	for n in lo.moves.size():
 		var d: Dictionary = Moves.DATA[lo.moves[n]]
-		var my: float = y + 374.0 + n * 48.0
-		var rx: float = edge.call(my + 42.0) + 8.0
-		u.slant(rx, my, cw - 18.0, 42.0, Color(0, 0, 0, 0.28))
-		u.type_icon(d.type, rx + 10.0, my + 6.0, 30.0)
-		u.text_fit(rx + 46.0, my + 9.0, tr(d.display_name), cw - 76.0, 22.0, Color(UiKit.INK, fade), u.bold)
+		var my: float = y + 236.0 + n * 37.0
+		var rx: float = edge.call(my + 34.0) + 8.0
+		u.slant(rx, my, cw - 18.0, 34.0, Color(0, 0, 0, 0.28))
+		u.type_icon(d.type, rx + 9.0, my + 4.0, 26.0)
+		u.text_fit(rx + 40.0, my + 6.0, tr(d.display_name), cw - 68.0, 20.0, Color(UiKit.INK, fade), u.bold)
 
 
 func _loadout_of(side: int, sp: String) -> Dictionary:
@@ -621,7 +689,8 @@ func _moves() -> void:
 		u.slant(60.0 + 18.0 * o, y, 330.0, strip, UiKit.PANEL.lerp(_side_color(side) if prep else UiKit.BLUE, lit))
 		zone("mvp", i, 60.0, y, 330.0 + strip * UiKit.SLANT, strip)
 		if m.portraits.has(s):
-			u.tex(m.portraits[s], 70.0 + 18.0 * o, y - 2.0, strip + 2.0, strip + 2.0)
+			var cut := Menu.PORTRAIT_SIZE.y
+			u.tex_region(m.portraits[s], 70.0 + 18.0 * o, y - 2.0, strip + 2.0, strip + 2.0, Rect2((Menu.PORTRAIT_SIZE.x - cut) * 0.5, 0, cut, cut))
 		var form: String = Roster.POKEMON[s].get("form_name", "")
 		u.title(156.0 + 18.0 * o, y + (6.0 if form != "" else 20.0) * strip / 74.0, tr(Roster.POKEMON[s].display_name).to_upper(), 32.0, UiKit.INK, -1, name_w)
 		if form != "":
@@ -1002,14 +1071,20 @@ func _profile() -> void:
 
 # ---------------------------------------------------------------- mouse zones
 
-func zone(kind: String, i: int, x: float, y: float, w: float, h: float) -> void:
-	zones.append({"kind": kind, "i": i, "rect": Rect2(u.p(x, y), Vector2(w, h) * u.k)})
+## "lean": it covers a slant block of that lean, inside this box, rather than the whole box.
+func zone(kind: String, i: int, x: float, y: float, w: float, h: float, lean := 0.0) -> void:
+	zones.append({"kind": kind, "i": i, "rect": Rect2(u.p(x, y), Vector2(w, h) * u.k), "lean": lean})
 
 
 func zone_at(pos: Vector2) -> Dictionary:
 	for k in range(zones.size() - 1, -1, -1):
-		if zones[k].rect.has_point(pos):
-			return zones[k]
+		var z: Dictionary = zones[k]
+		if not z.rect.has_point(pos):
+			continue
+		var r: Rect2 = z.rect
+		var from_edge: float = pos.x - r.position.x - (r.end.y - pos.y) * z.lean
+		if from_edge >= 0.0 and from_edge <= r.size.x - r.size.y * z.lean:
+			return z
 	return {}
 
 

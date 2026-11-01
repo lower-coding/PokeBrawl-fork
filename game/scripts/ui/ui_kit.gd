@@ -134,6 +134,21 @@ func tex_region(t: Texture2D, x: float, y: float, w: float, h: float, region: Re
 		c.draw_texture_rect_region(t, Rect2(p(x, y), Vector2(w, h) * k), region, mod)
 
 
+## A picture filling a slant(x, y, w, h) block, cut to its shape. "zoom" closes in on the middle.
+func slant_tex(t: Texture2D, x: float, y: float, w: float, h: float, zoom := 1.0, lean := SLANT) -> void:
+	if t == null:
+		return
+	var shift := h * lean
+	var corners: Array[Vector2] = [Vector2(shift, 0.0), Vector2(w + shift, 0.0), Vector2(w, h), Vector2(0.0, h)]
+	var box := Vector2(w + shift, h)
+	var pts := PackedVector2Array()
+	var uvs := PackedVector2Array()
+	for corner in corners:
+		pts.append(p(x + corner.x, y + corner.y))
+		uvs.append(Vector2(0.5, 0.5) + (corner / box - Vector2(0.5, 0.5)) / zoom)
+	c.draw_colored_polygon(pts, Color.WHITE, uvs, t)
+
+
 ## Cobblemon's type symbol (the round one), size × size.
 func type_icon(type: String, x: float, y: float, size: float, a := 1.0) -> void:
 	var i := TYPE_ORDER.find(type)
