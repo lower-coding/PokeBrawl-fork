@@ -82,6 +82,7 @@ godot --path game -- --p1=charizard --p2=pikachu --diff=hard --stage=league
 | Jump | A | ✕ | Space |
 | Dodge | B | ○ | Shift |
 | Lock on / release | RS (click the right stick) | R3 | Tab or middle click |
+| First person / back | none (set one in Options) | none (set one in Options) | C |
 | Switch target (locked on) | Flick the right stick | Flick the right stick | Sweep the mouse |
 | Move 1 | LB | L1 | Q |
 | Move 2 | RB | R1 | E |
@@ -125,8 +126,13 @@ picks a random Pokémon on the selection, and RB / R1 / E rolls random moves bef
   hold the button and turn the stream with the stick; it hits several times and drains energy.
 - **Lock-on** locks what the camera looks at: the rival or one of its decoys (Substitute's doll,
   Double Team's clones). Locked on, a flick of the right stick or a sweep of the mouse switches
-  target. With the camera free, moves go where the camera looks; homing shots still home in.
-  **Options > Crosshair** (off by default) marks where they go.
+  target. With the camera free, moves go to the point at the center of the screen, up and down too,
+  and streams turn toward it; shots only follow a target they were aimed at. **Options > Crosshair**
+  (off by default) marks that point and turns red on the foe; **Crosshair shape** makes it a cross
+  or a circle. In the **Rules** tab, **No lock-on** keeps every player's camera free, **Aim assist**
+  makes the aim stick to the foe while it is over it, more the higher it is, and **Legacy free aim**
+  brings back the old way: moves stay level and shots home in on the rival.
+- **First person** (C) sees the battle from your Pokémon's eyes, free or locked on.
 - **Stat changes** show under each HP bar as in Pokémon Showdown: `1.5× Atk` in green, `0.67× Def`
   in red.
 

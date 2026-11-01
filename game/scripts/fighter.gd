@@ -277,6 +277,38 @@ func free_aim() -> bool:
 	return not locked
 
 
+## True free aim (BattleRules "legacy_aim" off): its moves go to the point under the crosshair
+## (Intent.aim_at, found by the player's camera), up and down too.
+func crosshair_aim() -> bool:
+	return free_aim() and ctrl.aim_at.is_finite()
+
+
+## What its shots follow: what it aims at. With the crosshair, only what the crosshair is on: a
+## shot aimed elsewhere flies straight.
+func shot_target() -> Node3D:
+	if not crosshair_aim():
+		return aim_target()
+	for o in lock_candidates():
+		var seg: Array = o.body()
+		if Geometry3D.get_closest_point_to_segment(ctrl.aim_at, seg[0], seg[1]).distance_to(ctrl.aim_at) < o.radius() + 0.3:
+			return o
+	return null
+
+
+## Free, whether its moves would go at the rival or one of its decoys now (the crosshair's color
+## tells). With legacy aim, whether one is in line with where the camera looks, at any height.
+func aiming_at_foe() -> bool:
+	if crosshair_aim():
+		return shot_target() != null
+	var look := camera_forward()
+	for o in lock_candidates():
+		var to: Vector3 = o.global_position - global_position
+		to.y = 0.0
+		if to.dot(look) > 0.0 and (to - look * to.dot(look)).length() < o.radius() + 0.3:
+			return true
+	return false
+
+
 ## Where the camera looks, flat (free aim).
 func camera_forward() -> Vector3:
 	return Vector3(-sin(ctrl.yaw), 0.0, -cos(ctrl.yaw))
@@ -880,7 +912,7 @@ func _read_buffer(delta: float) -> void:
 		if locked:
 			locked = false
 			fooled_by = null
-		else:
+		elif not main.no_lock:
 			lock_on_looked()
 		_buffer.erase("lock_on")
 	# The decoy it was locked on is gone: the camera is free; lock on again to find the real
@@ -1152,7 +1184,10 @@ func _step_action(delta: float, on_ground: bool) -> void:
 	elif not action.no_brake:
 		# Flying it brakes like on the ground: when attacking it stops, without carrying inertia.
 		_brake(delta, 6.0 if on_ground or flying else 0.6)
-	if action.d.get("manual_aim", false) and is_player:
+	if action.d.get("manual_aim", false) and crosshair_aim():
+		# The stream follows the crosshair, as slowly as the stick would turn it.
+		turn_toward(ctrl.aim_at, delta, action.d.get("manual_turn", 0.5))
+	elif action.d.get("manual_aim", false) and is_player:
 		if ctrl.move_input.length() > 0.3:
 			turn_toward(global_position + _world_dir(ctrl.move_input), delta, action.d.get("manual_turn", 0.5))
 	elif action.d.get("manual_aim", false) and ai_aim != null:
@@ -1161,7 +1196,7 @@ func _step_action(delta: float, on_ground: bool) -> void:
 		turn_toward(ai_aim, delta, action.d.get("manual_turn", 0.5))
 	elif action.faces_rival and free_aim():
 		# Not locked on: the move goes where the camera looks.
-		turn_toward(global_position + camera_forward(), delta, action.turn_mult)
+		turn_toward(ctrl.aim_at if crosshair_aim() else global_position + camera_forward(), delta, action.turn_mult)
 	elif action.faces_rival and rival and is_instance_valid(rival):
 		turn_toward(aim_target().global_position, delta, action.turn_mult)
 	# Cancels allowed by the action itself. The cancelled move still goes on cooldown (it was

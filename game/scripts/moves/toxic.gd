@@ -30,7 +30,7 @@ func on_active() -> void:
 	var run := {"pos": start, "dir": l.forward(), "gone": 0.0, "phase": "run", "t": 0.0, "trail": 0.0,
 		"speed": d.speed * (1.45 if poison else 1.0),
 		"track": deg_to_rad(320.0) if poison else Combat.track_for(id),
-		"target": l.aim_target(), "mark": null}
+		"target": l.shot_target(), "mark": null}
 	var node := Node3D.new()
 	l.main.vfx.add_child(node)
 	l.main.vfx.burst("shadow", start + Vector3.UP * 0.2, Vector3.UP, Status.COLOR.tox, 0.8)

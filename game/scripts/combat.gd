@@ -65,12 +65,13 @@ func shot_by(p: Dictionary, f: Fighter) -> bool:
 ## close, where it cannot turn fast enough, or jumping at the right time. A dodge breaks the
 ## lock for good, like a step in Gundam Versus: from then on it flies straight. It also
 ## stops following once it has gone past the target (no U-turns). "homing" is a stronger
-## pull in 3D (Aura Sphere), with the same rules.
+## pull in 3D (Aura Sphere), with the same rules. With true free aim a shot only follows what the
+## crosshair is on (Fighter.shot_target), whatever the move asks for.
 func projectile(p: Dictionary) -> Dictionary:
 	p.merge({"radius": 0.3, "lifetime": 2.0, "gravity": 0.0, "pierces": false, "age_t": 0.0, "alive": true,
 		"homing": 0.0, "target": null, "track": -1.0}, false)
-	if p.target == null and p.user is Fighter and is_instance_valid(p.user):
-		p.target = p.user.aim_target()
+	if p.user is Fighter and is_instance_valid(p.user) and (p.target == null or p.user.crosshair_aim()):
+		p.target = p.user.shot_target()
 	if p.track < 0.0:
 		p.track = track_for(p.hit.move_id)
 		# Sand Veil: in a sandstorm, projectiles follow it worse (its evasion in the games).

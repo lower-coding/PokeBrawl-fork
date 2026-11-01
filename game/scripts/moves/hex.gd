@@ -12,7 +12,9 @@ var _mark: MeshInstance3D
 func on_start() -> void:
 	turn_mult = 3.0
 	var target := l.global_position + l.forward() * minf(6.0, d.reach)
-	if l.rival and is_instance_valid(l.rival) and l.rival.state != "ko":
+	if l.crosshair_aim():
+		target = l.ctrl.aim_at
+	elif l.rival and is_instance_valid(l.rival) and l.rival.state != "ko":
 		target = l.rival.global_position
 	var flat := Vector3(target.x - l.global_position.x, 0, target.z - l.global_position.z)
 	if flat.length() > d.reach:
@@ -25,9 +27,10 @@ func on_start() -> void:
 func in_startup(delta: float) -> void:
 	tint_col = Roster.TYPE_COLOR.ghost
 	tint_k = 0.3 * (t / d.startup)
-	# The mark creeps after the rival until it locks.
-	if t < startup_len() - float(d.lock) and l.rival and is_instance_valid(l.rival) and l.rival.state != "ko":
-		var to := Vector3(l.rival.global_position.x, _point.y, l.rival.global_position.z)
+	# The mark creeps after the rival (or the crosshair) until it locks.
+	if t < startup_len() - float(d.lock) and (l.crosshair_aim() or (l.rival and is_instance_valid(l.rival) and l.rival.state != "ko")):
+		var goal: Vector3 = l.ctrl.aim_at if l.crosshair_aim() else l.rival.global_position
+		var to := Vector3(goal.x, _point.y, goal.z)
 		var flat := Vector3(to.x - l.global_position.x, 0, to.z - l.global_position.z)
 		if flat.length() > d.reach:
 			to = l.global_position + flat.normalized() * d.reach

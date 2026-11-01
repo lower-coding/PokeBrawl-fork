@@ -718,11 +718,13 @@ func _locked(j: Fighter) -> void:
 	_piece("arrow_pointer_down", Vector2(p.x - 8.5, p.y - 10 + bounce), Vector2(17, 10))
 
 
-## Where free aim goes, in GUI pixels: on the line moves fly along (Action.aim), level, at
-## mouth height, where the camera looks. As far off as the rival, so aiming at the rival puts
-## it on the rival. Moves do not go up or down, so with the camera steeply up or down it just
-## stays on screen, at the edge.
+## Where free aim goes, in GUI pixels. True free aim: the center of the screen. With legacy aim
+## (BattleRules): on the line moves fly along (Action.aim), level, at mouth height, where the
+## camera looks. As far off as the rival, so aiming at the rival puts it on the rival. Moves do
+## not go up or down, so with the camera steeply up or down it just stays on screen, at the edge.
 func crosshair_at(j: Fighter) -> Vector2:
+	if not main.legacy_aim:
+		return (_c.size / _s * 0.5).round()
 	var cam: Camera3D = main.get_viewport().get_camera_3d()
 	var far := 12.0
 	if j.rival and is_instance_valid(j.rival):
@@ -736,20 +738,26 @@ func crosshair_at(j: Fighter) -> Vector2:
 	return p.round()
 
 
-## Four ticks and a dot, light on a dark outline so it reads on any floor.
+## A dot with four ticks or a ring round it (Settings), light on a dark outline so it reads on any
+## floor, red when aimed at the foe.
 func _crosshair(j: Fighter) -> void:
 	if not main.options.crosshair or j.state == "ko" or main.paused or main._end_t >= 0.0:
 		return
 	var c := crosshair_at(j)
 	if c.x < 0.0:
 		return
+	var col: Color = RED_MARK if j.aiming_at_foe() else INK
 	var parts := [[c, Vector2(1, 1)]]
-	for v in [Vector2.RIGHT, Vector2.LEFT, Vector2.DOWN, Vector2.UP]:
-		parts.append([c + v * 4.0, Vector2(1, 1) + v.abs() * 2.0])
+	if main.options.crosshair_shape == "circle":
+		_c.draw_arc(c * _s, 5.0 * _s, 0.0, TAU, 32, PANEL_DARK, 3.0 * _s)
+		_c.draw_arc(c * _s, 5.0 * _s, 0.0, TAU, 32, col, _s)
+	else:
+		for v in [Vector2.RIGHT, Vector2.LEFT, Vector2.DOWN, Vector2.UP]:
+			parts.append([c + v * 4.0, Vector2(1, 1) + v.abs() * 2.0])
 	for part in parts:
 		_rect(part[0] - part[1] * 0.5 - Vector2(1, 1), part[1] + Vector2(2, 2), PANEL_DARK)
 	for part in parts:
-		_rect(part[0] - part[1] * 0.5, part[1], INK)
+		_rect(part[0] - part[1] * 0.5, part[1], col)
 
 
 ## Pause, in the menus' look (UiKit): the floor darkened, a block with what each button
@@ -767,6 +775,9 @@ func _pause_menu(_gw: float, _gh: float) -> void:
 		[Controls.glyph("lock_on"), tr("Lock on")],
 		["%s %s %s %s" % [Controls.glyph("mov1"), Controls.glyph("mov2"), Controls.glyph("mov3"), Controls.glyph("mov4")], tr("Moves")],
 	]
+	if main.no_lock:
+		rows.remove_at(2)
+	rows.append([Controls.glyph("first_person"), tr("First person")])
 	if not main.parties.is_empty():
 		rows.append(["%s %s" % [Controls.glyph("switch1"), Controls.glyph("switch2")], tr("Switch Pokémon")])
 	var y := 360.0

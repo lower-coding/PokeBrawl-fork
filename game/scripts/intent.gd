@@ -6,6 +6,7 @@ extends RefCounted
 
 var move_input := Vector2.ZERO    # x right, y forward, relative to "yaw"
 var yaw := 0.0                    # where the camera (or the AI) is looking
+var aim_at := Vector3.INF         # true free aim: the point under the crosshair; INF without it
 var pressed := {}                 # action -> true only on the step it was pressed
 var held := {}                    # action -> true while it is held
 var counter := {}                 # action -> presses so far (for netplay)

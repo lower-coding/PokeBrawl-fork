@@ -32,6 +32,9 @@ var net: Net                     # online only
 var fighters: Array = []          # the two out on the field
 var parties: Array = []           # each side's Party, same order; empty in a 1 vs 1
 var field_pace := 1.0             # how much slower the League's field closes (BattleRules)
+var legacy_aim := false           # free aim the old way, level (BattleRules): no true free aim
+var no_lock := false              # players cannot lock on (BattleRules)
+var aim_assist := 0.0             # 0 to 1: how much the aim sticks to the foe (BattleRules)
 var trainers: Array = []          # Trainer of each fighter, same order (only for show)
 ## The opening: each trainer throws their Poké Ball and their Pokémon comes out; nobody
 ## moves until it ends. Tests skip it (unless --intro).
@@ -203,6 +206,9 @@ func start_battle(p1: String, p2: String, diff: String, rival_loadout := {}, riv
 		ai.queue_free()
 	if player_ai:
 		player_ai.queue_free()
+	legacy_aim = menu.choice.rules.legacy_aim != 0.0
+	no_lock = menu.choice.rules.no_lock != 0.0
+	aim_assist = menu.choice.rules.aim_assist / 100.0
 	var side := 1.0 if net and not net.host else -1.0
 	var a := _create(p1, 0, Vector3(7 * side, 0, 0), -PI * 0.5 * side, menu.battle_loadout(0, p1))
 	var b := _create(p2, 1, Vector3(-7 * side, 0, 0), PI * 0.5 * side,
@@ -220,10 +226,11 @@ func start_battle(p1: String, p2: String, diff: String, rival_loadout := {}, riv
 		_build_party(a)
 		_build_party(b)
 		field_pace = menu.choice.rules.field_pace
-		session.event("rules", BattleRules.changed(menu.choice.rules))
+	session.event("rules", BattleRules.changed(menu.choice.rules))
 	combat.targets = fighters.duplicate()
 	camera.target = a
 	camera.yaw = -PI * 0.5 * -side
+	camera.face_rival()
 	_end_t = -1.0
 	_no_input = 0.25
 	Engine.time_scale = 1.0
@@ -306,7 +313,7 @@ func on_party_swap(side: int, out: Fighter, incoming: Fighter) -> void:
 		camera.target = incoming
 		incoming.is_player = out.is_player
 		out.is_player = false
-		incoming.locked = out.locked
+	incoming.locked = out.locked
 	for x in [ai, player_ai]:
 		if x:
 			x.on_swap(out, incoming)
@@ -454,6 +461,7 @@ func _create(sp: String, eq: int, pos: Vector3, yaw: float, loadout := {}) -> Fi
 	var l := Fighter.new()
 	add_child(l)
 	l.setup(self, sp, eq, loadout)
+	l.locked = not no_lock
 	l.global_position = pos
 	l.face_yaw = yaw
 	l.start_pos = pos
@@ -479,6 +487,7 @@ func rematch() -> void:
 	a.reset(a.start_pos, a.start_yaw)
 	b.reset(b.start_pos, b.start_yaw)
 	camera.yaw = a.start_yaw + PI
+	camera.face_rival()
 	_end_t = -1.0
 	Engine.time_scale = 1.0
 	_introduce()
@@ -796,6 +805,7 @@ func _physics_process(delta: float) -> void:
 	var c := player.ctrl
 	c.move_input = Input.get_vector("move_left", "move_right", "move_down", "move_up")
 	c.yaw = camera.yaw
+	c.aim_at = camera.crosshair_point() if player.free_aim() and not legacy_aim else Vector3.INF
 	for a in ["jump", "dodge", "lock_on", "mov1", "mov2", "mov3", "mov4", "descend", "switch1", "switch2"]:
 		if Input.is_action_just_pressed(a):
 			c.press(a)
@@ -813,6 +823,8 @@ func _unhandled_input(ev: InputEvent) -> void:
 		hud.debug = not hud.debug
 	if fighters.size() < 2:
 		return
+	if ev.is_action_pressed("first_person") and not paused and not menu.is_open:
+		camera.toggle_first_person()
 	if ev.is_action_pressed("reset") and net == null and (mode == "training" or _end_t > 1.0):
 		rematch()
 	if ev is InputEventKey and ev.pressed and ev.physical_keycode == KEY_T and mode == "training" and ai:

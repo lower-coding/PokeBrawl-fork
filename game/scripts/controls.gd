@@ -17,19 +17,20 @@ extends RefCounted
 ##   move 4          RT        R2            F
 ##   pause           Menu      Options       Esc
 ##   descend (flying) LS (L3)  L3            Ctrl
+##   first person    (none)    (none)        C
 ##   details (menus)  Y        Triangle      X
 ## The player can change any of the battle actions in Options (Settings): the glyphs are
 ## read from the map, so they always show what is really bound.
 
 const ACTIONS := ["jump", "dodge", "lock_on", "mov1", "mov2", "mov3", "mov4", "pause",
 	"move_left", "move_right", "move_up", "move_down", "cam_left", "cam_right", "cam_up", "cam_down",
-	"menu_accept", "menu_back", "menu_info", "menu_extra", "debug", "reset", "descend", "switch1", "switch2"]
+	"menu_accept", "menu_back", "menu_info", "menu_extra", "debug", "reset", "descend", "switch1", "switch2", "first_person"]
 
 ## What the HUD shows next to each action, per controller type (translated on display).
 const GLYPHS := {
-	"xbox": {"jump": "A", "dodge": "B", "lock_on": "RS", "mov1": "LB", "mov2": "RB", "mov3": "LT", "mov4": "RT", "menu_back": "B", "menu_info": "Y", "menu_extra": "X", "descend": "LS", "switch1": "X", "switch2": "Y"},
-	"playstation": {"jump": "✕", "dodge": "○", "lock_on": "R3", "mov1": "L1", "mov2": "R1", "mov3": "L2", "mov4": "R2", "menu_back": "○", "menu_info": "△", "menu_extra": "□", "descend": "L3", "switch1": "□", "switch2": "△"},
-	"keyboard": {"jump": "Space", "dodge": "Shift", "lock_on": "Tab", "mov1": "Q", "mov2": "E", "mov3": "RMB", "mov4": "F", "menu_back": "Backspace", "menu_info": "X", "menu_extra": "R", "descend": "Ctrl", "switch1": "1", "switch2": "2"},
+	"xbox": {"jump": "A", "dodge": "B", "lock_on": "RS", "mov1": "LB", "mov2": "RB", "mov3": "LT", "mov4": "RT", "menu_back": "B", "menu_info": "Y", "menu_extra": "X", "descend": "LS", "switch1": "X", "switch2": "Y", "first_person": "-"},
+	"playstation": {"jump": "✕", "dodge": "○", "lock_on": "R3", "mov1": "L1", "mov2": "R1", "mov3": "L2", "mov4": "R2", "menu_back": "○", "menu_info": "△", "menu_extra": "□", "descend": "L3", "switch1": "□", "switch2": "△", "first_person": "-"},
+	"keyboard": {"jump": "Space", "dodge": "Shift", "lock_on": "Tab", "mov1": "Q", "mov2": "E", "mov3": "RMB", "mov4": "F", "menu_back": "Backspace", "menu_info": "X", "menu_extra": "R", "descend": "Ctrl", "switch1": "1", "switch2": "2", "first_person": "C"},
 }
 const PAD_NAME := {
 	"xbox": {JOY_BUTTON_A: "A", JOY_BUTTON_B: "B", JOY_BUTTON_X: "X", JOY_BUTTON_Y: "Y", JOY_BUTTON_LEFT_SHOULDER: "LB",
@@ -83,7 +84,7 @@ static func configure() -> void:
 			["mov4", KEY_F], ["pause", KEY_ESCAPE], ["move_left", KEY_A], ["move_right", KEY_D], ["move_up", KEY_W],
 			["move_down", KEY_S], ["move_left", KEY_LEFT], ["move_right", KEY_RIGHT], ["move_up", KEY_UP],
 			["move_down", KEY_DOWN], ["menu_accept", KEY_ENTER], ["menu_accept", KEY_SPACE], ["menu_back", KEY_BACKSPACE], ["menu_info", KEY_X], ["menu_extra", KEY_R],
-			["debug", KEY_F3], ["reset", KEY_R], ["descend", KEY_CTRL], ["switch1", KEY_1], ["switch2", KEY_2]]:
+			["debug", KEY_F3], ["reset", KEY_R], ["descend", KEY_CTRL], ["switch1", KEY_1], ["switch2", KEY_2], ["first_person", KEY_C]]:
 		var ev := InputEventKey.new()
 		ev.physical_keycode = ac[1]
 		InputMap.action_add_event(ac[0], ev)

@@ -500,7 +500,7 @@ func _setup_bar(setup: float) -> void:
 				sub = tr("Difficulty")
 				label = tr(Menu.DIFFICULTY_NAME[m.choice.diff])
 			"rules":
-				sub = tr("3 vs 3")
+				sub = tr("3 vs 3") if m.team_battle() else tr("1 vs 1")
 				label = tr("Rules")
 			"build":
 				sub = tr("Moves and ability")
@@ -518,7 +518,7 @@ func _setup_bar(setup: float) -> void:
 		else:
 			u.title(u.edge(bx, y, hgt, mid + 10.0) + 20.0, mid - 36.0, label.to_upper(), 46.0, ink, -1, tw - 44.0)
 		if it == "rules":
-			var custom := BattleRules.changed(m.choice.rules).size()
+			var custom: int = m.rules_items().filter(func(r): return r.get("changed", false)).size()
 			var line := tr("Default rules") if custom == 0 else tr("%d changed") % custom
 			u.text_fit(u.edge(bx, y, hgt, mid + 40.0) + 22.0, mid + 26.0, line, tw - 50.0, 19.0, Color(ink, 0.75), u.bold)
 		if it in ["stage", "diff"] and (host or it == "diff") and o > 0.01:

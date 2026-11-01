@@ -2,21 +2,24 @@ class_name Settings
 extends Node
 ## The player's options, saved in user://settings.cfg and applied when loaded and on every
 ## change: the battle controls (each action on keyboard and on gamepad), music and effects
-## volume, window mode, vertical sync and frame cap, camera shake, rumble, crosshair and language.
+## volume, window mode, vertical sync and frame cap, camera shake, rumble, crosshair and its shape,
+## and language.
 ## The Options screen (Menu, drawn by MenuDraw) works through items(), menu_input() and
 ## menu_event(). Tests start from the defaults and never save, so a player's settings
 ## never change what a test sees.
 
 const PATH := "user://settings.cfg"
 const ROWS := 12                     # rows shown at once on the screen (it scrolls)
-const BINDABLE := ["jump", "dodge", "lock_on", "mov1", "mov2", "mov3", "mov4", "descend", "switch1", "switch2", "pause"]
+const BINDABLE := ["jump", "dodge", "lock_on", "mov1", "mov2", "mov3", "mov4", "descend", "switch1", "switch2", "first_person", "pause"]
 const FPS_CAPS := [0, 60, 120, 144, 240]
 const LANGUAGES := ["", "en", "es"]
+const CROSSHAIR_SHAPES := ["cross", "circle"]
 
 var main: Node
 var rumble := true
 var shake := 1.0
 var crosshair := false
+var crosshair_shape := "cross"
 var music := 0.5
 var sfx := 1.0
 var fullscreen := true
@@ -48,6 +51,8 @@ func load_saved() -> void:
 	rumble = cf.get_value("game", "rumble", rumble)
 	shake = cf.get_value("game", "shake", shake)
 	crosshair = cf.get_value("game", "crosshair", crosshair)
+	var shape = cf.get_value("game", "crosshair_shape", crosshair_shape)
+	crosshair_shape = shape if shape in CROSSHAIR_SHAPES else CROSSHAIR_SHAPES[0]
 	language = cf.get_value("game", "language", language)
 	trainer = TrainerData.valid(cf.get_value("profile", "trainer", trainer))
 	player_name = str(cf.get_value("profile", "name", player_name)).substr(0, Menu.NAME_MAX)
@@ -67,6 +72,7 @@ func save() -> void:
 	cf.set_value("game", "rumble", rumble)
 	cf.set_value("game", "shake", shake)
 	cf.set_value("game", "crosshair", crosshair)
+	cf.set_value("game", "crosshair_shape", crosshair_shape)
 	cf.set_value("game", "language", language)
 	cf.set_value("profile", "trainer", trainer)
 	cf.set_value("profile", "name", player_name)
@@ -137,6 +143,8 @@ func items() -> Array:
 		"value": tr("On") if rumble else tr("Off"), "help": tr("The gamepad rumbles on hits.")})
 	out.append({"id": "crosshair", "kind": "toggle", "label": tr("Crosshair"),
 		"value": tr("On") if crosshair else tr("Off"), "help": tr("With nothing locked on, marks where your moves go.")})
+	out.append({"id": "crosshair_shape", "kind": "choice", "label": tr("Crosshair shape"),
+		"value": tr("Circle") if crosshair_shape == "circle" else tr("Cross"), "help": tr("A dot with four ticks round it, or a dot in a ring.")})
 	out.append({"id": "language", "kind": "choice", "label": tr("Language"),
 		"value": {"": tr("System"), "en": "English", "es": "Español"}[language], "help": tr("The game's language.")})
 	return out
@@ -154,6 +162,7 @@ func _action_name(a: String) -> String:
 		"descend": return tr("Descend (flying)")
 		"switch1": return tr("Switch 1")
 		"switch2": return tr("Switch 2")
+		"first_person": return tr("First person")
 		"pause": return tr("Pause")
 	return a
 
@@ -225,6 +234,8 @@ func _change(id: String, step: int) -> void:
 			rumble = not rumble
 		"crosshair":
 			crosshair = not crosshair
+		"crosshair_shape":
+			crosshair_shape = CROSSHAIR_SHAPES[(CROSSHAIR_SHAPES.find(crosshair_shape) + step + CROSSHAIR_SHAPES.size()) % CROSSHAIR_SHAPES.size()]
 		"fullscreen":
 			fullscreen = not fullscreen
 			apply(true)

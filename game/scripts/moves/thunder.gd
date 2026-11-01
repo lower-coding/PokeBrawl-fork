@@ -32,7 +32,9 @@ func on_start() -> void:
 func _target_spot() -> Vector3:
 	var r: Node3D = l.aim_target()
 	var spot: Vector3 = l.global_position + l.forward() * minf(8.0, d.reach)
-	if r and is_instance_valid(r) and not (r is Fighter and r.state == "ko"):
+	if l.crosshair_aim():
+		spot = l.ctrl.aim_at
+	elif r and is_instance_valid(r) and not (r is Fighter and r.state == "ko"):
 		spot = r.global_position
 	var flat := Vector3(spot.x - l.global_position.x, 0, spot.z - l.global_position.z)
 	if flat.length() > d.reach:

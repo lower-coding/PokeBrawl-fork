@@ -597,9 +597,7 @@ func setup_items() -> Array:
 	var out: Array = ["stage"]
 	if not online and choice.mode != "training":
 		out.append("diff")
-	if team_battle():
-		out.append("rules")
-	return out + ["build", "ready" if online else "fight"]
+	return out + ["rules", "build", "ready" if online else "fight"]
 
 
 func _selection() -> void:
@@ -951,6 +949,8 @@ func rules_items() -> Array:
 	var out: Array = []
 	var group := ""
 	for d in BattleRules.DEFS:
+		if not team_battle() and not d.get("any_format", false):
+			continue
 		if d.group != group:
 			group = d.group
 			out.append({"id": "h_" + group, "kind": "header", "label": tr(group)})

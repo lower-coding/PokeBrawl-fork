@@ -47,7 +47,10 @@ func on_active() -> void:
 func _center() -> Vector3:
 	var r: Node3D = l.aim_target() if is_instance_valid(l) else null
 	var at: Vector3 = l.global_position + l.forward() * 8.0
-	if r and is_instance_valid(r) and not (r is Fighter and r.state == "ko") \
+	if l.crosshair_aim():
+		var flat := Vector3(l.ctrl.aim_at.x - l.global_position.x, 0.0, l.ctrl.aim_at.z - l.global_position.z)
+		at = l.global_position + flat.limit_length(d.reach)
+	elif r and is_instance_valid(r) and not (r is Fighter and r.state == "ko") \
 			and Vector2(r.global_position.x - l.global_position.x, r.global_position.z - l.global_position.z).length() <= d.reach:
 		at = r.global_position
 	at.y = l.main.ground_y

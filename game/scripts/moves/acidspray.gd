@@ -20,7 +20,7 @@ func on_active() -> void:
 	var dir := aim(0.8)
 	# Thrown along that line and upward by just what gravity takes off it on the way, so it
 	# arrives at the target's height and the arc is taller the further it goes.
-	var dist: float = minf(from_pos.distance_to(l.target_center()), d.reach)
+	var dist: float = minf(from_pos.distance_to(l.ctrl.aim_at if l.crosshair_aim() else l.target_center()), d.reach)
 	var flight: float = dist / d.speed
 	var velocity: Vector3 = dir * d.speed + Vector3.UP * 0.5 * d.gravity * flight
 	var g := Hit.new()

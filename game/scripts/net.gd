@@ -298,6 +298,9 @@ func _pack() -> PackedByteArray:
 	b.put_float(c.move_input.x)
 	b.put_float(c.move_input.y)
 	b.put_float(c.yaw)
+	b.put_float(c.aim_at.x)
+	b.put_float(c.aim_at.y)
+	b.put_float(c.aim_at.z)
 	var mask := 0
 	for k in ACTIONS.size():
 		if c.keeps(ACTIONS[k]):
@@ -353,6 +356,7 @@ func _read_state(b: StreamPeerBuffer) -> void:
 	var c := r.ctrl
 	c.move_input = Vector2(b.get_float(), b.get_float())
 	c.yaw = b.get_float()
+	c.aim_at = Vector3(b.get_float(), b.get_float(), b.get_float())
 	var mask := b.get_u16()
 	# Estimated one-way delay, in frames: whatever starts is fast-forwarded by it.
 	var lead := int(round(_outbound() * 60.0))

@@ -1,13 +1,15 @@
 class_name BattleRules
 extends RefCounted
-## What a 3 vs 3 can change from one battle to the next (Party reads them). They are picked for
-## each battle, with the stage and the difficulty: in the selection's Rules screen (Menu) or
-## with --rules=id:value,id:value; online the host's are the ones that count. A battle keeps them
+## What can change from one battle to the next (Party reads most of them, for a 3 vs 3). They are
+## picked for each battle, with the stage and the difficulty: in the selection's Rules screen (Menu)
+## or with --rules=id:value,id:value; online the host's are the ones that count. A battle keeps them
 ## for its rematches, and the menu for the next one until the game closes; they are never saved.
 ##   default          what a battle plays by unless someone changes it
 ##   min, max, step   what the Rules screen and --rules allow
 ##   unit             how the value reads: "s", "%", "%/s", "x" or nothing
 ##   zero             the word for 0, where 0 turns it off
+##   one              the word for 1, where the rule is just off or on: any step flips it
+##   any_format       it counts in a 1 vs 1 too (the others only show in a 3 vs 3)
 ## Player-facing text (group, label, help, zero) is in English and goes through tr() when drawn.
 
 const DEFS := [
@@ -39,6 +41,12 @@ const DEFS := [
 		"help": "How much energy the team that lost a Pokémon gets."},
 	{"id": "field_pace", "group": "Stadium", "label": "League's field closes slower", "default": 2.5, "min": 1.0, "max": 5.0, "step": 0.5, "unit": "x",
 		"help": "How many times slower the League Stadium's field closes in. At 1 it closes as in a 1 vs 1."},
+	{"id": "legacy_aim", "group": "Aiming", "label": "Legacy free aim", "default": 0.0, "min": 0.0, "max": 1.0, "step": 1.0, "unit": "", "zero": "Off", "one": "On", "any_format": true,
+		"help": "With nothing locked on. Off, moves go exactly where the crosshair in the center of the screen points, up and down too. On, the old way: moves stay level and shots home in on the rival."},
+	{"id": "no_lock", "group": "Aiming", "label": "No lock-on", "default": 0.0, "min": 0.0, "max": 1.0, "step": 1.0, "unit": "", "zero": "Off", "one": "On", "any_format": true,
+		"help": "On, nobody can lock on: the button does nothing and the camera stays free. The AI still aims on its own."},
+	{"id": "aim_assist", "group": "Aiming", "label": "Aim assist", "default": 0.0, "min": 0.0, "max": 100.0, "step": 10.0, "unit": "%", "zero": "Off", "any_format": true,
+		"help": "With nothing locked on and the crosshair over the foe: turning the camera gets slower and the aim follows the foe a little, so it is harder to slip off. The higher, the stronger."},
 ]
 
 
@@ -86,6 +94,8 @@ static func sanitized(rules) -> Dictionary:
 ## One step of rule "id" up (1) or down (-1), staying within what it allows.
 static func stepped(id: String, value: float, step: int) -> float:
 	var d := def(id)
+	if d.has("one"):
+		return 0.0 if value != 0.0 else 1.0
 	return clampf(snappedf(value + float(d.step) * step, float(d.step)), d.min, d.max)
 
 
@@ -94,6 +104,8 @@ static func text(id: String, value: float) -> String:
 	var d := def(id)
 	if value == 0.0 and d.has("zero"):
 		return TranslationServer.translate(d.zero)
+	if d.has("one"):
+		return TranslationServer.translate(d.one)
 	var number := ("%.2f" % value).trim_suffix("0").trim_suffix("0").trim_suffix(".")
 	match d.unit:
 		"":

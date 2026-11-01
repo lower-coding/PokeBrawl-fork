@@ -234,6 +234,8 @@ func mouth() -> Vector3:
 ## "limit" caps the aim: it does not chase a rival that is too far to the side.
 func aim(limit := 0.6) -> Vector3:
 	var fwd := l.forward()
+	if l.crosshair_aim():
+		return (l.ctrl.aim_at - mouth()).normalized()
 	# Free camera: where the camera looks (homing shots still follow their target).
 	if l.free_aim():
 		return _free_dir(fwd)
@@ -256,6 +258,8 @@ func aim(limit := 0.6) -> Vector3:
 ## still does not either.
 func beam_aim(from_pos: Vector3, speed: float, limit := 0.6) -> Vector3:
 	var fwd := l.forward()
+	if l.crosshair_aim():
+		return (l.ctrl.aim_at - from_pos).normalized()
 	if l.free_aim():
 		return _free_dir(fwd)
 	if l.rival and is_instance_valid(l.rival) and l.rival.state != "ko":
@@ -289,15 +293,20 @@ static func lead(from: Vector3, target: Vector3, vel: Vector3, speed: float) -> 
 
 
 ## Streams and beams: horizontally, where the fighter faces (the player turns it with
-## the stick); vertically, at the target's height, automatically (to hit flyers).
+## the stick); vertically, at the target's height, automatically (to hit flyers). With the
+## crosshair the body turns toward it (Fighter) and the height is the crosshair's.
 func aim_stream(from_pos: Vector3) -> Vector3:
 	var fwd := l.forward()
-	if l.free_aim():
+	var toward: Vector3
+	if l.crosshair_aim():
+		toward = l.ctrl.aim_at - from_pos
+	elif l.free_aim():
 		return fwd
-	var target := l.aim_target()
-	if target == null or not is_instance_valid(target) or (target is Fighter and target.state == "ko"):
-		return fwd
-	var toward: Vector3 = l.target_center() - from_pos
+	else:
+		var target := l.aim_target()
+		if target == null or not is_instance_valid(target) or (target is Fighter and target.state == "ko"):
+			return fwd
+		toward = l.target_center() - from_pos
 	var flat_len := Vector2(toward.x, toward.z).length()
 	if Vector3(toward.x, 0, toward.z).dot(fwd) <= 0.0 or flat_len < 0.5:
 		return fwd

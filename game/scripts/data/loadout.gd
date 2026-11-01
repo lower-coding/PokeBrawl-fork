@@ -65,13 +65,18 @@ static func _listed_before(a: String, b: String) -> bool:
 	return na.naturalnocasecmp_to(nb) < 0
 
 
-## Four different random moves it can use, at least one an attack: with none it could not fight.
+## Four different random moves it can use, at least one an attack of its own type (STAB), or just
+## an attack if it has none of those: with none it could not fight.
 static func random_moves(sp: String) -> Array:
 	var pool := moves_for(sp)
 	pool.shuffle()
 	var four := pool.slice(0, 4)
-	if four.all(func(m): return Moves.DATA[m].get("power", 0) <= 0):
-		four[0] = pool.filter(func(m): return Moves.DATA[m].get("power", 0) > 0).pick_random()
+	var attacks := pool.filter(func(m): return Moves.DATA[m].get("power", 0) > 0)
+	var wanted := attacks.filter(func(m): return Moves.DATA[m].type in Roster.POKEMON[sp].types)
+	if wanted.is_empty():
+		wanted = attacks
+	if not four.any(func(m): return m in wanted):
+		four[0] = wanted.pick_random()
 	return four
 
 

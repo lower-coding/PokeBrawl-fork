@@ -5,7 +5,26 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+## [demo-aim] - 2026-10-31
+
+### Added
+- True free aim: with nothing locked on, moves go to the point at the center of the screen, up and
+  down too, and the crosshair sits there. The camera can look higher, to aim at what flies. Marks on
+  the ground (Thunder, Psychic, Hex...) go there too, and streams turn toward it. A shot only follows
+  a target the crosshair was on when it left. Letting go of the lock leaves the crosshair on the rival.
+- A new rule, **Legacy free aim** (off by default): the old way, with moves level and shots homing in
+  on the rival. It counts in a 1 vs 1 too, so a 1 vs 1 now has a Rules tab, with just the aiming rules.
+- Another new rule, **No lock-on** (off by default): nobody can lock on, the camera stays free and
+  the crosshair starts on the rival. The AI still aims on its own.
+- The crosshair turns red when your moves would go at the foe (or one of its decoys).
+- **Options > Crosshair shape**: a cross or a circle.
+- First person: C (it can be changed in Options) sees the battle from your Pokémon's eyes, free or
+  locked on, and looks higher. The opening, a KO and the end of a battle go back to third person.
+- A new rule, **Aim assist** (off by default, up to 100 %): with the crosshair over the foe, turning
+  is slower and the aim moves with the foe, so it is harder to slip off. The higher, the stronger.
+
 ### Changed
+- Random moves always include an attack of the Pokémon's own type (STAB).
 - The selection's roster is now rows of slanted cells, like a fighting game's. The rows and the cell
   size adapt to how many Pokémon there are: two rows of 7 today, and it still fits 150 (cells under
   90 px leave the name to the player card). Up and down go to the cell right above or below.
@@ -17,6 +36,8 @@ All notable changes to this project are documented here. The format follows
 - New tests: `--test=menu_wall` and `--test=menu_perf`.
 
 ### Fixed
+- Online 3 vs 3: the other player's incoming Pokémon always started locked on, whatever the one
+  going out was doing, so it could aim differently on your screen.
 - The selection ran at about 14 fps on a fast PC: it checked every move's script on the disk for every
   cell, every frame, which got worse with each new Pokémon. It now checks once.
 - Menu renders no longer keep drawing unseen after their screen is left.

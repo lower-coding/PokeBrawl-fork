@@ -92,9 +92,9 @@ func _ready() -> void:
 			_plan = [[1.5, "", "menu_title"], [1.7, "menu_accept", ""], [2.3, "move_down", ""], [2.6, "", "menu_main"],
 				[2.8, "move_up", ""], [3.0, "menu_accept", ""], [3.4, "menu_accept", ""], [3.8, "move_right", ""], [4.1, "move_down", ""],
 				[4.8, "", "menu_selection"], [5.0, "menu_accept", ""], [5.4, "move_down", ""], [5.9, "", "menu_rival"],
-				[6.1, "menu_accept", ""], [6.4, "move_left", ""], [6.5, "move_left", ""], [6.6, "move_left", ""], [6.7, "move_up", ""],
-				[6.8, "move_right", ""], [6.9, "move_up", ""], [7.0, "move_right", ""], [7.1, "move_right", ""],
-				[7.3, "", "menu_setup"], [7.5, "menu_accept", ""],
+				[6.1, "menu_accept", ""], [6.3, "move_left", ""], [6.4, "move_left", ""], [6.5, "move_left", ""], [6.6, "move_left", ""], [6.7, "move_up", ""],
+				[6.8, "move_right", ""], [6.9, "move_up", ""], [7.0, "move_right", ""], [7.1, "move_right", ""], [7.2, "move_right", ""],
+				[7.35, "", "menu_setup"], [7.5, "menu_accept", ""],
 				[7.8, "", "menu_vs"], [10.7, "", "menu_battle"], [10.9, "pause", ""], [11.3, "", "menu_pause"],
 				[11.5, "menu_back", ""], [12.2, "", "menu_back"]]
 		"menu_perf":
@@ -131,12 +131,14 @@ func _ready() -> void:
 				[13.0, "", "moves_restored"]]
 		"menu_prep":
 			# Battle, 1 vs 1: a random pick on the wall by key, the rival's by its button; random moves
-			# for both from the options, then the rival's moves and its list of moves, by group.
+			# for both from the options, then the rival's moves and its list of moves, by group; back
+			# on the options, its Rules tab, with legacy free aim turned on.
 			_plan = [[1.5, "menu_accept", ""], [2.0, "menu_accept", ""], [2.6, "menu_accept", ""], [3.2, "", "prep_wall"], [3.4, "menu_info", ""],
 				[3.8, "", "prep_rival"], [4.0, "click:rand:0", ""], [4.6, "", "prep_setup"], [4.8, "mov2", ""], [5.2, "", "prep_rolled"],
 				[5.4, "move_left", ""], [5.6, "menu_accept", ""], [6.2, "", "prep_picks"], [6.4, "move_down", ""], [6.6, "menu_accept", ""],
 				[7.0, "", "prep_slots"], [7.2, "menu_accept", ""], [7.6, "", "prep_list"], [7.8, "move_right", ""], [8.2, "", "prep_common"],
-				[8.4, "menu_accept", ""], [8.8, "", "prep_chosen"], [9.0, "menu_back", ""], [9.3, "menu_back", ""], [9.8, "", "prep_back"]]
+				[8.4, "menu_accept", ""], [8.8, "", "prep_chosen"], [9.0, "menu_back", ""], [9.3, "menu_back", ""], [9.8, "", "prep_back"],
+				[10.0, "move_left", ""], [10.2, "menu_accept", ""], [10.6, "move_right", ""], [11.0, "", "prep_rules"], [11.2, "menu_back", ""], [11.7, "", "prep_rules_back"]]
 		"menu_prep_team":
 			# Battle, 3 vs 3: both teams at random, random moves for all six, then the list of just
 			# those six and, from a pick's slots, on to the next one.
@@ -518,7 +520,8 @@ func _physics_process(delta: float) -> void:
 				var ok_forms: bool = main.menu.choice.p1 == "urshifurapidstrike"
 				print("%s  The form picked on the wall is the one chosen  %s" % ["OK   " if ok_forms else "FAIL ", main.menu.choice.p1])
 				get_tree().quit()
-			if test_name == "menu_prep" and t > 10.0:
+			if test_name == "menu_prep" and t > 11.9:
+				print("%s  A 1 vs 1's Rules tab turns on legacy free aim  %s" % ["OK   " if main.menu.choice.rules.legacy_aim == 1.0 else "FAIL ", main.menu.choice.rules.legacy_aim])
 				get_tree().quit()
 			if test_name == "menu_prep_team" and t > 7.2:
 				var who: Array = main.menu.edit_entries()
@@ -751,6 +754,8 @@ func _prep_test() -> void:
 	var ordered := true
 	var whole := true
 	var rolls_ok := true
+	var stab_ok := true
+	var no_stab: Array = []
 	for sp in Roster.POKEMON:
 		var groups := Loadout.move_groups(sp)
 		var listed: Array = groups[0] + groups[1]
@@ -762,14 +767,19 @@ func _prep_test() -> void:
 				ordered = ordered and not Loadout._listed_before(group[i], group[i - 1])
 				var ta := UiKit.TYPE_ORDER.find(Moves.DATA[group[i - 1]].type)
 				ordered = ordered and ta <= UiKit.TYPE_ORDER.find(Moves.DATA[group[i]].type)
+		var is_stab := func(mv): return Moves.DATA[mv].get("power", 0) > 0 and Moves.DATA[mv].type in Roster.POKEMON[sp].types
+		if not can.any(is_stab):
+			no_stab.append(sp)
 		for roll in 50:
 			var four := Loadout.random_moves(sp)
 			rolls_ok = rolls_ok and Loadout.valid(sp, {"moves": four, "ability": ""}).moves == four \
 				and four.any(func(mv): return Moves.DATA[mv].get("power", 0) > 0)
+			stab_ok = stab_ok and (sp in no_stab or four.any(is_stab))
 	_ok("Groups: every move once, the default four among its own", whole)
 	_ok("Groups: by type, then by name", ordered)
 	_ok("Groups: what most learn is common, what few learn is not", Loadout.is_common("protect") and not Loadout.is_common("flamethrower"))
 	_ok("Random moves: always four it can use, one an attack", rolls_ok)
+	_ok("Random moves: always one attack of its own type", stab_ok and no_stab.is_empty(), "none to pick for: %s" % [no_stab])
 
 	var m: Menu = main.menu
 	m._edit_return = "main"
@@ -3156,8 +3166,11 @@ func _team_test() -> void:
 	await _wait(0.4)
 	_ok("Passes through its teammate", luc.hp == hp1, "%.0f -> %.0f" % [hp1, luc.hp])
 	var shot: Dictionary = _team_shot(b, b.center() + Vector3(0, 6.0, 0), Vector3(0, 0.1, 0), 3.0, luc)
+	luc.locked = false
 	var took2: float = await _team_switch(pa, 1)
 	_ok("Shots in flight turn to the new one", pa.active == ven and shot.target == ven, "%.2f s" % took2)
+	_ok("Whoever is not the player, the one coming in is as free as the one that left", not ven.locked)
+	ven.locked = true
 
 	# Hits cut it; the charge stays spent.
 	ab = await _team_battle("charizard", "charizard,lucario,venusaur", "garchomp", "garchomp,gengar,blastoise")
@@ -3295,6 +3308,11 @@ func _team_test() -> void:
 	main.player_ai = null
 	rival_ai.queue_free()
 
+	_ok("Legacy free aim starts off and any step flips it", R.legacy_aim == 0.0 and BattleRules.stepped("legacy_aim", 0.0, 1) == 1.0 and BattleRules.stepped("legacy_aim", 0.0, -1) == 1.0 and BattleRules.stepped("legacy_aim", 1.0, 1) == 0.0)
+	_ok("It reads as off or on", BattleRules.text("legacy_aim", 0.0) == "Off" and BattleRules.text("legacy_aim", 1.0) == "On")
+	_ok("No lock-on starts off and any step flips it", R.no_lock == 0.0 and BattleRules.stepped("no_lock", 0.0, 1) == 1.0 and BattleRules.stepped("no_lock", 1.0, -1) == 0.0)
+	_ok("Aim assist starts off and goes up by tens", R.aim_assist == 0.0 and BattleRules.stepped("aim_assist", 0.0, 1) == 10.0 and BattleRules.stepped("aim_assist", 100.0, 1) == 100.0)
+	_ok("It reads as off or a share", BattleRules.text("aim_assist", 0.0) == "Off" and BattleRules.text("aim_assist", 50.0) == "50 %", BattleRules.text("aim_assist", 50.0))
 	# The rules are this battle's.
 	var parsed: Dictionary = BattleRules.parsed("recall:0.1,lockout:999,nonsense:3,landing:x")
 	_ok("--rules takes what it knows, within limits", parsed.recall == 0.1 and parsed.lockout == 30.0 and parsed.landing == R.landing and not parsed.has("nonsense"))
@@ -3427,7 +3445,8 @@ func _team_test() -> void:
 	mn._go("selection")
 	_ok("Back from a battle both teams stay, on the battle's options", mn.sel_phase == "setup" and mn.choice.team.size() == 3)
 	mn.choice.format = "1v1"
-	_ok("A 1 vs 1 has no Rules tab", not "rules" in mn.setup_items())
+	var shown: Array = mn.rules_items().filter(func(it): return it.kind == "choice").map(func(it): return it.id)
+	_ok("A 1 vs 1's Rules tab has only what counts in it", "rules" in mn.setup_items() and shown == ["legacy_aim", "no_lock", "aim_assist"], str(shown))
 	mn.choice.team = []
 	mn.choice.team2 = []
 	mn.sel_phase = "p1"
@@ -3582,7 +3601,8 @@ func _hud_test() -> void:
 	a.boost("def", -1)
 	a.boost("spa", 2)
 	_ok("A tag per changed stat", main.hud.stage_tags(a) == raised, str(main.hud.stage_tags(a)))
-	# Free aim on the rival: the crosshair lands on the rival. Locked on, there is an arrow.
+	# Legacy free aim on the rival: the crosshair lands on the rival. Locked on, there is an arrow.
+	main.legacy_aim = true
 	a.is_player = true
 	main._no_input = 0.0
 	a.locked = false
@@ -3613,6 +3633,50 @@ func _hud_test() -> void:
 	cross = main.hud.crosshair_at(a)
 	_ok("With the camera steeply down it stays on screen", cross.y >= 30.0 and cross.y < main.get_viewport().get_visible_rect().size.y / main.hud._s, str(cross))
 	_capture("hud_camera_down")
+	# True free aim: the center of the screen, wherever the camera looks, and that is where it looks.
+	main.legacy_aim = false
+	for look in [-1.1, -0.2, 0.6]:
+		main.camera.pitch = look
+		await _wait(0.5)
+		cross = main.hud.crosshair_at(a)
+		var along: Vector2 = cam.unproject_position(cam.global_position - cam.global_transform.basis.z * 10.0) / main.hud._s
+		var middle: Vector2 = main.get_viewport().get_visible_rect().size / main.hud._s * 0.5
+		_ok("True free aim: in the center, at pitch %.1f" % look, cross.distance_to(middle) < 1.0 and cross.distance_to(along) < 2.0,
+			"crosshair %s, center %s, view %s" % [cross, middle, along])
+		_capture("hud_true_aim_%d" % roundi(look * 10.0))
+	# Red on the foe, and off it the usual color; a cross or a circle.
+	main.camera.yaw = atan2(-toward.x, -toward.z)
+	a.locked = true
+	await _wait(0.1)
+	a.locked = false
+	await _wait(0.8)
+	_ok("On the foe, it knows", a.aiming_at_foe())
+	_capture("hud_cross_on_foe")
+	row = main.options.items().filter(func(it): return it.id == "crosshair_shape")
+	_ok("The Options screen has its shape, as a choice", row.size() == 1 and row[0].kind == "choice" and row[0].value == tr("Cross"), str(row))
+	main.options._change("crosshair_shape", 1)
+	_ok("Changing it makes it a circle", main.options.crosshair_shape == "circle")
+	await _wait(0.1)
+	_capture("hud_circle_on_foe")
+	main.camera.yaw += 0.5
+	await _wait(0.5)
+	_ok("Off the foe, it knows too", not a.aiming_at_foe())
+	_capture("hud_circle_off_foe")
+	main.options._change("crosshair_shape", -1)
+	_ok("And back to a cross", main.options.crosshair_shape == "cross")
+	# First person: from the eyes, free and locked on, with the crosshair in the same place.
+	main.camera.yaw = atan2(-toward.x, -toward.z)
+	main.camera.pitch = 0.05
+	main.camera.toggle_first_person()
+	await _wait(0.4)
+	_capture("hud_first_person")
+	a.locked = true
+	await _wait(0.8)
+	_capture("hud_first_person_locked")
+	a.locked = false
+	main.camera.toggle_first_person()
+	await _wait(0.4)
+	_capture("hud_third_person_again")
 	main.camera.pitch = -0.2
 	a.locked = true
 	a.inflict("brn")
@@ -3685,6 +3749,217 @@ func _lockon_test() -> void:
 	a.ctrl.yaw = atan2(-toward.x, -toward.z)
 	a.lock_on_looked()
 	_ok("Locking on picks what the camera looks at", a.locked and a.aim_target() == b, str(a.aim_target()))
+	await _true_aim_cases()
 	var fails := _results.filter(func(r): return not r[1]).size()
 	print("RESULT: %d of %d" % [_results.size() - fails, _results.size()])
 	get_tree().quit()
+
+
+## True free aim: the camera finds the point under the crosshair and moves go there, in 3D. The
+## rule brings the old way back.
+func _true_aim_cases() -> void:
+	_ok("True free aim unless the rules say otherwise", not main.legacy_aim)
+	var ab: Array = await _setup("pikachu", "snorlax", Vector3(-8, 0, 0), Vector3(4, 0, 0))
+	var a: Fighter = ab[0]
+	var b: Fighter = ab[1]
+	var toward: Vector3 = b.global_position - a.global_position
+	main.camera.yaw = atan2(-toward.x, -toward.z)
+	await _wait(0.2)
+	# Letting go of the lock leaves the crosshair on the rival.
+	a.locked = false
+	await _wait(0.8)
+	var at: Vector3 = main.camera.crosshair_point()
+	var seg: Array = b.body()
+	_ok("Letting go of the lock, the crosshair is on the rival", Geometry3D.get_closest_point_to_segment(at, seg[0], seg[1]).distance_to(at) < 0.01, str(at))
+	# Off the rival, it finds the floor; up, the sky far off, higher than the old limit lets it look.
+	main.camera.pitch = -0.7
+	await _wait(0.8)
+	at = main.camera.crosshair_point()
+	_ok("Looking down, the floor", absf(at.y - main.ground_y) < 0.1 and at.distance_to(a.global_position) < 6.0, str(at))
+	main.camera.pitch = 0.7
+	await _wait(0.8)
+	at = main.camera.crosshair_point()
+	_ok("Looking up, high up", at.y > 15.0, str(at))
+	main.camera.pitch = -0.1
+	# A shot goes to the point, up too, and flies straight if nothing is there.
+	var side := Vector3(-toward.normalized().z, 0.0, toward.normalized().x)
+	a.ctrl.aim_at = a.center() + side * 10.0 + Vector3.UP * 5.0
+	await _wait(0.5)
+	var want: Vector3 = (a.ctrl.aim_at - a.center()).normalized()
+	var shot: Dictionary = await _first_shot(a)
+	_ok("A shot leaves toward the crosshair, up too", shot.velocity.normalized().dot(want) > 0.98, "%s, wanted %s" % [shot.velocity.normalized(), want])
+	_ok("Aimed at nothing, it follows nothing", shot.target == null, str(shot.target))
+	# With the crosshair on the rival it follows it.
+	ab = await _setup("pikachu", "snorlax", Vector3(-8, 0, 0), Vector3(4, 0, 0))
+	a = ab[0]
+	b = ab[1]
+	a.locked = false
+	a.ctrl.aim_at = b.center()
+	shot = await _first_shot(a)
+	_ok("Aimed at the rival, it follows it", shot.target == b, str(shot.target))
+	_ok("Aimed at the rival, the crosshair knows", a.aiming_at_foe())
+	a.ctrl.aim_at = b.center() + Vector3.UP * 6.0
+	_ok("Over its head, it does not", not a.aiming_at_foe())
+	# Streams keep turning with the body, at the crosshair's height.
+	a.ctrl.aim_at = a.center() + a.forward() * 10.0 + Vector3.UP * 5.0
+	var act := Action.new()
+	act.l = a
+	var stream := act.aim_stream(a.center())
+	_ok("A stream rises to the crosshair's height", absf(stream.y - sin(atan2(5.0, 10.0))) < 0.01 and Vector3(stream.x, 0.0, stream.z).normalized().dot(a.forward()) > 0.99, str(stream))
+	a.ctrl.aim_at = a.global_position + side * 6.0
+	# Marks on the ground go under the crosshair, not under the rival.
+	var bolt: Variant = load("res://scripts/moves/thunderbolt.gd").new()
+	bolt.l = a
+	bolt.d = {"reach": 40.0}
+	var spot: Vector3 = bolt._target_spot()
+	_ok("A mark on the ground goes under the crosshair", absf(spot.x - a.ctrl.aim_at.x) < 0.01 and absf(spot.z - a.ctrl.aim_at.z) < 0.01 and spot.y == main.ground_y, str(spot))
+	# The input gives the point only free and not by the legacy rule.
+	a.is_player = true
+	main._no_input = 0.0
+	a.locked = false
+	await _wait(0.1)
+	_ok("Free, the player's input carries the point", a.ctrl.aim_at.is_finite() and a.crosshair_aim())
+	a.locked = true
+	await _wait(0.1)
+	_ok("Locked on, no point", not a.ctrl.aim_at.is_finite() and not a.crosshair_aim())
+	a.is_player = false
+	# The rule, read when a battle starts: free, the old way again.
+	main.menu.choice.rules = BattleRules.parsed("legacy_aim:1")
+	ab = await _setup("pikachu", "snorlax", Vector3(-8, 0, 0), Vector3(4, 0, 0))
+	a = ab[0]
+	b = ab[1]
+	_ok("--rules turns on legacy free aim, in a 1 vs 1 too", main.legacy_aim)
+	a.is_player = true
+	main._no_input = 0.0
+	a.locked = false
+	await _wait(0.1)
+	_ok("Legacy: no point", not a.ctrl.aim_at.is_finite() and not a.crosshair_aim())
+	_ok("Legacy: its shots follow the rival", a.shot_target() == b)
+	main.camera.yaw = atan2(-toward.x, -toward.z)
+	await _wait(0.1)
+	_ok("Legacy: in line with the rival, the crosshair knows", a.aiming_at_foe())
+	main.camera.yaw += 1.0
+	await _wait(0.1)
+	_ok("Legacy: off to a side, it does not", not a.aiming_at_foe())
+	a.is_player = false
+	# No lock-on: everyone free from the start, the button does nothing, the crosshair on the rival.
+	main.menu.choice.rules = BattleRules.parsed("no_lock:1")
+	main.start_battle("pikachu", "snorlax", "normal")
+	await get_tree().physics_frame
+	main.ai.mode = "still"
+	a = main.fighters[0]
+	b = main.fighters[1]
+	b.ctrl.move_input = Vector2.ZERO
+	_ok("No lock-on: the player starts free", main.no_lock and not a.locked)
+	await _wait(1.0)
+	_ok("No lock-on: the AI still aims on its own", b.locked)
+	at = main.camera.crosshair_point()
+	seg = b.body()
+	_ok("No lock-on: the crosshair starts on the rival", Geometry3D.get_closest_point_to_segment(at, seg[0], seg[1]).distance_to(at) < 0.01, str(at))
+	a.ctrl.press("lock_on")
+	await _wait(0.1)
+	_ok("No lock-on: the button does nothing", not a.locked)
+	main.rematch()
+	await _wait(0.1)
+	_ok("No lock-on: a rematch keeps it", not a.locked)
+	main.menu.choice.rules = BattleRules.defaults()
+	main.legacy_aim = false
+	main.no_lock = false
+	await _first_person_cases()
+	await _aim_assist_cases()
+
+
+## First person: the key turns it on and off; from the eyes, its body out of that view only; the
+## crosshair works from there; a KO and another Pokémon coming in are taken care of.
+func _first_person_cases() -> void:
+	var ab: Array = await _setup("pikachu", "snorlax", Vector3(-8, 0, 0), Vector3(4, 0, 0))
+	var a: Fighter = ab[0]
+	var b: Fighter = ab[1]
+	var cam: BattleCamera = main.camera
+	a.locked = false
+	a.is_player = true
+	main._no_input = 0.0
+	var key := InputEventKey.new()
+	key.physical_keycode = KEY_C
+	key.pressed = true
+	_ok("The first person action is on C", key.is_action_pressed("first_person"))
+	main._unhandled_input(key)
+	_ok("The key turns first person on", cam.first_person)
+	cam.yaw = atan2(-12.0, 0.0)
+	var to: Vector3 = b.center() - (a.global_position + Vector3.UP * a.data.height * BattleCamera.EYE_HEIGHT)
+	cam.pitch = atan2(to.y, Vector2(to.x, to.z).length())
+	await _wait(0.3)
+	var eye: Vector3 = a.global_position + Vector3.UP * a.data.height * BattleCamera.EYE_HEIGHT
+	_ok("The camera is at the eyes", cam.global_position.distance_to(eye) < 0.05, "%s, eyes %s" % [cam.global_position, eye])
+	var body_layers: int = a.model.mesh_instance.layers
+	_ok("Its body is out of that view", body_layers & cam.cull_mask == 0 and a.model.visible, str(body_layers))
+	_ok("The rival's is not", b.model.mesh_instance.layers & cam.cull_mask != 0)
+	var seg: Array = b.body()
+	var at: Vector3 = a.ctrl.aim_at
+	_ok("From the eyes the crosshair lands on the rival", Geometry3D.get_closest_point_to_segment(at, seg[0], seg[1]).distance_to(at) < 0.01 and a.aiming_at_foe(), str(at))
+	cam.pitch = 1.2
+	await _wait(0.1)
+	_ok("From the eyes it can look further up", a.ctrl.aim_at.y > 40.0, str(a.ctrl.aim_at))
+	# Whoever the camera follows, only that body goes.
+	cam.target = b
+	await _wait(0.1)
+	_ok("Another target: the first body is back, the new one is out", a.model.mesh_instance.layers & cam.cull_mask != 0 and b.model.mesh_instance.layers & cam.cull_mask == 0)
+	cam.target = a
+	a.state = "ko"
+	await _wait(0.1)
+	_ok("A KO goes back to third person", a.model.mesh_instance.layers & cam.cull_mask != 0 and cam.global_position.distance_to(eye) > 0.3)
+	a.state = "free"
+	await _wait(0.1)
+	main._unhandled_input(key)
+	await _wait(0.5)
+	_ok("The key turns it off: the body is back, the camera behind it", not cam.first_person and a.model.mesh_instance.layers & cam.cull_mask != 0 and cam.global_position.distance_to(eye) > 1.0)
+	_ok("And the pitch back in its limit", cam.pitch <= BattleCamera.PITCH_UP_FREE)
+	a.is_player = false
+
+
+## Aim assist: slower turning over the foe only, and the aim goes after a foe that moves; the
+## higher the rule, the stronger; off, neither. Turned to the rival with no input, so all it does shows.
+func _aim_assist_cases() -> void:
+	var turned := {}
+	for share in [0.0, 50.0, 100.0]:
+		main.menu.choice.rules = BattleRules.parsed("aim_assist:%d" % share)
+		var ab: Array = await _setup("pikachu", "snorlax", Vector3(-8, 0, 0), Vector3(4, 0, 0))
+		var a: Fighter = ab[0]
+		var b: Fighter = ab[1]
+		var cam: BattleCamera = main.camera
+		_ok("The rule reads at the battle's start: %d %%" % share, is_equal_approx(main.aim_assist, share / 100.0))
+		a.locked = false
+		a.is_player = true
+		main._no_input = 0.0
+		cam.yaw = atan2(-12.0, 0.0)
+		await _wait(1.0)
+		var drag: float = cam._drag()
+		_ok("Over the foe, turning is held by the rule", a.aiming_at_foe() and is_equal_approx(drag, 1.0 - share / 100.0 * BattleCamera.ASSIST_MAX), "%.2f" % drag)
+		var yaw0: float = cam.yaw
+		# The foe steps aside, a little every step.
+		for k in 12:
+			b.global_position += Vector3(0.0, 0.0, 0.04)
+			await get_tree().physics_frame
+		turned[share] = absf(angle_difference(yaw0, cam.yaw))
+		cam.yaw = yaw0 + 1.0
+		await _wait(0.8)
+		_ok("Off the foe, turning is free", not a.aiming_at_foe() and cam._drag() == 1.0, "%.2f" % cam._drag())
+		a.is_player = false
+	_ok("Off, the aim does not follow a foe that moves", turned[0.0] < 0.001, str(turned))
+	_ok("The higher, the more it follows", turned[50.0] > 0.005 and turned[100.0] > turned[50.0] * 1.2, str(turned))
+	main.menu.choice.rules = BattleRules.defaults()
+	main.aim_assist = 0.0
+
+
+## Fires its first move and returns the projectile that comes out.
+func _first_shot(a: Fighter) -> Dictionary:
+	var before: int = a.shots
+	a.ctrl.press("mov1")
+	await _wait(0.05)
+	a.ctrl.release("mov1")
+	for k in 60:
+		await get_tree().physics_frame
+		for p in main.combat.projectiles:
+			if p.user == a and p.seq > before:
+				return p
+	return {"velocity": Vector3.ZERO, "target": null}

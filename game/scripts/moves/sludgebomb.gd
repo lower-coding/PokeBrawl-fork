@@ -20,7 +20,9 @@ func in_startup(_delta: float) -> void:
 
 func _target_pos() -> Vector3:
 	var p: Vector3 = l.global_position + l.forward() * d.max * 0.6
-	if l.rival and is_instance_valid(l.rival) and l.rival.state != "ko":
+	if l.crosshair_aim():
+		p = l.ctrl.aim_at
+	elif l.rival and is_instance_valid(l.rival) and l.rival.state != "ko":
 		# Lobbed: it lands where the rival will be when it comes down.
 		p = l.rival.global_position + Vector3(l.rival.velocity.x, 0.0, l.rival.velocity.z) * d.flight_time * l.aim_lead
 	var plane := Vector3(p.x - l.global_position.x, 0, p.z - l.global_position.z)

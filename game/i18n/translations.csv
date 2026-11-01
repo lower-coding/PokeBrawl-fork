@@ -661,6 +661,14 @@ Energy for the team,Energy for the team,Energía para el equipo
 How much energy the team that lost a Pokémon gets.,How much energy the team that lost a Pokémon gets.,Cuánta energía recibe el equipo que perdió un Pokémon.
 League's field closes slower,League's field closes slower,El campo de la Liga se cierra más lento
 How many times slower the League Stadium's field closes in. At 1 it closes as in a 1 vs 1.,How many times slower the League Stadium's field closes in. At 1 it closes as in a 1 vs 1.,Cuántas veces más lento se cierra el campo del Estadio de la Liga. Con 1 se cierra como en un 1 contra 1.
+Aiming,Aiming,Puntería
+Legacy free aim,Legacy free aim,Puntería libre antigua
+No lock-on,No lock-on,Sin fijar objetivo
+Aim assist,Aim assist,Ayuda al apuntar
+"With nothing locked on and the crosshair over the foe: turning the camera gets slower and the aim follows the foe a little, so it is harder to slip off. The higher, the stronger.","With nothing locked on and the crosshair over the foe: turning the camera gets slower and the aim follows the foe a little, so it is harder to slip off. The higher, the stronger.","Sin nada fijado y con el punto de mira sobre el rival: la cámara gira más despacio y la mira sigue un poco al rival, así cuesta más salirse. Cuanto más alto, más fuerte."
+First person,First person,Primera persona
+"On, nobody can lock on: the button does nothing and the camera stays free. The AI still aims on its own.","On, nobody can lock on: the button does nothing and the camera stays free. The AI still aims on its own.","Con Sí, nadie puede fijar objetivo: el botón no hace nada y la cámara queda libre. La IA sigue apuntando por su cuenta."
+"With nothing locked on. Off, moves go exactly where the crosshair in the center of the screen points, up and down too. On, the old way: moves stay level and shots home in on the rival.","With nothing locked on. Off, moves go exactly where the crosshair in the center of the screen points, up and down too. On, the old way: moves stay level and shots home in on the rival.","Sin nada fijado. Con No, los movimientos van justo adonde apunta el punto de mira del centro de la pantalla, también arriba y abajo. Con Sí, a la antigua: los movimientos van a nivel y los disparos persiguen al rival."
 "%s, go!","%s, go!","¡Adelante, %s!"
 Switching!,Switching!,¡Cambio!
 %d of %d still standing,%d of %d still standing,%d de %d siguen en pie
@@ -702,6 +710,10 @@ SpD,SpD,DfE
 Spe,Spe,Vel
 Crosshair,Crosshair,Punto de mira
 "With nothing locked on, marks where your moves go.","With nothing locked on, marks where your moves go.","Sin nada fijado, marca adónde van tus movimientos."
+Crosshair shape,Crosshair shape,Forma del punto de mira
+Cross,Cross,Cruz
+Circle,Circle,Círculo
+"A dot with four ticks round it, or a dot in a ring.","A dot with four ticks round it, or a dot in a ring.","Un punto con cuatro marcas alrededor, o un punto dentro de un anillo."
 Critical hit!,Critical hit!,¡Golpe crítico!
 But it failed!,But it failed!,¡Pero ha fallado!
 Unseen Fist,Unseen Fist,Puño Invisible
