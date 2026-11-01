@@ -19,8 +19,8 @@ extends RefCounted
 ##   descend (flying) LS (L3)  L3            Ctrl
 ##   first person    (none)    (none)        C
 ##   details (menus)  Y        Triangle      X
-## The player can change any of the battle actions in Options (Settings): the glyphs are
-## read from the map, so they always show what is really bound.
+## The player can change any of the battle actions in Options (Settings), and the keys that
+## move (WASD): the glyphs are read from the map, so they always show what is really bound.
 
 const ACTIONS := ["jump", "dodge", "lock_on", "mov1", "mov2", "mov3", "mov4", "pause",
 	"move_left", "move_right", "move_up", "move_down", "cam_left", "cam_right", "cam_up", "cam_down",
@@ -32,6 +32,9 @@ const GLYPHS := {
 	"playstation": {"jump": "✕", "dodge": "○", "lock_on": "R3", "mov1": "L1", "mov2": "R1", "mov3": "L2", "mov4": "R2", "menu_back": "○", "menu_info": "△", "menu_extra": "□", "descend": "L3", "switch1": "□", "switch2": "△", "first_person": "-"},
 	"keyboard": {"jump": "Space", "dodge": "Shift", "lock_on": "Tab", "mov1": "Q", "mov2": "E", "mov3": "RMB", "mov4": "F", "menu_back": "Backspace", "menu_info": "X", "menu_extra": "R", "descend": "Ctrl", "switch1": "1", "switch2": "2", "first_person": "C"},
 }
+## The arrow keys of each direction. Only the other key of a direction can be changed: the arrows
+## stay, like the stick and the D-pad, so the menus can always be used.
+const MOVE_ARROWS := {"move_left": KEY_LEFT, "move_right": KEY_RIGHT, "move_up": KEY_UP, "move_down": KEY_DOWN}
 const PAD_NAME := {
 	"xbox": {JOY_BUTTON_A: "A", JOY_BUTTON_B: "B", JOY_BUTTON_X: "X", JOY_BUTTON_Y: "Y", JOY_BUTTON_LEFT_SHOULDER: "LB",
 		JOY_BUTTON_RIGHT_SHOULDER: "RB", JOY_BUTTON_LEFT_STICK: "LS", JOY_BUTTON_RIGHT_STICK: "RS", JOY_BUTTON_BACK: "View",
@@ -158,12 +161,19 @@ static func event_name(ev: InputEvent, device := "xbox") -> String:
 	return "?"
 
 
+## An arrow key on its direction: it cannot be changed (MOVE_ARROWS).
+static func is_arrow(action: String, ev: InputEvent) -> bool:
+	return ev is InputEventKey and MOVE_ARROWS.get(action, KEY_NONE) == ev.physical_keycode
+
+
 ## Puts "ev" on the action in place of what it had on that kind of device (keyboard and
-## mouse, or gamepad); the other kind is kept.
+## mouse, or gamepad); the other kind is kept. The directions only take keys and mouse buttons.
 static func rebind(action: String, ev: InputEvent) -> void:
 	var pad := is_pad(ev)
+	if pad and MOVE_ARROWS.has(action):
+		return
 	for old in InputMap.action_get_events(action):
-		if is_pad(old) == pad:
+		if is_pad(old) == pad and not is_arrow(action, old):
 			InputMap.action_erase_event(action, old)
 	var clean: InputEvent
 	if ev is InputEventKey:

@@ -575,7 +575,7 @@ func _player_card(side: int) -> void:
 		var my: float = y + 162.0 + i * 55.0
 		var rx := u.edge(x, y, hgt, my + 48.0) + 410.0
 		u.slant(rx - 12.0, my, rw + 12.0, 48.0, Color(0, 0, 0, 0.28))
-		u.type_icon(d.type, rx + 4.0, my + 6.0, 36.0)
+		u.type_icon(Moves.type_for(lo.moves[i], lo.ability), rx + 4.0, my + 6.0, 36.0)
 		u.text_fit(rx + 50.0, my + 10.0, tr(d.display_name), rw - 66.0, 26.0, UiKit.INK, u.bold)
 	if not left and m.online and m.rival_ready:
 		var ry := y + hgt - 84.0
@@ -647,7 +647,7 @@ func _team_slot(side: int, i: int, sp: String, preview: bool, picking: bool, cx:
 		var my: float = y + 236.0 + n * 37.0
 		var rx: float = edge.call(my + 34.0) + 8.0
 		u.slant(rx, my, cw - 18.0, 34.0, Color(0, 0, 0, 0.28))
-		u.type_icon(d.type, rx + 9.0, my + 4.0, 26.0)
+		u.type_icon(Moves.type_for(lo.moves[n], lo.ability), rx + 9.0, my + 4.0, 26.0)
 		u.text_fit(rx + 40.0, my + 6.0, tr(d.display_name), cw - 68.0, 20.0, Color(UiKit.INK, fade), u.bold)
 
 
@@ -672,7 +672,7 @@ const RW := 920.0
 
 func _moves() -> void:
 	var prep := m.prepping()
-	_header(tr("This battle's moves") if prep else tr("Moves"), UiKit.BLUE)
+	_header(tr("Moves"), UiKit.BLUE)
 	var list := m.edit_entries()
 	var sp := m.edit_sp
 	var picking := m.edit_phase == "pokemon"
@@ -732,7 +732,7 @@ func _moves() -> void:
 	# Right: its moves and ability, or the options for a slot, or a move's details.
 	var lo := m.edit_loadout()
 	if m.details and m.shown_move() != "":
-		_details(m.shown_move())
+		_details(m.shown_move(), lo.ability)
 	elif m.edit_phase == "list":
 		_choices(lo)
 	else:
@@ -793,10 +793,11 @@ func _slots(lo: Dictionary) -> void:
 		if i < 4:
 			var id: String = lo.moves[i]
 			var d: Dictionary = Moves.DATA[id]
-			var tc: Color = Roster.TYPE_COLOR.get(d.type, UiKit.GREY)
+			var type := Moves.type_for(id, lo.ability)
+			var tc: Color = Roster.TYPE_COLOR.get(type, UiKit.GREY)
 			u.slant(x, y, RW, 132.0, UiKit.PANEL.lerp(tc.darkened(0.2), o))
 			u.slant(x, y, 16.0, 132.0, tc)
-			u.type_icon(d.type, x + 40.0, y + 22.0, 64.0)
+			u.type_icon(type, x + 40.0, y + 22.0, 64.0)
 			u.title(x + 124.0, y + 18.0, tr(d.display_name).to_upper(), 46.0, UiKit.INK, -1, RW - 340.0)
 			u.text_fit(x + 128.0, y + 82.0, ", ".join(MoveInfo.facts(id).slice(0, 3)), RW - 340.0, 22.0, Color(UiKit.INK, 0.75), u.body)
 			# Right edge: power and cooldown, big figures.
@@ -835,10 +836,11 @@ func _choices(lo: Dictionary) -> void:
 		zone("opt", k, RX + 30.0, y, RW - 70.0 + 62.0 * UiKit.SLANT, 62.0)
 		if m.edit_slot < 4:
 			var d: Dictionary = Moves.DATA[id]
-			var tc: Color = Roster.TYPE_COLOR.get(d.type, UiKit.GREY)
+			var type := Moves.type_for(id, lo.ability)
+			var tc: Color = Roster.TYPE_COLOR.get(type, UiKit.GREY)
 			var equipped: bool = id in lo.moves
 			u.slant(RX + 30.0, y, RW - 70.0, 62.0, tc.darkened(0.15) if sel else UiKit.PANEL_HI)
-			u.type_icon(d.type, RX + 46.0, y + 9.0, 44.0, 1.0 if not equipped or sel else 0.45)
+			u.type_icon(type, RX + 46.0, y + 9.0, 44.0, 1.0 if not equipped or sel else 0.45)
 			var ink := UiKit.INK if (sel or not equipped) else Color(UiKit.INK, 0.4)
 			u.text_fit(RX + 104.0, y + 14.0, tr(d.display_name), RW - 380.0, 30.0, ink, u.heavy)
 			if equipped and not sel:
@@ -857,13 +859,14 @@ func _choices(lo: Dictionary) -> void:
 
 ## A move's details: its games' numbers and ours, each as a meter in its type's color with
 ## the exact figure, then what it does and how to face it.
-func _details(id: String) -> void:
+func _details(id: String, ability: String) -> void:
 	var d: Dictionary = Moves.DATA[id]
-	var tc: Color = Roster.TYPE_COLOR.get(d.type, UiKit.GREY)
+	var type := Moves.type_for(id, ability)
+	var tc: Color = Roster.TYPE_COLOR.get(type, UiKit.GREY)
 	u.slant(RX, 150.0, RW, 840.0, UiKit.PANEL, UiKit.TALL)
 	var hx := u.edge(RX, 150.0, 840.0, 254.0, UiKit.TALL) + 16.0
 	u.slant(hx, 166.0, RW - 60.0, 104.0, tc.darkened(0.15))
-	u.type_icon(d.type, u.edge(hx, 166.0, 104.0, 226.0) + 26.0, 182.0, 72.0)
+	u.type_icon(type, u.edge(hx, 166.0, 104.0, 226.0) + 26.0, 182.0, 72.0)
 	u.title(u.edge(hx, 166.0, 104.0, 230.0) + 116.0, 178.0, tr(d.display_name).to_upper(), 54.0, UiKit.INK, -1, RW - 260.0)
 	u.text_fit(u.edge(hx, 166.0, 104.0, 250.0) + 120.0, 236.0, ", ".join(MoveInfo.facts(id).slice(0, 2)), RW - 260.0, 20.0, Color(UiKit.INK, 0.85), u.bold)
 	var y := 296.0
@@ -901,17 +904,38 @@ func _options() -> void:
 		u.text_fit(110.0 + 16.0 * o, y + 14.0, it.label, 560.0, 28.0, UiKit.INK, u.bold)
 		var value: String = it.value
 		if opts.waiting == it.id:
-			value = tr("Press a key or button...")
+			value = tr("Press a key...") if Controls.MOVE_ARROWS.has(it.id) else tr("Press a key or button...")
 		if it.kind == "slider" and opts.waiting != it.id:
 			var v: float = float(value.trim_suffix("%")) / 100.0
 			u.meter(720.0 + 16.0 * o, y + 22.0, 300.0, 16.0, v, UiKit.YELLOW if o < 0.5 else UiKit.INK, 10)
-		u.text_fit(1150.0 + 16.0 * o, y + 14.0, value, 400.0 if it.kind != "slider" else 110.0, 28.0, UiKit.INK, u.heavy, 1)
+		if opts.waiting != it.id and (it.get("kb_clash", false) or it.get("pad_clash", false)):
+			_clashing_keys(1150.0 + 16.0 * o, y + 14.0, it)
+		else:
+			u.text_fit(1150.0 + 16.0 * o, y + 14.0, value, 400.0 if it.kind != "slider" else 110.0, 28.0, UiKit.INK, u.heavy, 1)
 		y += 68.0
 	var cur: Dictionary = items[opts.cursor]
 	u.slant(1260.0, 150.0, 600.0, 330.0, UiKit.PANEL, UiKit.TALL)
 	u.slant(1260.0, 150.0, 14.0, 330.0, UiKit.RED, UiKit.TALL)
-	u.para(1320.0, 186.0, cur.get("help", ""), 500.0, 26.0, UiKit.INK, u.bold, 1.3, 8)
+	var below := u.para(1320.0, 186.0, cur.get("help", ""), 500.0, 26.0, UiKit.INK, u.bold, 1.3, 8)
+	u.para(1320.0, below + 12.0, "\n".join(cur.get("clashes", [])), 500.0, 26.0, UiKit.RED, u.bold, 1.3, 4)
 	u.hints([[Controls.glyph("jump"), tr("Change")], [tr("< >"), tr("Adjust")], [Controls.glyph("menu_back"), tr("Back")]])
+
+
+## A binding's keys, with those another action also uses in red on a dark mark: the highlighted
+## row is red itself.
+func _clashing_keys(right: float, y: float, it: Dictionary) -> void:
+	var size := u.fit(it.value, 400.0, 28.0, u.heavy)
+	var at_y := y + (28.0 - size) * 0.8
+	var x := right
+	var parts: Array = [[it.kb, it.kb_clash]]
+	if not Controls.MOVE_ARROWS.has(it.id):
+		parts = [[it.pad, it.pad_clash], ["  /  ", false], [it.kb, it.kb_clash]]
+	for part in parts:
+		var w := u.width(part[0], size, u.heavy)
+		if part[1]:
+			u.slant(x - w - 12.0, y - 6.0, w + 16.0, 40.0, UiKit.DARK)
+		u.text(x, at_y, part[0], size, UiKit.RED if part[1] else UiKit.INK, u.heavy, 1)
+		x -= w
 
 
 # ---------------------------------------------------------------- this battle's rules

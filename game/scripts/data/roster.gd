@@ -191,6 +191,17 @@ const POKEMON := {
 		"passive": {"id": "pressure", "display_name": "Pressure",
 			"text": "While it is in play, the rival's moves take 10% longer to come back."},
 	},
+	"sylveon": {
+		"display_name": "Sylveon", "types": ["fairy"], "cat": "special",
+		"style": "Slow and hard to wear down. Sweeps the field with wide waves, hunts with homing stars and steals health from whoever gets close.",
+		"height": 1.35, "radius": 0.55, "poise": 0, "hp": 1100.0, "knockback": 1.05,
+		"speed": 6.6, "accel": 44.0, "turn": 12.0, "jump": 8.6, "gravity": 28.0, "air_control": 0.6,
+		"dodge": {"dist": 4.7, "dur": 0.24, "iframes": [0.04, 0.2], "recovery": 0.2, "charges": 2, "recharge": 1.5},
+		"points": {"locator_hand_primary": "frontpaw_right", "locator_hand_secondary": "frontpaw_left"},
+		"moves": ["moonblast", "swift", "drainingkiss", "hypervoice"],
+		"passive": {"id": "pixilate", "display_name": "Pixilate",
+			"text": "Its Normal moves become Fairy moves and hit 1.2 times as hard."},
+	},
 }
 
 ## Soft type matchups: a disadvantage matters, but it does not decide the battle on its own.

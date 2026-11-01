@@ -9,9 +9,12 @@ extends Action
 ##             on the ground where it lands.
 ##   rage      shakes with anger, then charges in (Facade, Lash Out); red while it hits twice
 ##             as hard.
+##   kiss      leans back for an instant, then a small hop forward into a kiss, with a burst of
+##             hearts where it lands (Draining Kiss; Fighter.on_strike heals).
 ## Where it hits: a sphere "reach" in front at "hit_height" (share of its height), radius
 ## "radius"; "advance" meters forward while active. "recovery_on_hit": a landed hit recovers
-## this soon (Lash Out: only a miss pays the long recovery).
+## this soon (Lash Out: only a miss pays the long recovery). "sound_hit": what a landed hit sounds
+## like, on top of its type's impact.
 
 var _dust := 0.0
 
@@ -43,7 +46,7 @@ func in_startup(delta: float) -> void:
 
 
 func _color() -> Color:
-	if d.motion == "rage" and Damage.power_of(d, l, null) > float(d.get("power", 0)):
+	if d.motion == "rage" and Damage.base_power(d, l, null) > float(d.get("power", 0)):
 		return Color(1.0, 0.35, 0.25)          # at full power
 	return d.get("color", Roster.TYPE_COLOR[d.type])
 
@@ -52,10 +55,19 @@ func on_active() -> void:
 	var h: float = l.data.height
 	if d.motion == "headbutt":
 		l.velocity.y = maxf(l.velocity.y, 3.5)
+	elif d.motion == "kiss":
+		l.velocity.y = maxf(l.velocity.y, 2.2)
 	advance_by(float(d.get("advance", 2.0)) / d.active * 0.5)
-	hit({"shape": "sphere", "center": Vector3(0, h * float(d.get("hit_height", 0.5)), l.data.radius + d.reach * 0.5), "radius": d.radius})
+	var values := {"shape": "sphere", "center": Vector3(0, h * float(d.get("hit_height", 0.5)), l.data.radius + d.reach * 0.5), "radius": d.radius}
+	if d.has("sound_hit"):
+		values.on_strike = func(o: Node, res: String):
+			if res == "hit":
+				l.main.audio.play_sound(d.sound_hit, o.center(), -3.0)
+	hit(values)
 	var col := _color()
 	match d.motion:
+		"kiss":
+			l.main.vfx.cobble("disarmingvoice_actorhearts", l.point("locator_mouth"), null, h)
 		"shove":
 			l.main.vfx.wave(l.global_position + l.forward() * (l.data.radius + 0.8), 2.6, 0.35, col, 0.07)
 			l.main.shake_camera(0.12, l.global_position)
@@ -105,4 +117,8 @@ func pose() -> Dictionary:
 			return {"side": 0.08 * sin(t * 60.0), "stretch": 1.04, "tilt": -0.1}
 		["rage", "active"]:
 			return {"tilt": 0.5, "stretch": 1.1, "anim": "physical"}
+		["kiss", "startup"]:
+			return {"tilt": -0.2 * k, "stretch": 0.95, "anim": "special", "reset": t < 0.02}
+		["kiss", "active"]:
+			return {"tilt": 0.35, "stretch": 1.1}
 	return {"tilt": 0.12 * (1.0 - t / maxf(d.recovery, 0.01))}

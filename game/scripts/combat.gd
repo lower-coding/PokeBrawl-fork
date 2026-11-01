@@ -16,9 +16,18 @@ var clock := 0.0
 
 
 func add_hit(g: Hit) -> Hit:
+	_retype(g)
 	g.born = clock
 	hits.append(g)
 	return g
+
+
+## Pixilate: its user's Normal moves hit as Fairy ones, and look pink. Every hit passes through
+## add_hit or projectile, so this is the one place that needs to know.
+func _retype(g: Hit) -> void:
+	if g.type == "normal" and g.user is Fighter and is_instance_valid(g.user) and g.user.data.passive.id == "pixilate":
+		g.type = "fairy"
+		g.pink = true
 
 
 func remove(g: Hit) -> void:
@@ -77,6 +86,7 @@ func projectile(p: Dictionary) -> Dictionary:
 		# Sand Veil: in a sandstorm, projectiles follow it worse (its evasion in the games).
 		if p.target is Fighter and p.target.data.passive.id == "sandveil" and main.weather and main.weather.is_on("sand"):
 			p.track *= 0.8
+	_retype(p.hit)
 	p.hit.local = false
 	p.hit.shape = "sphere"
 	p.hit.radius = p.radius
@@ -488,7 +498,7 @@ func _move_projectiles(delta: float) -> void:
 		if finished:
 			p.alive = false
 			if p.has("on_impact") and p.on_impact.is_valid() and not p.get("broken", false):
-				p.on_impact.call(where, against)
+				Vfx.pink_if(p.hit.pink, p.on_impact.bind(where, against))
 			if is_instance_valid(p.get("node")):
 				p.node.queue_free()
 			projectiles.remove_at(i)
@@ -571,19 +581,20 @@ func apply(g: Hit, o: Node, point: Vector3) -> String:
 	if res == "":
 		return ""
 	if g.on_strike.is_valid():
-		g.on_strike.call(o, res)
+		Vfx.pink_if(g.pink, g.on_strike.bind(o, res))
 	if res in ["hit", "armor"]:
 		var strength := g.strength
 		if attacker and is_instance_valid(attacker):
 			attacker.on_strike(o, g, res)
 			attacker.freeze(g.hitstop)
-		main.vfx.impact(point, g.type, strength, g.contact)
-		var now := Time.get_ticks_msec()
-		if now - int(g.get_meta("fx_ms", -100000)) > 280:
-			g.set_meta("fx_ms", now)
-			var looks = attacker.center() if attacker and is_instance_valid(attacker) else null
-			for piece in Moves.DATA.get(g.move_id, {}).get("fx_hit", []):
-				main.vfx.cobble(piece, point, looks, o.data.height)
+		Vfx.pink_if(g.pink, func():
+			main.vfx.impact(point, g.type, strength, g.contact)
+			var now := Time.get_ticks_msec()
+			if now - int(g.get_meta("fx_ms", -100000)) > 280:
+				g.set_meta("fx_ms", now)
+				var looks = attacker.center() if attacker and is_instance_valid(attacker) else null
+				for piece in Moves.DATA.get(g.move_id, {}).get("fx_hit", []):
+					main.vfx.cobble(piece, point, looks, o.data.height))
 		main.audio.impact(g.type, strength, point)
 		main.shake_camera(0.08 + 0.12 * strength, point)
 		for l in [attacker, o]:
@@ -618,7 +629,7 @@ func _predicted_hit(g: Hit, o: Fighter, point: Vector3, mult: float, flow: bool)
 	if g.cat == "status":
 		# The rival decides whether it takes (Fighter._status_move); nothing to predict.
 		if g.on_strike.is_valid():
-			g.on_strike.call(o, "status")
+			Vfx.pink_if(g.pink, g.on_strike.bind(o, "status"))
 		return "status"
 	if Moves.DATA.get(g.move_id, {}).get("needs_attacking", false) and not o.is_attacking():
 		main.vfx.text(o.center() + Vector3.UP * 0.9, main.tr("But it failed!"), Color(0.75, 0.77, 0.85))
@@ -638,13 +649,13 @@ func _predicted_hit(g: Hit, o: Fighter, point: Vector3, mult: float, flow: bool)
 			attacker.freeze(g.hitstop)
 			o.freeze(g.hitstop)
 	if not flow or randf() < 0.4:
-		main.vfx.impact(point, g.type, strength, g.contact)
+		Vfx.pink_if(g.pink, main.vfx.impact.bind(point, g.type, strength, g.contact))
 		main.audio.impact(g.type, strength, point)
 		main.shake_camera(0.08 + 0.12 * strength, point)
 		if attacker is Fighter and attacker.has_method("rumble_pad"):
 			attacker.rumble_pad(0.2 + 0.25 * strength, 0.35 + 0.3 * strength, 0.08 + 0.06 * strength)
 	if g.on_strike.is_valid():
-		g.on_strike.call(o, "hit")
+		Vfx.pink_if(g.pink, g.on_strike.bind(o, "hit"))
 	return "hit"
 
 

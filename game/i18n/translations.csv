@@ -792,3 +792,36 @@ Other pick,Other pick,Otra elección
 Other group,Other group,Otro grupo
 %s's moves,%s's moves,Movimientos de %s
 Common moves,Common moves,Movimientos comunes
+"Press to change it, then press the new key. Esc cancels. The arrow keys, the stick and the D-pad always move too.","Press to change it, then press the new key. Esc cancels. The arrow keys, the stick and the D-pad always move too.","Pulsa para cambiarla y luego pulsa la tecla nueva. Esc cancela. Las flechas, el stick y la cruceta siempre mueven también."
+Hit sound,Hit sound,Sonido de golpe
+"A short ping when you hit the foe, just one for a quick burst of hits.","A short ping when you hit the foe, just one for a quick burst of hits.","Un ping corto al golpear al rival, solo uno en una ráfaga rápida de golpes."
+Move forward,Move forward,Avanzar
+Move back,Move back,Retroceder
+Move left,Move left,Ir a la izquierda
+Move right,Move right,Ir a la derecha
+Press a key...,Press a key...,Pulsa una tecla...
+C,C,C
+%s also does: %s,%s also does: %s,%s también hace: %s
+Infatuated!,Infatuated!,¡Enamorado!
+Immobilized by love!,Immobilized by love!,¡Paralizado de amor!
+%s is immobilized by love!,%s is immobilized by love!,¡El amor le impide atacar a %s!
+Cute Charm,Cute Charm,Gran Encanto
+Love,Love,Amor
+Draining Kiss,Draining Kiss,Beso Drenaje
+Moonblast,Moonblast,Fuerza Lunar
+Swift,Swift,Rapidez
+Dazzling Gleam,Dazzling Gleam,Brillo Mágico
+Hyper Voice,Hyper Voice,Vozarrón
+Sylveon,Sylveon,Sylveon
+Pixilate,Pixilate,Piel Feérica
+A quick kiss at close range. It heals the user by most of the damage dealt.,A quick kiss at close range. It heals the user by most of the damage dealt.,Un beso rápido a corta distancia. Cura al usuario la mayor parte del daño causado.
+A bright ball of moonlight. It can lower the target's Sp. Atk.,A bright ball of moonlight. It can lower the target's Sp. Atk.,Una bola brillante de luz de luna. Puede bajar el At. Esp. del objetivo.
+"Five star-shaped rays that chase the target. They never miss, unless it dodges.","Five star-shaped rays that chase the target. They never miss, unless it dodges.","Cinco rayos en forma de estrella que persiguen al objetivo. Nunca fallan, salvo que esquive."
+A wide sheet of light rolls across the field.,A wide sheet of light rolls across the field.,Un ancho manto de luz recorre el campo.
+A great shout spreads across the field in waves of sound.,A great shout spreads across the field in waves of sound.,Un gran grito se extiende por el campo en ondas de sonido.
+"It only reaches a few meters and heals nothing if it misses: stay away, or dodge through it and punish.","It only reaches a few meters and heals nothing if it misses: stay away, or dodge through it and punish.","Solo alcanza unos metros y no cura nada si falla: mantente lejos, o esquívalo atravesándolo y castiga."
+The glow warns you and it barely turns: sidestep late or dodge through it.,The glow warns you and it barely turns: sidestep late or dodge through it.,El brillo te avisa y apenas gira: hazte a un lado en el último momento o esquívala atravesándola.
+You cannot outrun them: a dodge makes them lose you. Walls stop them too.,You cannot outrun them: a dodge makes them lose you. Walls stop them too.,No puedes dejarlas atrás corriendo: al esquivar te pierden. Las paredes también las detienen.
+"Slow and hard to wear down. Sweeps the field with wide waves, hunts with homing stars and steals health from whoever gets close.","Slow and hard to wear down. Sweeps the field with wide waves, hunts with homing stars and steals health from whoever gets close.","Lento y difícil de desgastar. Barre el campo con ondas anchas, caza con estrellas que persiguen y roba salud a quien se acerca."
+Its Normal moves become Fairy moves and hit 1.2 times as hard.,Its Normal moves become Fairy moves and hit 1.2 times as hard.,"Sus movimientos Normal pasan a ser de tipo Hada y golpean 1,2 veces más fuerte."
+"Each contact move that hits it has a 30% chance of infatuating the attacker for 8 s: half of its moves fail, unless either one leaves the field.","Each contact move that hits it has a 30% chance of infatuating the attacker for 8 s: half of its moves fail, unless either one leaves the field.","Cada movimiento de contacto que lo golpea tiene un 30% de probabilidad de enamorar al atacante durante 8 s: la mitad de sus movimientos fallan, salvo que uno de los dos deje el campo."

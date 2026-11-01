@@ -202,7 +202,9 @@ and teams, which hold only one. **Without a Cobblemon model**, an openly license
 non-commercial use can come in with its credit (`tools/import_pokemans.py`); its data still comes from Cobblemon.
 **Legendaries** are skipped by `tools/import_cobblemon.py` unless they are named in `ROSTER_LEGENDARIES`
 (Mewtwo). **A model with no attack clips** gets ours in `sources/cobblemon/<id>/moves.animation.json`, which
-`convert()` merges so the source's own file stays untouched. Mewtwo keeps its real stats (680 in all, the
+`convert()` merges so the source's own file stays untouched; so does **one whose walk lives in Cobblemon's
+poser code** (Sylveon's `q.quadruped_walk`: `tools/sylveon_walk.py`). A species outside generation 1 needs its
+generation named: `import_cobblemon.py <clone> 6 --only=sylveon`. Mewtwo keeps its real stats (680 in all, the
 highest here) and pays in its kit: expect it on top until playtesting says otherwise.
 
 ---

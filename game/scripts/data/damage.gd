@@ -14,12 +14,14 @@ extends RefCounted
 ## snow; Solar Power).
 ## A move with "crit" is always a critical hit, as in the games: ×1.5, ignoring the user's
 ## lowered attack and the target's raised defense. One with "hits_def" is special but measured
-## against the target's Defense, not its Sp. Def (Psyshock).
+## against the target's Defense, not its Sp. Def (Psyshock). Pixilate turns the user's Normal moves
+## into Fairy ones (Moves.type_for), for STAB and the weather too, and they hit ×1.2 (PIXILATE).
 
 const BATTLE_LENGTH := 4.2
 const STAB := 1.5
 const CRIT := 1.5
 const ROLL := 0.925
+const PIXILATE := 1.2
 
 
 ## Damage of hit "g" from "attacker" to "target" ("affinity": type effectiveness). Without
@@ -51,18 +53,28 @@ static func dealt(g: Hit, attacker: Fighter, target: Fighter, affinity: float) -
 		if not physical and w.is_on("sun") and attacker.data.passive.id == "solarpower":
 			atk *= 1.5
 	var base := (22.0 * power * atk / def) / 50.0 + 2.0
-	if d.type in attacker.types:
+	# Whoever threw it decides its type (a shot sent back keeps its thrower's).
+	var type := Moves.type_for(g.move_id, attacker.data.passive.id)
+	if type in attacker.types:
 		base *= STAB
 	if crit:
 		base *= CRIT
 	var share: float = g.damage / maxf(float(d.get("power_at", d.get("damage", g.damage))), 0.01)
 	if w:
-		base *= w.type_mult(d.type)
+		base *= w.type_mult(type)
 	return base * affinity * ROLL * Stats.HP_MULT / BATTLE_LENGTH / float(d.get("split", 1)) * share * g.bonus
 
 
-## The move's power in the games; Electro Ball's depends on how much faster the user is.
+## The power it hits with: the games', and Pixilate's on the Normal moves of whoever has it.
 static func power_of(d: Dictionary, attacker: Fighter, target: Fighter) -> float:
+	var power := base_power(d, attacker, target)
+	if attacker and d.get("type", "") == "normal" and attacker.data.passive.id == "pixilate":
+		power *= PIXILATE
+	return power
+
+
+## The move's power in the games; Electro Ball's depends on how much faster the user is.
+static func base_power(d: Dictionary, attacker: Fighter, target: Fighter) -> float:
 	if d.get("power_by", "") == "speed" and attacker and target and attacker.data.has("stats"):
 		var ratio: float = float(attacker.data.stats.spe) / maxf(float(target.data.stats.spe), 1.0)
 		if ratio >= 4.0:

@@ -2,11 +2,12 @@ class_name Audio
 extends Node
 ## Battle sound. Move and impact sounds come from Cobblemon (game/sounds/moves/,
 ## MPL 2.0); the cries, from each Pokémon. What Cobblemon does not have (dodge,
-## footsteps, falls, armor, charges) is synthesized here in code and is marked as
+## footsteps, falls, armor, charges, the hit ping) is synthesized here in code and is marked as
 ## placeholder in the README.
 ## Players are reused: never created on every hit.
 
 const DIR := "res://sounds/moves/"
+const PING_GAP := 150            # ms between hit pings: a burst of hits is one ping
 
 ## Key -> Cobblemon folder and file prefix (one is picked at random).
 const COBBLEMON := {
@@ -64,6 +65,11 @@ const COBBLEMON := {
 	"confusion": ["confusion", "confusion_actor"], "confusion_hit": ["confusion", "confusion_target"],
 	"teleport": ["kinesis", "kinesis_actor"], "calmmind": ["kinesis", "kinesis_actor"], "agility": ["quickattack", "quickattack_actor"],
 	"psyshock": ["psychic", "psychic_actor"], "psyshock_hit": ["psychic", "psychic_target"],
+	"drainingkiss": ["megadrain", "megadrain_actor"], "drainingkiss_hit": ["megadrain", "megadrain_target"],
+	"moonblast": ["shadowball", "shadowball_actor"], "moonblast_hit": ["psychic", "psychic_target"],
+	"swift": ["magicalleaf", "magicalleaf_actor"], "swift_hit": ["magicalleaf", "magicalleaf_target"],
+	"dazzlinggleam": ["lightscreen", "lightscreen_actor"], "dazzlinggleam_hit": ["psychic", "psychic_target"],
+	"hypervoice": ["sing", "sing_actor"], "hypervoice_hit": ["kinesis", "kinesis_target"],
 }
 
 var main: Node
@@ -71,7 +77,10 @@ var _pool: Array = []
 var _cache := {}
 var _synth := {}
 var volume := 1.0
+var pings := 0                   # how many so far (the tests count them)
 var _ui: AudioStreamPlayer
+var _ping: AudioStreamPlayer
+var _ping_ms := -PING_GAP
 
 
 ## Every sound goes through one of two buses under Master: "SFX" (effects, cries, the
@@ -115,6 +124,7 @@ func _ready() -> void:
 	_synth["ui_move"] = _notes([1320.0], 0.035)
 	_synth["ui_ok"] = _notes([880.0, 1320.0], 0.055)
 	_synth["ui_back"] = _notes([990.0, 660.0], 0.05)
+	_synth["ping"] = _notes([1760.0], 0.12)
 
 
 func _player() -> AudioStreamPlayer3D:
@@ -194,6 +204,23 @@ func ui(kind: String) -> void:
 	_ui.volume_db = vol
 	_ui.pitch_scale = pitch
 	_ui.play()
+
+
+## The player's hit landed: a short high note, not placed in the world, so it reads the same
+## however far the foe is.
+func ping() -> void:
+	var now := Time.get_ticks_msec()
+	if now - _ping_ms < PING_GAP:
+		return
+	_ping_ms = now
+	pings += 1
+	if _ping == null:
+		_ping = AudioStreamPlayer.new()
+		_ping.bus = "SFX"
+		_ping.stream = _synth.get("ping")
+		_ping.volume_db = -8.0
+		add_child(_ping)
+	_ping.play()
 
 
 func _touch(s: AudioStream, pos: Vector3, vol: float, tone: float) -> void:

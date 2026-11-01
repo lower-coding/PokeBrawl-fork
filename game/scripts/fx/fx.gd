@@ -120,6 +120,7 @@ func play(id: String, pos: Vector3, target = null, opts := {}) -> Dictionary:
 		vars.target_distance = to.length()
 	var em := {"d": d, "pos": pos, "basis": basis, "age": 0.0, "vars": vars, "parts": [], "acc": 0.0,
 		"fired": {}, "active": true, "dur": opts.get("dur", 3.0), "loops": 0, "low": opts.get("low", false),
+		"pink": opts.get("pink", Vfx.pink),
 		"ground": main.ground_at(pos, pos.y + 1.0) if main else 0.0}
 	ctx.e = vars
 	ctx.p = {}
@@ -147,7 +148,7 @@ func line(id: String, from_pos: Vector3, to_pos: Vector3) -> Dictionary:
 ## Draws a pixelated sprite this frame (projectile balls, for example).
 ## `frames` in a horizontal or vertical strip depending on the texture's shape.
 func sprite(tex_path: String, pos: Vector3, size: float, frame: int, frames: int, color := Color.WHITE) -> void:
-	_sprites.append([tex_path, pos, size, frame, frames, color])
+	_sprites.append([tex_path, pos, size, frame, frames, color, Vfx.pink])
 
 
 ## One-shot animation: runs through the frames of a strip and disappears.
@@ -155,7 +156,7 @@ func sprite(tex_path: String, pos: Vector3, size: float, frame: int, frames: int
 ## halos); otherwise alpha is cut at one half like in Cobblemon.
 func anim(tex_path: String, pos: Vector3, size: float, frames: int, dur: float, color := Color.WHITE, turn := 0.0, translucent := false) -> void:
 	_anims.append({"tex": tex_path, "pos": pos, "size": size, "frames": frames, "dur": dur, "t": 0.0, "color": color, "turn": turn,
-		"mat": "particles_blend" if translucent else "particles_alpha"})
+		"mat": "particles_blend" if translucent else "particles_alpha", "pink": Vfx.pink})
 
 
 static func _tex(path: String) -> Texture2D:
@@ -165,11 +166,11 @@ static func _tex(path: String) -> Texture2D:
 	return _tex_cache[path]
 
 
-func _draw_sprite(tex_path: String, pos: Vector3, size: float, frame: int, frames: int, color: Color, turn: float, cam: Camera3D, material := "particles_alpha") -> void:
+func _draw_sprite(tex_path: String, pos: Vector3, size: float, frame: int, frames: int, color: Color, turn: float, cam: Camera3D, material := "particles_alpha", pink := false) -> void:
 	var tex := _tex(tex_path)
 	if tex == null:
 		return
-	var b = _bucket_tex(tex_path, tex, material)
+	var b = _bucket_tex(tex_path, tex, material, pink)
 	var w := float(tex.get_width())
 	var h := float(tex.get_height())
 	var uvr := Color(0, 0, 1, 1)
@@ -213,7 +214,7 @@ func play_sequence(seq_id: String, actor: Dictionary, target: Dictionary, time_s
 		var loc: String = step.loc
 		var pos: Vector3 = subject.get(loc, subject.root)
 		var looks: Vector3 = other.get("middle", other.root)
-		var opts := {"height": subject.get("height", 1.0)}
+		var opts := {"height": subject.get("height", 1.0), "pink": Vfx.pink}
 		var id: String = step.fx
 		if t <= 0.0:
 			play(id, pos, looks, opts)
@@ -263,7 +264,7 @@ func _fire_def(em: Dictionary, ev: Dictionary, pos: Vector3) -> void:
 		_fire_def(em, ev.randomize[randi() % ev.randomize.size()], pos)
 	if ev.has("particle_effect"):
 		var id: String = String(ev.particle_effect.effect).split(":")[-1]
-		var child := play(id, pos, null, {"basis": em.basis, "low": em.low})
+		var child := play(id, pos, null, {"basis": em.basis, "low": em.low, "pink": em.pink})
 		if not child.is_empty():
 			for k in ["target_deltax", "target_deltay", "target_deltaz", "target_distance", "entity_height", "entity_width"]:
 				child.vars[k] = em.vars[k]
@@ -407,7 +408,7 @@ func _process(delta: float) -> void:
 			e += 1
 	if cam != null:
 		for s in _sprites:
-			_draw_sprite(s[0], s[1], s[2], s[3], s[4], s[5], 0.0, cam)
+			_draw_sprite(s[0], s[1], s[2], s[3], s[4], s[5], 0.0, cam, "particles_alpha", s[6])
 		var k := 0
 		while k < _anims.size():
 			var a: Dictionary = _anims[k]
@@ -416,7 +417,7 @@ func _process(delta: float) -> void:
 				_anims.remove_at(k)
 				continue
 			var fr := mini(int(a.t / a.dur * a.frames), a.frames - 1)
-			_draw_sprite(a.tex, a.pos, a.size, fr, a.frames, a.color, a.turn, cam, a.mat)
+			_draw_sprite(a.tex, a.pos, a.size, fr, a.frames, a.color, a.turn, cam, a.mat, a.pink)
 			k += 1
 	_sprites.clear()
 	particles = 0
@@ -476,7 +477,7 @@ func _update_particles(em: Dictionary, delta: float, cam: Camera3D) -> void:
 	var bb: Dictionary = c.get("particle_appearance_billboard", {})
 	var tint: Dictionary = c.get("particle_appearance_tinting", {})
 	var tl: Dictionary = c.get("particle_lifetime_events", {}).get("timeline", {})
-	var bucket = _bucket(em.d)
+	var bucket = _bucket(em.d, em.pink)
 	var basis: Basis = em.basis
 	var i := 0
 	while i < em.parts.size():
@@ -526,20 +527,20 @@ func _update_particles(em: Dictionary, delta: float, cam: Camera3D) -> void:
 
 # ---------------------------------------------------------------- drawing
 
-func _bucket(d: Dictionary):
+func _bucket(d: Dictionary, pink := false):
 	if d.tex_res == null:
 		return null
-	return _bucket_tex(d.tex, d.tex_res, d.material)
+	return _bucket_tex(d.tex, d.tex_res, d.material, pink)
 
 
-func _bucket_tex(path: String, tex: Texture2D, material: String):
-	var key: String = path + "|" + material
+func _bucket_tex(path: String, tex: Texture2D, material: String, pink := false):
+	var key: String = path + "|" + material + ("|pink" if pink else "")
 	if _buckets.has(key):
 		return _buckets[key]
 	var mesh := QuadMesh.new()
 	mesh.size = Vector2.ONE
 	var mat := ShaderMaterial.new()
-	mat.shader = _shader(material)
+	mat.shader = _shader(material, pink)
 	mat.set_shader_parameter("tex", tex)
 	var mm := MultiMesh.new()
 	mm.transform_format = MultiMesh.TRANSFORM_3D
@@ -559,9 +560,10 @@ func _bucket_tex(path: String, tex: Texture2D, material: String):
 	return b
 
 
-static func _shader(material: String) -> Shader:
-	if _shaders.has(material):
-		return _shaders[material]
+static func _shader(material: String, pink := false) -> Shader:
+	var key: String = material + ("|pink" if pink else "")
+	if _shaders.has(key):
+		return _shaders[key]
 	var mode := "blend_mix, depth_draw_never"
 	var alpha := "ALPHA = c.a;"
 	if material == "particles_add":
@@ -582,7 +584,9 @@ void fragment() {
 	%s
 }
 """ % [mode, alpha]
-	_shaders[material] = s
+	if pink:
+		s.code = VfxShaders.pink(s.code)
+	_shaders[key] = s
 	return s
 
 

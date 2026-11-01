@@ -47,6 +47,7 @@ var bonus := 1.0               # damage multiplier (a projectile sent back hits 
 var born := 0.0                # Combat's clock when it came out (deflect timing)
 var quiet := false             # a follow-up blow of a flurry: the effectiveness is not told again
 var cut := 0.0                 # a stream stopped short by another (m from its origin; 0: not cut)
+var pink := false              # turned by Pixilate: what it does on landing has its filter (Vfx.pink)
 
 
 ## What share of its move one hit is worth (Aura Sphere's charge; 1 otherwise).
@@ -62,7 +63,7 @@ func copy() -> Hit:
 	var h := Hit.new()
 	for k in ["user", "shape", "local", "center", "a", "b", "radius", "dir", "length", "angle", "r_in", "r_out",
 			"ground_only", "damage", "type", "cat", "contact", "knock", "push", "push_dir", "lift", "stun",
-			"knocks_down", "hitstop", "strength", "effect", "interval", "lifetime", "move_id", "source", "bonus", "quiet"]:
+			"knocks_down", "hitstop", "strength", "effect", "interval", "lifetime", "move_id", "source", "bonus", "quiet", "pink"]:
 		h.set(k, get(k))
 	return h
 

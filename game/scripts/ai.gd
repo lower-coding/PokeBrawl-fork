@@ -22,6 +22,7 @@ const DIFFICULTY := {
 }
 const SWITCH_MIN_DIST := 4.0     # closer than this, the rival would just hit it out of the recall
 const SWITCH_RETRY := 0.3        # seconds until it looks again when the moment was not safe
+const SWITCH_CHARMED := 0.5      # how much worse staying looks while infatuated (a switch cures it)
 
 ## Each Pokémon's style: preferred distance and eagerness to attack.
 const PROFILE := {
@@ -39,6 +40,7 @@ const PROFILE := {
 	"urshifu": {"dist": [1.5, 4.5], "aggression": 0.75, "circle_around": 0.5},
 	"urshifurapidstrike": {"dist": [2.0, 6.0], "aggression": 0.65, "circle_around": 0.6},
 	"mewtwo": {"dist": [4.0, 9.0], "aggression": 0.6, "circle_around": 0.7},
+	"sylveon": {"dist": [4.0, 9.0], "aggression": 0.5, "circle_around": 0.5},
 }
 
 var main: Node
@@ -167,9 +169,9 @@ func _edge_guard() -> void:
 # ---------------------------------------------------------------- switching
 
 ## Every so often: if a teammate would do clearly better than the one out, sends it out. It
-## counts what leaving costs: stat stages won are lost, and lowered ones go away. It does not
-## try with the rival close by or attacking, or with a shot on its way, which would cut the
-## recall: it looks again in a moment.
+## counts what leaving costs: stat stages won are lost, and lowered ones go away, as does being
+## infatuated. It does not try with the rival close by or attacking, or with a shot on its way,
+## which would cut the recall: it looks again in a moment.
 func _consider_switch(seen: Dictionary, dist: float, diff: Dictionary, delta: float) -> bool:
 	if me.party == null:
 		return false
@@ -183,7 +185,7 @@ func _consider_switch(seen: Dictionary, dist: float, diff: Dictionary, delta: fl
 	var stages := 0
 	for k in me.stages:
 		stages += int(me.stages[k])
-	var here: float = Party.score(me, rival) + 0.15 * stages
+	var here: float = Party.score(me, rival) + 0.15 * stages - (SWITCH_CHARMED if me.charmed_by != "" else 0.0)
 	var best := -1
 	var best_score: float = here + float(diff.switch_margin)
 	for slot in 2:
@@ -621,7 +623,7 @@ func _status_useless(move: String) -> bool:
 		return true
 	if o.status != "" or o.status_lock > 0.0 or o.drowsy > 0.0:
 		return true
-	if d.get("respects_types", false) and Roster.immune(d.type, o.types):
+	if d.get("respects_types", false) and Roster.immune(Moves.type_for(move, me.data.passive.id), o.types):
 		return true
 	if d.get("powder", false) and "grass" in o.types:
 		return true

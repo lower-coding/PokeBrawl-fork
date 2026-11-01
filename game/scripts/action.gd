@@ -37,12 +37,25 @@ var _air_advance := false
 var _live_pieces: Array = []   # [Fx emitter, locator]: they follow the body
 
 
+## A Normal move of a Pokémon with Pixilate: all its effects come out through the filter (Vfx.pink).
+func pixilated() -> bool:
+	return d.get("type", "") == "normal" and l.data.passive.id == "pixilate"
+
+
 func start() -> void:
+	Vfx.pink_if(pixilated(), _start)
+
+
+func _start() -> void:
 	_pieces("fx_startup")
 	on_start()
 
 
 func step(delta: float) -> void:
+	Vfx.pink_if(pixilated(), _step.bind(delta))
+
+
+func _step(delta: float) -> void:
 	t += delta
 	total += delta
 	for p in _live_pieces:
@@ -101,7 +114,7 @@ func finish(interrupted: bool) -> void:
 	for h in _hits:
 		l.main.combat.remove(h)
 	_hits.clear()
-	on_end(interrupted)
+	Vfx.pink_if(pixilated(), on_end.bind(interrupted))
 
 
 # ---------------------------------------------------------------- hooks

@@ -47,7 +47,7 @@ godot --path game -- --p1=charizard --p2=pikachu --diff=hard --stage=league
 
 | Argument | Values |
 |---|---|
-| `--p1`, `--p2` | `pikachu`, `snorlax`, `charizard`, `blastoise`, `venusaur`, `lucario`, `gengar`, `garchomp`, `greninja`, `scizor`, `goodra`, `urshifu`, `urshifurapidstrike`, `mewtwo` |
+| `--p1`, `--p2` | `pikachu`, `snorlax`, `charizard`, `blastoise`, `venusaur`, `lucario`, `gengar`, `garchomp`, `greninja`, `scizor`, `goodra`, `urshifu`, `urshifurapidstrike`, `mewtwo`, `sylveon` |
 | `--team`, `--team2` | a 3 vs 3 against the AI (prototype): `--team=charizard,lucario,venusaur`; the first one leads, a missing `--team2` is filled from the roster. See [3 vs 3](#3-vs-3-prototype) |
 | `--rules` | that battle's 3 vs 3 rules: `--rules=recall:0.4,lockout:5,bench_heal:0.5` (the ids and limits are in [battle_rules.gd](game/scripts/data/battle_rules.gd)) |
 | `--diff` | `easy`, `normal`, `hard` |
@@ -59,7 +59,7 @@ godot --path game -- --p1=charizard --p2=pikachu --diff=hard --stage=league
 
 - **Battle** against the AI (easy, normal, hard), **Online** and **Training**, 1 vs 1 or 3 vs 3.
 - **Moves:** each Pokémon's four moves and its ability, picked from the ones it learns in the
-  games (97 moves and 27 abilities so far). Every move has its details: power, cooldown, reach,
+  games (102 moves and 30 abilities so far). Every move has its details: power, cooldown, reach,
   timings and how to counter it. **Restore defaults** puts them back.
 - **Profile:** your trainer (nine, with the games' sprites) and your name. Your trainer stands
   by the field, throws the Poké Ball at the start and reacts to the battle; online, your rival
@@ -77,7 +77,7 @@ godot --path game -- --p1=charizard --p2=pikachu --diff=hard --stage=league
 
 | Action | Xbox | PlayStation | Keyboard and mouse |
 |---|---|---|---|
-| Move | Left stick | Left stick | WASD |
+| Move | Left stick | Left stick | WASD (can be changed in Options) or arrows |
 | Camera | Right stick | Right stick | Mouse |
 | Jump | A | ✕ | Space |
 | Dodge | B | ○ | Shift |
@@ -96,9 +96,10 @@ godot --path game -- --p1=charizard --p2=pikachu --diff=hard --stage=league
 
 In the menus: A / ✕ / Space or left click picks, B / ○ / Backspace or right click goes back,
 Y / △ / X shows a move's details, and X / □ / R restores the defaults in the Moves screen. The
-mouse wheel scrolls. The Moves menu sets each Pokémon's defaults; **Edit Pokémon**, once the
-Pokémon are picked, changes the moves and ability of just those picks, for that battle. Y / △ / X
-picks a random Pokémon on the selection, and RB / R1 / E rolls random moves before the battle.
+mouse wheel scrolls. The Moves menu sets each Pokémon's moves and ability; **Edit Pokémon**, once
+the Pokémon are picked, does the same for just those picks, and it is saved too (the AI's picks
+have their own). Y / △ / X picks a random Pokémon on the selection, and RB / R1 / E rolls random
+moves before the battle, which last for that battle unless you then change one by hand.
 
 ## How battles work
 
@@ -168,20 +169,21 @@ Default moves and ability, and the abilities each one can pick. The Moves screen
 
 | Pokémon | Types | Default moves | Abilities | Moves to pick from |
 |---|---|---|---|---|
-| **Ash's Pikachu** | Electric | Thunder Shock · Quick Attack · Iron Tail · Electro Ball | Static, Lightning Rod | 28 |
-| **Snorlax** | Normal | Body Slam · Ice Punch · Earthquake · Rest | Thick Fat, Immunity, Gluttony | 40 |
-| **Charizard** | Fire / Flying | Flamethrower · Air Slash · Dragon Claw · Flare Blitz | Blaze, Solar Power | 40 |
+| **Ash's Pikachu** | Electric | Thunder Shock · Quick Attack · Iron Tail · Electro Ball | Static, Lightning Rod | 30 |
+| **Snorlax** | Normal | Body Slam · Ice Punch · Earthquake · Rest | Thick Fat, Immunity, Gluttony | 41 |
+| **Charizard** | Fire / Flying | Flamethrower · Air Slash · Dragon Claw · Flare Blitz | Blaze, Solar Power | 41 |
 | **Blastoise** | Water | Aqua Jet · Hydro Pump · Rapid Spin · Ice Beam | Torrent, Rain Dish | 39 |
 | **Venusaur** | Grass / Poison | Vine Whip · Razor Leaf · Sludge Bomb · Solar Beam | Overgrow, Chlorophyll | 24 |
-| **Lucario** | Fighting / Steel | Aura Sphere · Meteor Mash · Extreme Speed · Detect | Steadfast, Inner Focus, Justified | 46 |
-| **Gengar** | Ghost / Poison | Shadow Ball · Sludge Bomb · Hex · Substitute | Levitate, Cursed Body | 36 |
-| **Garchomp** | Dragon / Ground | Dig · Dragon Claw · Earthquake · Stone Edge | Rough Skin, Sand Veil | 33 |
-| **Greninja** | Water / Dark | Water Shuriken · Night Slash · Double Team · Hydro Pump | Protean, Torrent | 29 |
-| **Scizor** | Bug / Steel | Bullet Punch · X-Scissor · Swords Dance · Wing Attack | Technician, Swarm, Light Metal | 27 |
+| **Lucario** | Fighting / Steel | Aura Sphere · Meteor Mash · Extreme Speed · Detect | Steadfast, Inner Focus, Justified | 47 |
+| **Gengar** | Ghost / Poison | Shadow Ball · Sludge Bomb · Hex · Substitute | Levitate, Cursed Body | 37 |
+| **Garchomp** | Dragon / Ground | Dig · Dragon Claw · Earthquake · Stone Edge | Rough Skin, Sand Veil | 34 |
+| **Greninja** | Water / Dark | Water Shuriken · Night Slash · Double Team · Hydro Pump | Protean, Torrent | 30 |
+| **Scizor** | Bug / Steel | Bullet Punch · X-Scissor · Swords Dance · Wing Attack | Technician, Swarm, Light Metal | 28 |
 | **Goodra** | Dragon | Dragon Pulse · Surf · Ice Beam · Body Slam | Gooey, Sap Sipper, Hydration, Overcoat | 38 |
-| **Urshifu**, Single Strike | Fighting / Dark | Wicked Blow · Sucker Punch · Close Combat · Bulk Up | Unseen Fist, Inner Focus | 32 |
-| **Urshifu**, Rapid Strike | Fighting / Water | Surging Strikes · Liquidation · Chilling Water · Close Combat | Unseen Fist, Inner Focus | 32 |
-| **Mewtwo** | Psychic | Psychic · Shadow Ball · Confusion · Teleport | Pressure | 51 |
+| **Urshifu**, Single Strike | Fighting / Dark | Wicked Blow · Sucker Punch · Close Combat · Bulk Up | Unseen Fist, Inner Focus | 33 |
+| **Urshifu**, Rapid Strike | Fighting / Water | Surging Strikes · Liquidation · Chilling Water · Close Combat | Unseen Fist, Inner Focus | 33 |
+| **Mewtwo** | Psychic | Psychic · Shadow Ball · Confusion · Teleport | Pressure | 52 |
+| **Sylveon** | Fairy | Moonblast · Swift · Draining Kiss · Hyper Voice | Pixilate, Cute Charm | 27 |
 
 Urshifu's two forms share one cell on the selection screen: **LB / L1 / Q** or the cell's tabs change
 the form, each side has its own, and a team holds only one of them.
@@ -222,6 +224,7 @@ The tests are built into the game and run with `--test=NAME`:
 godot --headless --path game -- --test=mechanics          # acceptance cases of the combat
 godot --headless --path game -- --test=urshifu            # only its cases of the above: forms, crits, guards, reads
 godot --headless --path game -- --test=mewtwo             # only its cases too: Pressure, Disable, Confusion, Teleport, boosts
+godot --headless --path game -- --test=sylveon            # only its cases too: Pixilate, Cute Charm, infatuation, its five moves
 godot --headless --path game -- --test=loadouts           # every Pokémon with every move it can pick
 godot --headless --path game -- --test=status             # also: status_moves, abilities, new_moves
 godot --headless --path game -- --test=deflect            # also: clash, lockon, league, trainers

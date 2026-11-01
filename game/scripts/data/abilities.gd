@@ -41,4 +41,6 @@ const DATA := {
 		"text": "In the rain it cures its status condition at the end of every turn (3 s)."},
 	"overcoat": {"display_name": "Overcoat",
 		"text": "The sandstorm does not hurt it, and powder moves do nothing to it."},
+	"cutecharm": {"display_name": "Cute Charm",
+		"text": "Each contact move that hits it has a 30% chance of infatuating the attacker for 8 s: half of its moves fail, unless either one leaves the field."},
 }

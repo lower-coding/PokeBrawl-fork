@@ -5,6 +5,38 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+## [demo-sylveon] - 2026-11-01
+
+### Added
+- **Sylveon**, a slow special wall: Moonblast, Swift, Draining Kiss and Hyper Voice by default, with
+  Dazzling Gleam and 22 more on the Moves screen. Its legs and ribbons move with clips of ours.
+- **Pixilate** (its default ability): Normal moves become Fairy moves and hit 1.2 times as hard. The menus
+  and the HUD show them as Fairy, and a pink filter turns their effects pink.
+- **Cute Charm**: each contact move that hits it has a 30% chance of infatuating the attacker, one roll per
+  second at most. Infatuated, half of the moves it tries fail for 8 s or until either one leaves the field: it is
+  stunned for a moment and the move's cooldown runs, at most 4 s, but nothing is spent. It cannot come back
+  for 5 s afterwards.
+- Five moves, the game's first Fairy ones among them: **Draining Kiss**, **Moonblast**, **Swift**,
+  **Dazzling Gleam** and **Hyper Voice**. Swift also reaches Charizard, Pikachu, Mewtwo, Scizor, Garchomp,
+  Lucario, Greninja and both Urshifu; Draining Kiss, Pikachu; Dazzling Gleam, Gengar; Hyper Voice, Snorlax.
+
+## [demo-controls] - 2026-11-01
+
+### Added
+- **Options > Controls**: the keys that move (WASD) can be changed. The arrow keys, the stick and the
+  D-pad always move too, so the menus can always be used. On these rows a gamepad button cancels.
+- **Options > Controls** marks in red a key or button that two actions share, and says which ones.
+- **Options > Hit sound** (off by default): a short ping when you hit the foe, with a short cooldown
+  so a burst of hits is one ping. Online it plays when the rival confirms the hit.
+
+### Changed
+- What you choose in **Edit Pokémon** before a battle is now saved, like in the Moves menu, instead
+  of lasting for that battle. What you set for the AI's picks is saved apart from your own, and
+  **Restore defaults** there puts the roster's back. Random moves still last for that battle, so a
+  roll never overwrites a saved set, unless you then change one of its moves by hand.
+- The cries on the menus are quieter: 8 dB on choosing a Pokémon, 10 dB on the VS screen.
+- Tests never touch the player's saved moves: they all use a file of their own.
+
 ## [demo-aim] - 2026-10-31
 
 ### Added

@@ -1,8 +1,9 @@
 class_name Loadout
 extends RefCounted
-## Each Pokémon's four moves and its ability, as the player sets them in the Moves menu.
-## Saved in user://loadouts.json, so they last between sessions; online, each side sends
-## its own with its choice. Only moves the Pokémon learns in the games (level, egg, TM or
+## Each Pokémon's four moves and its ability, as the player sets them in the Moves menu or
+## before a battle. Saved in user://loadouts.json, so they last between sessions; online, each
+## side sends its own with its choice. What is set for the AI's picks (side 1) is saved apart,
+## so giving the AI's Charizard a set does not change yours. Only moves the Pokémon learns in the games (level, egg, TM or
 ## tutor) and whose script is done are allowed, and only abilities it has; anything else
 ## falls back to the roster's defaults.
 
@@ -11,8 +12,10 @@ static var path := "user://loadouts.json"
 const LEARNED := ["level", "egg", "tm", "tutor"]
 ## A move more than this share of the roster can use is common.
 const COMMON_SHARE := 0.5
+const AI_KEY := "ai"
 
 static var _saved := {}
+static var _saved_ai := {}       # side 1's, under "ai" in the same file
 static var _loaded := false
 static var _learners := {}       # move -> how many Pokémon can use it
 static var _groups := {}         # species and language -> its move_groups
@@ -134,36 +137,40 @@ static func valid(sp: String, l: Variant) -> Dictionary:
 	return {"moves": moves.duplicate(), "ability": ab}
 
 
-## What the player saved for this Pokémon (or its default).
-static func saved(sp: String) -> Dictionary:
-	_load()
-	return valid(sp, _saved.get(sp, {}))
+## What the player saved for this Pokémon on that side (or its default).
+static func saved(sp: String, side := 0) -> Dictionary:
+	return valid(sp, _of_side(side).get(sp, {}))
 
 
-static func store(sp: String, l: Dictionary) -> void:
-	_load()
-	_saved[sp] = valid(sp, l)
+static func store(sp: String, l: Dictionary, side := 0) -> void:
+	_of_side(side)[sp] = valid(sp, l)
 	_write()
 
 
-## Back to the roster's four moves and ability: one Pokémon, or all of them (sp "").
-static func restore(sp := "") -> void:
-	_load()
+## Back to the roster's four moves and ability: one Pokémon, or all of them (sp ""), on that side.
+static func restore(sp := "", side := 0) -> void:
 	if sp == "":
-		_saved.clear()
+		_of_side(side).clear()
 	else:
-		_saved.erase(sp)
+		_of_side(side).erase(sp)
 	_write()
 
 
-static func is_default(sp: String) -> bool:
-	return saved(sp) == default_for(sp)
+static func is_default(sp: String, side := 0) -> bool:
+	return saved(sp, side) == default_for(sp)
+
+
+static func _of_side(side: int) -> Dictionary:
+	_load()
+	return _saved_ai if side == 1 else _saved
 
 
 static func _write() -> void:
 	var f := FileAccess.open(path, FileAccess.WRITE)
 	if f:
-		f.store_string(JSON.stringify(_saved, "\t"))
+		var all := _saved.duplicate()
+		all[AI_KEY] = _saved_ai
+		f.store_string(JSON.stringify(all, "\t"))
 
 
 static func _load() -> void:
@@ -173,4 +180,7 @@ static func _load() -> void:
 	if FileAccess.file_exists(path):
 		var d: Variant = JSON.parse_string(FileAccess.get_file_as_string(path))
 		if d is Dictionary:
+			var ai: Variant = d.get(AI_KEY, {})
+			_saved_ai = ai if ai is Dictionary else {}
+			d.erase(AI_KEY)
 			_saved = d
