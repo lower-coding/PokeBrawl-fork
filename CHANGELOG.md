@@ -5,6 +5,8 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+## [demo-doubles] - 2026-11-01
+
 ### Added
 - **2 vs 2**: you and an AI ally against two AI foes, or online with two to four players and AIs in the
   empty seats. Each trainer brings one to three Pokémon (the **Pokémon per trainer** rule, 1 by default),
